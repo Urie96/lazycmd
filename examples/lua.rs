@@ -1,32 +1,35 @@
-use mlua::{prelude::*, Lua};
-use std::{sync::LazyLock, time::Duration};
+use mlua::{chunk, prelude::*, Lua};
 
-static LUA: LazyLock<Lua> = LazyLock::new(Lua::new);
+pub fn main() -> mlua::Result<()> {
+    let lua = Lua::new();
+    set_global(&lua)?;
 
-#[tokio::main]
-async fn main() -> mlua::Result<()> {
-    // let lua = Lua::new();
-    let set_timeout = LUA.create_function(|_, (callback, time): (LuaFunction, u64)| {
-        tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_millis(time)).await;
-            let _ = callback.call::<()>(());
-        });
-        Ok(())
-    })?;
+    let res: i64 = lua
+        .load(chunk! {
+        print(lc.event.on("a"))
+        return 1
+        })
+        .call(())?;
 
-    LUA.globals().set("set_timeout", set_timeout)?;
-
-    LUA.load(
-        r#"
-local a=1
-set_timeout(function() print("foo",a) end, 1000)
-set_timeout(function() a=2 end, 500)
-print("global end")
-"#,
-    )
-    .exec()?;
-    dbg!("asdf");
-    tokio::time::sleep(Duration::from_millis(2000)).await;
+    println!("{res}");
 
     Ok(())
+}
+
+fn set_global(lua: &Lua) -> mlua::Result<()> {
+    let lua_event_on = LuaFunction::wrap_raw(event_on);
+
+    lua.load(chunk!(
+    lc = {
+        event = {
+            on = $lua_event_on
+        }
+    }
+    ))
+    .exec()?;
+    Ok(())
+}
+
+fn event_on(s: String) -> String {
+    s.to_string()
 }
