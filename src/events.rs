@@ -2,9 +2,14 @@ use std::{pin::Pin, time::Duration};
 
 use crossterm::event::{Event as CrosstermEvent, *};
 use futures::{Stream, StreamExt};
-use tokio::time::interval;
+use tokio::{sync::mpsc, time::interval};
 use tokio_stream::{wrappers::IntervalStream, StreamMap};
 
+use crate::{ro_cell::RoCell, Keymap};
+
+static TX: RoCell<mpsc::UnboundedSender<Event>> = RoCell::new();
+
+#[derive(Default)]
 pub struct Events {
     streams: StreamMap<StreamName, Pin<Box<dyn Stream<Item = Event>>>>,
 }
@@ -13,9 +18,9 @@ pub struct Events {
 enum StreamName {
     Render,
     Crossterm,
+    Text,
 }
 
-#[derive(Clone, Debug)]
 pub enum Event {
     Init,
     Quit,
@@ -23,15 +28,31 @@ pub enum Event {
     Closed,
     Tick,
     Render,
+    Command(String),
     Crossterm(CrosstermEvent),
+}
+
+pub fn emit(e: Event) {
+    TX.send(e).unwrap();
 }
 
 impl Events {
     pub fn new() -> Self {
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        TX.init(tx);
+
+        let stream = async_stream::stream! {
+            while let Some(item) = rx.recv().await {
+                yield item;
+            }
+        };
+        let stream = Box::pin(stream);
+
         Self {
             streams: StreamMap::from_iter([
                 (StreamName::Render, render_stream()),
                 (StreamName::Crossterm, crossterm_stream()),
+                (StreamName::Text, stream),
             ]),
         }
     }
