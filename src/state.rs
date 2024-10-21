@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::HashMap};
 
 use crossterm::event::KeyEvent;
 
-use crate::{ro_cell::RoCell, Keymap, Mode, PageItems};
+use crate::{ro_cell::RoCell, Keymap, Mode, Page};
 
 pub static STATE: RoCell<RefCell<State>> = RoCell::new();
 pub fn init() {
@@ -10,11 +10,11 @@ pub fn init() {
 }
 
 pub struct State {
-    current_mode: Mode,
-    current_path: Vec<String>,
-    items: HashMap<Vec<String>, PageItems>,
-    keymap_config: Vec<Keymap>,
-    last_key_event_buffer: Vec<KeyEvent>,
+    pub current_mode: Mode,
+    pub current_path: Vec<String>,
+    pub pages: HashMap<Vec<String>, Page>,
+    pub keymap_config: Vec<Keymap>,
+    pub last_key_event_buffer: Vec<KeyEvent>,
 }
 
 impl State {
@@ -22,7 +22,7 @@ impl State {
         Self {
             current_path: Default::default(),
             current_mode: Mode::Main,
-            items: Default::default(),
+            pages: Default::default(),
             keymap_config: Default::default(),
             last_key_event_buffer: Default::default(),
         }
@@ -66,5 +66,17 @@ impl State {
             return;
         }
         self.current_path.pop();
+    }
+
+    pub fn scroll_down_by(&mut self, amount: u16) {
+        if let Some(page) = self.pages.get_mut(&self.current_path) {
+            page.list_state.scroll_down_by(amount)
+        }
+    }
+
+    pub fn scroll_up_by(&mut self, amount: u16) {
+        if let Some(page) = self.pages.get_mut(&self.current_path) {
+            page.list_state.scroll_up_by(amount)
+        }
     }
 }

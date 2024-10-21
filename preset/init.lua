@@ -1,16 +1,15 @@
 local M = {}
 
-lc.keymap.set("up", function()
-  print("up")
-end)
-lc.keymap.set("q", function()
-  lc.cmd("quit")
-end)
+local map = lc.keymap.set
+
+map("up", "scroll_up 1")
+map("down", "scroll_down 1")
+map("q", "quit")
 
 function M:list(path)
-  lc.defer_fn(function()
-    print("1000ms done")
-  end, 1000)
+  -- lc.defer_fn(function()
+  --   print("1000ms done")
+  -- end, 1000)
   table.insert(path, "aaaa")
   return path
 end

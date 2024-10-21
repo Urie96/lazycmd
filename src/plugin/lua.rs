@@ -11,9 +11,6 @@ pub fn init() -> mlua::Result<()> {
     lc::set_lua_global(&lua)?;
 
     let m: LuaTable = lua.load(preset!("init")).call(())?;
-    let items: Vec<String> = m.call_method("list", ["a", "b", "c"])?;
-
-    println!("{:?}", items);
 
     LUA.init(lua);
     Ok(())

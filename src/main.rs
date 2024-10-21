@@ -2,9 +2,9 @@ use std::time::Duration;
 
 pub use app::App;
 pub use events::Event;
-pub use items::*;
 pub use keymap::*;
 pub use mode::*;
+pub use page::*;
 pub use state::*;
 use tokio::{task, time::sleep};
 
@@ -12,9 +12,10 @@ mod action;
 mod app;
 mod errors;
 mod events;
-mod items;
 mod keymap;
+mod log;
 mod mode;
+mod page;
 mod plugin;
 mod ro_cell;
 mod state;
@@ -28,6 +29,7 @@ async fn main() -> anyhow::Result<()> {
     // Run the local task set.
     local
         .run_until(async move {
+            log::Logs::start()?;
             errors::install_hooks()?;
             state::init();
             plugin::init()?;

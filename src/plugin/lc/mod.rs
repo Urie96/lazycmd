@@ -1,3 +1,4 @@
+mod api;
 mod cmd;
 mod defer_fn;
 mod keymap;
@@ -9,6 +10,7 @@ pub fn set_lua_global(lua: &Lua) -> mlua::Result<()> {
     lc.raw_set("defer_fn", defer_fn::new(lua)?)?;
     lc.raw_set("cmd", cmd::new(lua)?)?;
     lc.raw_set("keymap", keymap::new(lua)?)?;
+    lc.raw_set("api", api::new(lua)?)?;
 
     lua.globals().set("lc", lc)?;
     Ok(())
