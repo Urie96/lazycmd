@@ -7,7 +7,9 @@ pub fn install_hooks() -> Result<()> {
 
     let hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
-        let _ = term::restore();
+        term::restore().unwrap();
+        let backtrace = std::backtrace::Backtrace::capture();
+        tracing::info!("My backtrace: {:#?}", backtrace);
         hook(info);
     }));
 

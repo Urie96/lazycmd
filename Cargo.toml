@@ -4,18 +4,19 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-anyhow       = "1.0.89"
-libc         = "0.2.159"
-mlua         = { version = "0.10.0-rc.1", features = ["lua54", "async", "macros"] }
-ratatui      = "0.28.1"
-tokio        = { version = "1.40.0", features = ["full"] }
-crossterm    = { version = "0.28.0", features = ["event-stream"] }
-futures      = "0.3.28"
-lazy_static  = "1.5.0"
-better-panic = "0.3.0"
-tokio-stream = "0.1.16"
-async-stream = "0.3.6"
-tracing-appender = "0.2.3"
+anyhow             = "1.0.89"
+libc               = "0.2.159"
+mlua               = { version = "0.10.0-rc.1", features = ["lua54", "async"] }
+ratatui            = "0.28.1"
+tokio              = { version = "1.40.0", features = ["full"] }
+crossterm          = { version = "0.28.0", features = ["event-stream"] }
+futures            = "0.3.28"
+lazy_static        = "1.5.0"
+better-panic       = "0.3.0"
+tokio-stream       = "0.1.16"
+async-stream       = "0.3.6"
+tracing-appender   = "0.2.3"
 tracing-subscriber = "0.3.18"
-tracing = "0.1.40"
-shell-words = "1.1.0"
+tracing            = "0.1.40"
+shell-words        = "1.1.0"
+strum_macros = "0.26.4"

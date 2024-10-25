@@ -2,7 +2,8 @@ use ratatui::widgets;
 
 #[derive(Default)]
 pub struct PageEntry {
-    key: String,
+    pub key: String,
+    pub display: String,
 }
 
 #[derive(Default)]

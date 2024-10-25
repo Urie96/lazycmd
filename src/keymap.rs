@@ -1,15 +1,20 @@
+use std::rc::Rc;
+
 use anyhow::bail;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use futures::future::LocalBoxFuture;
 
 use crate::Mode;
+
+pub type TapKeyAsyncCallback = Rc<dyn Fn() -> LocalBoxFuture<'static, ()>>;
 
 pub struct Keymap {
     pub mode: Option<Mode>,
     pub key_sequence: KeySequence,
-    pub callback: Box<dyn Fn() -> anyhow::Result<()>>,
+    pub callback: TapKeyAsyncCallback,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct KeySequence(Vec<KeyEvent>);
 
 impl KeySequence {

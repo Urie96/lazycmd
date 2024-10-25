@@ -1,4 +1,4 @@
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq)]
 pub enum Mode {
     Main,
     Input,

@@ -1,16 +1,14 @@
-use std::{pin::Pin, time::Duration};
+use std::{hash::Hash, pin::Pin, time::Duration};
 
 use crossterm::event::{Event as CrosstermEvent, *};
 use futures::{Stream, StreamExt};
 use tokio::{sync::mpsc, time::interval};
 use tokio_stream::{wrappers::IntervalStream, StreamMap};
 
-use crate::{ro_cell::RoCell, Keymap};
+use crate::{Keymap, PageEntry, TapKeyAsyncCallback};
 
-static TX: RoCell<mpsc::UnboundedSender<Event>> = RoCell::new();
-
-#[derive(Default)]
 pub struct Events {
+    tx: mpsc::UnboundedSender<Event>,
     streams: StreamMap<StreamName, Pin<Box<dyn Stream<Item = Event>>>>,
 }
 
@@ -22,24 +20,49 @@ enum StreamName {
 }
 
 pub enum Event {
-    Init,
     Quit,
     Error,
-    Closed,
-    Tick,
     Render,
+    Enter(Vec<String>),
     Command(String),
     Crossterm(CrosstermEvent),
+    AddKeymap(Keymap),
+    PageSetEntries(Vec<PageEntry>),
+    AddEventHook(EventName, TapKeyAsyncCallback),
 }
 
-pub fn emit(e: Event) {
-    TX.send(e).unwrap();
+#[derive(PartialEq, Eq, Hash)]
+pub enum EventName {
+    Quit,
+    Error,
+    Render,
+    Enter,
+    Command,
+    Crossterm,
+    AddKeymap,
+    PageSetEntries,
+    AddEventHook,
+}
+
+impl From<&Event> for EventName {
+    fn from(value: &Event) -> Self {
+        match value {
+            Event::Quit => EventName::Quit,
+            Event::Enter(_) => EventName::Enter,
+            Event::Error => EventName::Error,
+            Event::Render => EventName::Render,
+            Event::Command(_) => EventName::Command,
+            Event::Crossterm(_) => EventName::Crossterm,
+            Event::AddKeymap(_) => EventName::AddKeymap,
+            Event::PageSetEntries(_) => EventName::PageSetEntries,
+            Event::AddEventHook(_, _) => EventName::AddEventHook,
+        }
+    }
 }
 
 impl Events {
     pub fn new() -> Self {
         let (tx, mut rx) = mpsc::unbounded_channel();
-        TX.init(tx);
 
         let stream = async_stream::stream! {
             while let Some(item) = rx.recv().await {
@@ -49,6 +72,7 @@ impl Events {
         let stream = Box::pin(stream);
 
         Self {
+            tx,
             streams: StreamMap::from_iter([
                 (StreamName::Render, render_stream()),
                 (StreamName::Crossterm, crossterm_stream()),
@@ -57,8 +81,18 @@ impl Events {
         }
     }
 
+    pub fn sender(&self) -> mpsc::UnboundedSender<Event> {
+        self.tx.clone()
+    }
+
     pub async fn next(&mut self) -> Option<Event> {
         self.streams.next().await.map(|(_name, event)| event)
+    }
+}
+
+impl Default for Events {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

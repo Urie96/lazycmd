@@ -1,13 +1,12 @@
-use std::{env, path::Path};
-use tracing::info;
+use std::{cell::OnceCell, env, path::Path};
 
 use anyhow::Context;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::{fmt, prelude::__tracing_subscriber_SubscriberExt, Registry};
 
-use crate::ro_cell::RoCell;
-
-static _GUARD: RoCell<WorkerGuard> = RoCell::new();
+thread_local! {
+    static _GUARD: OnceCell<WorkerGuard> = const { OnceCell::new() }
+}
 
 pub(super) struct Logs;
 
@@ -32,9 +31,8 @@ impl Logs {
         tracing::subscriber::set_global_default(subscriber)
             .context("setting default subscriber failed")?;
 
-        _GUARD.init(guard);
+        _GUARD.with(|cell| cell.set(guard).unwrap());
 
-        info!("sdf");
         Ok(())
     }
 }
