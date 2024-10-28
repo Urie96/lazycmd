@@ -2,6 +2,7 @@ use crossterm::event::KeyEvent;
 
 use crate::{Keymap, Mode, Page, TapKeyAsyncCallback};
 
+#[derive(Default)]
 pub struct State {
     pub current_mode: Mode,
     pub current_path: Vec<String>,
@@ -11,16 +12,6 @@ pub struct State {
 }
 
 impl State {
-    pub fn new() -> Self {
-        Self {
-            current_path: Default::default(),
-            current_mode: Mode::Main,
-            current_page: Default::default(),
-            keymap_config: Default::default(),
-            last_key_event_buffer: Default::default(),
-        }
-    }
-
     pub fn add_keymap(&mut self, keymap: Keymap) {
         self.keymap_config
             .retain(|v| !(v.mode == keymap.mode && v.key_sequence == keymap.key_sequence));
@@ -36,9 +27,14 @@ impl State {
                 Ok(None)
             }
             1 => {
-                let cb = cands.first().unwrap().callback.clone();
-                self.last_key_event_buffer.clear();
-                Ok(Some(cb))
+                let cand = cands.first().unwrap();
+                if cand.key_sequence.all_match(&self.last_key_event_buffer) {
+                    let cb = cands.first().unwrap().callback.clone();
+                    self.last_key_event_buffer.clear();
+                    Ok(Some(cb))
+                } else {
+                    Ok(None)
+                }
             }
             _ => Ok(None),
         }
@@ -74,11 +70,5 @@ impl State {
         if let Some(page) = &mut self.current_page {
             page.list_state.scroll_up_by(amount)
         }
-    }
-}
-
-impl Default for State {
-    fn default() -> Self {
-        Self::new()
     }
 }

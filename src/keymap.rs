@@ -1,6 +1,5 @@
 use std::rc::Rc;
 
-use anyhow::bail;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use futures::future::LocalBoxFuture;
 
@@ -21,14 +20,18 @@ impl KeySequence {
     pub fn prefix_match(&self, events: &[KeyEvent]) -> bool {
         self.0.len() >= events.len() && &self.0[..events.len()] == events
     }
+
+    pub fn all_match(&self, events: &[KeyEvent]) -> bool {
+        self.0 == events
+    }
 }
 
 impl From<&str> for KeySequence {
     fn from(raw: &str) -> Self {
         let (remaining, modifiers) = extract_modifiers(raw);
-        let keyevent = parse_key_code_with_modifiers(remaining, modifiers).unwrap();
+        let keyseq = parse_key_code_with_modifiers(remaining, modifiers).unwrap();
 
-        Self(vec![keyevent])
+        Self(keyseq)
     }
 }
 
@@ -36,7 +39,7 @@ impl From<&str> for KeySequence {
 fn parse_key_code_with_modifiers(
     raw: &str,
     mut modifiers: KeyModifiers,
-) -> anyhow::Result<KeyEvent> {
+) -> anyhow::Result<Vec<KeyEvent>> {
     let c = match raw.to_lowercase().as_str() {
         "esc" => KeyCode::Esc,
         "enter" => KeyCode::Enter,
@@ -71,16 +74,14 @@ fn parse_key_code_with_modifiers(
         "hyphen" => KeyCode::Char('-'),
         "minus" => KeyCode::Char('-'),
         "tab" => KeyCode::Tab,
-        c if c.len() == 1 => {
-            let mut c = raw.chars().next().unwrap();
-            if modifiers.contains(KeyModifiers::SHIFT) {
-                c = c.to_ascii_uppercase();
-            }
-            KeyCode::Char(c)
+        _ => {
+            return Ok(raw
+                .chars()
+                .map(|c| KeyEvent::new(KeyCode::Char(c), KeyModifiers::empty()))
+                .collect());
         }
-        _ => bail!("Unable to parse {raw}"),
     };
-    Ok(KeyEvent::new(c, modifiers))
+    Ok(vec![KeyEvent::new(c, modifiers)])
 }
 
 fn extract_modifiers(raw: &str) -> (&str, KeyModifiers) {

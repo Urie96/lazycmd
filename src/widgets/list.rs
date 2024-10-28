@@ -12,15 +12,10 @@ impl StatefulWidget for ListWidget {
         let block = widgets::Block::bordered()
             .border_set(ROUNDED)
             .title("header");
-        let list = widgets::List::new(
-            page.list
-                .iter()
-                .map(|entry| entry.display.as_str())
-                .collect::<Vec<_>>(),
-        )
-        .block(block)
-        .highlight_style(Style::default().fg(Color::Blue))
-        .highlight_spacing(widgets::HighlightSpacing::Always);
+        let list = widgets::List::new(page.list.iter().map(|entry| entry.display.clone()))
+            .block(block)
+            .highlight_style(Style::default().fg(Color::Blue))
+            .highlight_spacing(widgets::HighlightSpacing::Always);
         StatefulWidget::render(list, area, buf, &mut page.list_state);
     }
 }

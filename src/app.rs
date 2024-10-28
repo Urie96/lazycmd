@@ -94,6 +94,7 @@ impl App {
                         cb().await;
                     }
                 }
+                self.event_sender.send(Event::Render).unwrap();
             }
             _ => (),
         };

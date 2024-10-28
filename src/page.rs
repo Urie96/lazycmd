@@ -1,9 +1,21 @@
-use ratatui::widgets;
+use mlua::prelude::*;
+use ratatui::widgets::{self, ListItem};
 
-#[derive(Default)]
 pub struct PageEntry {
     pub key: String,
-    pub display: String,
+    pub raw: LuaTable,
+}
+
+impl PageEntry {
+    fn display(&self) -> ListItem {
+        let f = || {
+            let tbl = &self.raw;
+
+            if tbl.get::<LuaValue>("displayer")?.is_nil() {
+                Ok()
+            }
+        };
+    }
 }
 
 #[derive(Default)]

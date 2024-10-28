@@ -97,7 +97,7 @@ impl Default for Events {
 }
 
 fn render_stream() -> Pin<Box<dyn Stream<Item = Event>>> {
-    let render_delay = Duration::from_secs_f64(1.0);
+    let render_delay = Duration::from_secs_f64(20.0);
     let render_interval = interval(render_delay);
     Box::pin(IntervalStream::new(render_interval).map(|_| Event::Render))
 }

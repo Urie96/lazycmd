@@ -32,7 +32,7 @@ async fn main() -> anyhow::Result<()> {
             errors::install_hooks()?;
 
             let events = events::Events::new();
-            let state = Rc::new(RefCell::new(State::new()));
+            let state = Rc::new(RefCell::new(State::default()));
             let _plugin_runner = PluginRunner::new(events.sender(), Rc::clone(&state)).await;
 
             App::new(Rc::clone(&state), events.sender())

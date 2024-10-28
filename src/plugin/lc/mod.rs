@@ -56,6 +56,16 @@ pub(super) fn register(p: &PluginRunner) -> mlua::Result<()> {
         })?,
     )?;
 
-    p.lua.globals().set("lc", lc)?;
+    lc.raw_set(
+        "split",
+        lua.create_function(|lua, (s, sep): (String, String)| {
+            lua.create_sequence_from(s.split(&sep))
+        })?,
+    )?;
+
+    let globals = p.lua.globals();
+    let string: LuaTable = globals.get("string")?;
+
+    globals.set("lc", lc)?;
     Ok(())
 }
