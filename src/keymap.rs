@@ -1,16 +1,12 @@
-use std::rc::Rc;
-
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use futures::future::LocalBoxFuture;
+use mlua::prelude::*;
 
 use crate::Mode;
 
-pub type TapKeyAsyncCallback = Rc<dyn Fn() -> LocalBoxFuture<'static, ()>>;
-
 pub struct Keymap {
-    pub mode: Option<Mode>,
+    pub mode: Mode,
     pub key_sequence: KeySequence,
-    pub callback: TapKeyAsyncCallback,
+    pub callback: LuaFunction,
 }
 
 #[derive(Debug, PartialEq)]

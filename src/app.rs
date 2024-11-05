@@ -1,31 +1,37 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
-
 use anyhow::{bail, Context, Result};
 use crossterm::event::Event as CrosstermEvent;
+use std::collections::HashMap;
+
+use mlua::prelude::*;
 use ratatui::{prelude::*, widgets::*};
 use tokio::sync::mpsc;
 
 use crate::{
     events::{Event, EventName, Events},
+    plugin,
     term::{self, Term},
     widgets::{header::HeaderWidget, list::ListWidget},
-    Page, State, TapKeyAsyncCallback,
+    Page, State,
 };
 
 pub struct App {
     frame_count: usize,
     event_sender: mpsc::UnboundedSender<Event>,
-    state: Rc<RefCell<State>>,
+    state: State,
     term: Term,
     quitting: bool,
-    event_hooks: HashMap<EventName, Vec<TapKeyAsyncCallback>>,
+    event_hooks: HashMap<EventName, Vec<LuaFunction>>,
+    lua: Lua,
 }
 
 impl App {
-    pub fn new(state: Rc<RefCell<State>>, event_sender: mpsc::UnboundedSender<Event>) -> Self {
+    pub fn new(event_sender: mpsc::UnboundedSender<Event>) -> Self {
         let term = term::init().unwrap();
+        let mut state = State::default();
+        let lua = plugin::new_lua(&mut state, &event_sender).unwrap();
 
         Self {
+            lua,
             event_sender,
             state,
             term,
@@ -40,7 +46,7 @@ impl App {
         self.event_sender.send(Event::Enter(Vec::new())).unwrap();
         loop {
             if let Some(e) = events.next().await {
-                self.handle_event(e).await?;
+                self.handle_event(e)?;
             }
             if self.quitting {
                 break;
@@ -55,11 +61,14 @@ impl App {
     /// This method maps incoming events from the terminal user interface to
     /// specific `Action` that represents tasks or operations the
     /// application needs to carry out.
-    async fn handle_event(&mut self, e: Event) -> Result<()> {
+    fn handle_event(&mut self, e: Event) -> Result<()> {
         if let Some(hooks) = self.event_hooks.get(&EventName::from(&e)) {
-            for hook in hooks {
-                hook().await;
-            }
+            plugin::scope(&self.lua, &mut self.state, &self.event_sender, || {
+                for hook in hooks {
+                    hook.call::<()>(())?;
+                }
+                Ok(())
+            })?;
         }
         match e {
             Event::Quit => {
@@ -71,15 +80,18 @@ impl App {
             }
             // Event::Crossterm(CrosstermEvent::Resize(x, y)) => Some(Action::Resize(x, y)),
             Event::Crossterm(CrosstermEvent::Key(key)) => {
-                let cb = { self.state.borrow_mut().tap_key(key)? };
+                let cb = { self.state.tap_key(key)? };
                 if let Some(cb) = cb {
-                    cb().await;
+                    plugin::scope(&self.lua, &mut self.state, &self.event_sender, || {
+                        cb.call::<()>(())
+                    })?;
                 }
             }
+            Event::Crossterm(_) => {}
             Event::Command(command) => self.handle_command(command.as_str())?,
-            Event::AddKeymap(keymap) => self.state.borrow_mut().add_keymap(keymap),
+            Event::AddKeymap(keymap) => self.state.add_keymap(keymap),
             Event::PageSetEntries(entries) => {
-                self.state.borrow_mut().current_page = Some(Page {
+                self.state.current_page = Some(Page {
                     list: entries,
                     ..Default::default()
                 })
@@ -87,16 +99,21 @@ impl App {
             Event::AddEventHook(name, cb) => self.event_hooks.entry(name).or_default().push(cb),
             Event::Enter(path) => {
                 {
-                    self.state.borrow_mut().current_path = path;
+                    self.state.current_path = path;
                 }
                 if let Some(cbs) = self.event_hooks.get(&EventName::Enter) {
-                    for cb in cbs {
-                        cb().await;
-                    }
+                    plugin::scope(&self.lua, &mut self.state, &self.event_sender, || {
+                        for cb in cbs {
+                            cb.call::<()>(())?;
+                        }
+                        Ok(())
+                    })?;
                 }
                 self.event_sender.send(Event::Render).unwrap();
             }
-            _ => (),
+            Event::LuaCallback(cb) => {
+                cb();
+            }
         };
         Ok(())
     }
@@ -117,9 +134,9 @@ impl App {
                     None => 1,
                 };
                 if cmd == "scroll_up" {
-                    self.state.borrow_mut().scroll_up_by(num);
+                    self.state.scroll_up_by(num);
                 } else {
-                    self.state.borrow_mut().scroll_down_by(num);
+                    self.state.scroll_down_by(num);
                 }
                 self.event_sender.send(Event::Render).unwrap();
             }
@@ -131,8 +148,7 @@ impl App {
     // Render the `AppWidget` as a stateful widget using `self` as the `State`
     fn draw(&mut self) -> Result<()> {
         self.term.draw(|frame| {
-            let mut state = self.state.borrow_mut();
-            frame.render_stateful_widget(AppWidget, frame.area(), &mut *state);
+            frame.render_stateful_widget(AppWidget, frame.area(), &mut self.state);
             self.frame_count = frame.count()
         })?;
         Ok(())
@@ -152,7 +168,7 @@ impl StatefulWidget for AppWidget {
 
         use Constraint::*;
         let [header, main, _footer] = Layout::vertical([Length(3), Min(3), Length(1)]).areas(area);
-        let [list, _preview] = Layout::horizontal([Percentage(50), Fill(1)]).areas(main);
+        let [list, preview] = Layout::horizontal([Percentage(50), Fill(1)]).areas(main);
 
         HeaderWidget.render(header, buf);
         if let Some(page) = &mut state.current_page {
@@ -160,5 +176,6 @@ impl StatefulWidget for AppWidget {
         } else {
             Paragraph::new("loading...").render(list, buf)
         }
+        state.current_preview.render(preview, buf);
     }
 }

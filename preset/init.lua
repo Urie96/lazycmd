@@ -6,12 +6,20 @@ local M = {}
 
 local lc = lc or {}
 
-local map = lc.keymap.set
+local function map(mode, key, cb)
+  if type(cb) == "string" then
+    lc.keymap.set(mode, key, function()
+      lc.cmd(cb)
+    end)
+  elseif type(cb) == "function" then
+    lc.keymap.set(mode, key, cb)
+  end
+end
 
-map("up", "scroll_up 1")
-map("down", "scroll_down 1")
-map("q", "quit")
-map("gh", function()
+map("main", "up", "scroll_up 1")
+map("main", "down", "scroll_down 1")
+map("main", "q", "quit")
+map("main", "gh", function()
   lc.api.go_to(os.getenv("HOME"):split("/"))
 end)
 

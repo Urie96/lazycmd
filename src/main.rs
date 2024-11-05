@@ -1,11 +1,8 @@
-use std::{cell::RefCell, rc::Rc};
-
 pub use app::App;
 pub use events::Event;
 pub use keymap::*;
 pub use mode::*;
 pub use page::*;
-pub use plugin::PluginRunner;
 pub use state::*;
 use tokio::task;
 
@@ -17,6 +14,7 @@ mod log;
 mod mode;
 mod page;
 mod plugin;
+mod preview;
 mod state;
 mod term;
 mod widgets;
@@ -32,12 +30,8 @@ async fn main() -> anyhow::Result<()> {
             errors::install_hooks()?;
 
             let events = events::Events::new();
-            let state = Rc::new(RefCell::new(State::default()));
-            let _plugin_runner = PluginRunner::new(events.sender(), Rc::clone(&state)).await;
 
-            App::new(Rc::clone(&state), events.sender())
-                .run(events)
-                .await?;
+            App::new(events.sender()).run(events).await?;
 
             term::restore()?;
             Ok::<_, anyhow::Error>(())

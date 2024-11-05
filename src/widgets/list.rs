@@ -12,7 +12,7 @@ impl StatefulWidget for ListWidget {
         let block = widgets::Block::bordered()
             .border_set(ROUNDED)
             .title("header");
-        let list = widgets::List::new(page.list.iter().map(|entry| entry.display.clone()))
+        let list = widgets::List::new(page.list.iter().map(|entry| entry.display()))
             .block(block)
             .highlight_style(Style::default().fg(Color::Blue))
             .highlight_spacing(widgets::HighlightSpacing::Always);

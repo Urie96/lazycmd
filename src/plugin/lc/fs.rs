@@ -1,25 +1,8 @@
-use crate::PluginRunner;
 use mlua::prelude::*;
 
-pub(super) fn new_table(p: &PluginRunner) -> mlua::Result<LuaTable> {
-    let lua = &p.lua;
-    let lc = lua.create_table_with_capacity(0, 5)?;
-
-    // lc.raw_set(
-    //     "read_dir_sync",
-    //     lua.create_async_function(|_, (path): String| async {
-    //         let mut read_dir = tokio::fs::read_dir(path).await?;
-    //
-    //         while let Some(entry) = read_dir.next_entry().await? {
-    //             println!("tokio: {}", entry.path().display());
-    //         }
-    //         Ok(())
-    //     })?,
-    // )?;
-
-    lc.raw_set(
-        "read_dir_sync",
-        lua.create_function(|lua, path: String| {
+pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
+    let read_dir_sync = lua
+        .create_function(|lua, path: String| {
             let entries = std::fs::read_dir(path)?
                 .map(|v| {
                     v.into_lua_err().and_then(|e| {
@@ -31,7 +14,8 @@ pub(super) fn new_table(p: &PluginRunner) -> mlua::Result<LuaTable> {
                 })
                 .collect::<Result<Vec<_>, _>>()?;
             lua.create_sequence_from(entries)
-        })?,
-    )?;
-    Ok(lc)
+        })?
+        .into_lua(lua)?;
+
+    lua.create_table_from([("read_dir_sync", read_dir_sync)])
 }

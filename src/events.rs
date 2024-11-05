@@ -1,16 +1,22 @@
+use mlua::prelude::*;
 use std::{hash::Hash, pin::Pin, time::Duration};
 
 use crossterm::event::{Event as CrosstermEvent, *};
 use futures::{Stream, StreamExt};
-use tokio::{sync::mpsc, time::interval};
+use tokio::{
+    sync::mpsc::{self},
+    time::interval,
+};
 use tokio_stream::{wrappers::IntervalStream, StreamMap};
 
-use crate::{Keymap, PageEntry, TapKeyAsyncCallback};
+use crate::{Keymap, PageEntry};
 
 pub struct Events {
-    tx: mpsc::UnboundedSender<Event>,
+    tx: EventSender,
     streams: StreamMap<StreamName, Pin<Box<dyn Stream<Item = Event>>>>,
 }
+
+pub type EventSender = mpsc::UnboundedSender<Event>;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 enum StreamName {
@@ -21,20 +27,19 @@ enum StreamName {
 
 pub enum Event {
     Quit,
-    Error,
     Render,
     Enter(Vec<String>),
     Command(String),
     Crossterm(CrosstermEvent),
     AddKeymap(Keymap),
     PageSetEntries(Vec<PageEntry>),
-    AddEventHook(EventName, TapKeyAsyncCallback),
+    AddEventHook(EventName, LuaFunction),
+    LuaCallback(Box<dyn FnOnce()>),
 }
 
 #[derive(PartialEq, Eq, Hash)]
 pub enum EventName {
     Quit,
-    Error,
     Render,
     Enter,
     Command,
@@ -42,6 +47,16 @@ pub enum EventName {
     AddKeymap,
     PageSetEntries,
     AddEventHook,
+    LuaCallback,
+}
+
+impl FromLua for EventName {
+    fn from_lua(value: mlua::Value, lua: &mlua::Lua) -> mlua::Result<Self> {
+        Ok(match String::from_lua(value, lua)?.as_str() {
+            "enter" => EventName::Enter,
+            other => Err(format!("Unable to cast string '{other}' into EventName").into_lua_err())?,
+        })
+    }
 }
 
 impl From<&Event> for EventName {
@@ -49,13 +64,13 @@ impl From<&Event> for EventName {
         match value {
             Event::Quit => EventName::Quit,
             Event::Enter(_) => EventName::Enter,
-            Event::Error => EventName::Error,
             Event::Render => EventName::Render,
             Event::Command(_) => EventName::Command,
             Event::Crossterm(_) => EventName::Crossterm,
             Event::AddKeymap(_) => EventName::AddKeymap,
             Event::PageSetEntries(_) => EventName::PageSetEntries,
             Event::AddEventHook(_, _) => EventName::AddEventHook,
+            Event::LuaCallback(_) => EventName::LuaCallback,
         }
     }
 }
@@ -81,7 +96,11 @@ impl Events {
         }
     }
 
-    pub fn sender(&self) -> mpsc::UnboundedSender<Event> {
+    pub fn send(&self, event: Event) {
+        self.tx.send(event).unwrap()
+    }
+
+    pub fn sender(&self) -> EventSender {
         self.tx.clone()
     }
 
@@ -108,7 +127,7 @@ fn crossterm_stream() -> Pin<Box<dyn Stream<Item = Event>>> {
             // Ignore key release / repeat events
             Ok(CrosstermEvent::Key(key)) if key.kind == KeyEventKind::Release => None,
             Ok(event) => Some(Event::Crossterm(event)),
-            Err(_) => Some(Event::Error),
+            Err(e) => panic!("{}", e),
         }
     }))
 }
