@@ -3,13 +3,10 @@ use std::{hash::Hash, pin::Pin, time::Duration};
 
 use crossterm::event::{Event as CrosstermEvent, *};
 use futures::{Stream, StreamExt};
-use tokio::{
-    sync::mpsc::{self},
-    time::interval,
-};
+use tokio::{sync::mpsc, time::interval};
 use tokio_stream::{wrappers::IntervalStream, StreamMap};
 
-use crate::{Keymap, PageEntry};
+use crate::Keymap;
 
 pub struct Events {
     tx: EventSender,
@@ -32,46 +29,23 @@ pub enum Event {
     Command(String),
     Crossterm(CrosstermEvent),
     AddKeymap(Keymap),
-    PageSetEntries(Vec<PageEntry>),
-    AddEventHook(EventName, LuaFunction),
-    LuaCallback(Box<dyn FnOnce()>),
+    AddEventHook(EventHook, LuaFunction),
+    LuaCallback(Box<dyn FnOnce(&Lua) -> mlua::Result<()>>),
 }
 
 #[derive(PartialEq, Eq, Hash)]
-pub enum EventName {
-    Quit,
-    Render,
-    Enter,
-    Command,
-    Crossterm,
-    AddKeymap,
-    PageSetEntries,
-    AddEventHook,
-    LuaCallback,
+pub enum EventHook {
+    EnterPost,
+    HoverPost,
 }
 
-impl FromLua for EventName {
+impl FromLua for EventHook {
     fn from_lua(value: mlua::Value, lua: &mlua::Lua) -> mlua::Result<Self> {
         Ok(match String::from_lua(value, lua)?.as_str() {
-            "enter" => EventName::Enter,
+            "EnterPost" => EventHook::EnterPost,
+            "HoverPost" => EventHook::HoverPost,
             other => Err(format!("Unable to cast string '{other}' into EventName").into_lua_err())?,
         })
-    }
-}
-
-impl From<&Event> for EventName {
-    fn from(value: &Event) -> Self {
-        match value {
-            Event::Quit => EventName::Quit,
-            Event::Enter(_) => EventName::Enter,
-            Event::Render => EventName::Render,
-            Event::Command(_) => EventName::Command,
-            Event::Crossterm(_) => EventName::Crossterm,
-            Event::AddKeymap(_) => EventName::AddKeymap,
-            Event::PageSetEntries(_) => EventName::PageSetEntries,
-            Event::AddEventHook(_, _) => EventName::AddEventHook,
-            Event::LuaCallback(_) => EventName::LuaCallback,
-        }
     }
 }
 

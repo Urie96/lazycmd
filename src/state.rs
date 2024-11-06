@@ -15,10 +15,14 @@ pub struct State {
 
 impl State {
     pub fn set_current_page_entries(&mut self, entries: Vec<PageEntry>) {
-        self.current_page = Some(Page {
-            list: entries,
-            ..Default::default()
-        })
+        if self.current_page.is_none() {
+            self.current_page = Some(Default::default())
+        }
+        let page = self.current_page.as_mut().unwrap();
+        page.list = entries;
+        if !page.list.is_empty() && page.list_state.selected().is_none() {
+            page.list_state.select(Some(0));
+        }
     }
     pub fn add_keymap(&mut self, keymap: Keymap) {
         self.keymap_config
@@ -48,6 +52,12 @@ impl State {
         }
     }
 
+    pub fn hovered(&self) -> Option<&PageEntry> {
+        self.current_page
+            .as_ref()
+            .and_then(|p| p.list_state.selected().and_then(|s| p.list.get(s)))
+    }
+
     fn keymap_candidates_iter(&self) -> impl Iterator<Item = &Keymap> {
         // todo: 加path
         self.keymap_config.iter().filter(|keymap| {
@@ -58,11 +68,19 @@ impl State {
         })
     }
 
+    pub fn go_to(&mut self, path: Vec<String>) {
+        self.current_path = path;
+        self.current_page = None;
+        self.current_preview.clear();
+    }
+
     pub fn go_to_parent(&mut self) {
         if self.current_path.is_empty() {
             return;
         }
         self.current_path.pop();
+        self.current_page = None;
+        self.current_preview.clear();
     }
 
     pub fn scroll_down_by(&mut self, amount: u16) {

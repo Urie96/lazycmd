@@ -1,13 +1,13 @@
-use ratatui::{prelude::*, text::Text, widgets::Widget};
+use ratatui::{prelude::*, widgets::Widget};
 
 pub trait Renderable {
-    fn render(self: Box<Self>, buf: &mut ratatui::buffer::Buffer);
+    fn render(&self, area: Rect, buf: &mut ratatui::buffer::Buffer);
 }
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct Preview {
     pub offset: usize,
-    pub content: Option<Text<'static>>,
+    pub content: Option<Box<dyn Renderable>>,
 }
 
 impl Preview {
@@ -17,5 +17,10 @@ impl Preview {
         } else {
             Text::raw("Loading...").render(area, buf)
         };
+    }
+
+    pub fn clear(&mut self) {
+        self.offset = 0;
+        self.content = None;
     }
 }

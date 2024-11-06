@@ -1,6 +1,6 @@
-use mlua::Lua;
+use mlua::{prelude::*, Lua};
 
-use crate::{events::EventSender, State};
+use crate::{events::EventSender, Event, State};
 
 pub fn scope<R>(
     lua: &Lua,
@@ -13,4 +13,30 @@ pub fn scope<R>(
         lua.set_named_registry_value("sender", scope.create_any_userdata_ref(sender)?)?;
         f()
     })
+}
+
+pub(super) fn send_event(lua: &Lua, e: Event) -> LuaResult<()> {
+    lua.named_registry_value::<LuaAnyUserData>("sender")?
+        .borrow_scoped::<EventSender, _>(|sender| sender.send(e).unwrap())
+}
+
+pub(super) fn clone_sender(lua: &Lua) -> LuaResult<EventSender> {
+    lua.named_registry_value::<LuaAnyUserData>("sender")?
+        .borrow_scoped::<EventSender, _>(|sender| sender.clone())
+}
+
+pub(super) fn borrow_scope_state<R>(
+    lua: &Lua,
+    f: impl FnOnce(&State) -> LuaResult<R>,
+) -> LuaResult<R> {
+    lua.named_registry_value::<LuaAnyUserData>("state")?
+        .borrow_scoped::<State, _>(f)?
+}
+
+pub(super) fn mut_scope_state<R>(
+    lua: &Lua,
+    f: impl FnOnce(&mut State) -> LuaResult<R>,
+) -> LuaResult<R> {
+    lua.named_registry_value::<LuaAnyUserData>("state")?
+        .borrow_mut_scoped::<State, _>(f)?
 }

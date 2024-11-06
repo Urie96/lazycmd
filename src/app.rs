@@ -3,15 +3,18 @@ use crossterm::event::Event as CrosstermEvent;
 use std::collections::HashMap;
 
 use mlua::prelude::*;
-use ratatui::{prelude::*, widgets::*};
+use ratatui::{
+    prelude::*,
+    widgets::{Block, Paragraph},
+};
 use tokio::sync::mpsc;
 
 use crate::{
-    events::{Event, EventName, Events},
+    events::{Event, EventHook, Events},
     plugin,
     term::{self, Term},
     widgets::{header::HeaderWidget, list::ListWidget},
-    Page, State,
+    State,
 };
 
 pub struct App {
@@ -20,7 +23,7 @@ pub struct App {
     state: State,
     term: Term,
     quitting: bool,
-    event_hooks: HashMap<EventName, Vec<LuaFunction>>,
+    event_hooks: HashMap<EventHook, Vec<LuaFunction>>,
     lua: Lua,
 }
 
@@ -28,7 +31,9 @@ impl App {
     pub fn new(event_sender: mpsc::UnboundedSender<Event>) -> Self {
         let term = term::init().unwrap();
         let mut state = State::default();
-        let lua = plugin::new_lua(&mut state, &event_sender).unwrap();
+        let lua = Lua::new();
+
+        plugin::scope(&lua, &mut state, &event_sender, || plugin::init_lua(&lua)).unwrap();
 
         Self {
             lua,
@@ -55,14 +60,8 @@ impl App {
         Ok(())
     }
 
-    /// Handles an event by producing an optional `Action` that the application
-    /// should perform in response.
-    ///
-    /// This method maps incoming events from the terminal user interface to
-    /// specific `Action` that represents tasks or operations the
-    /// application needs to carry out.
-    fn handle_event(&mut self, e: Event) -> Result<()> {
-        if let Some(hooks) = self.event_hooks.get(&EventName::from(&e)) {
+    fn run_event_hooks(&mut self, e: EventHook) -> Result<()> {
+        if let Some(hooks) = self.event_hooks.get(&e) {
             plugin::scope(&self.lua, &mut self.state, &self.event_sender, || {
                 for hook in hooks {
                     hook.call::<()>(())?;
@@ -70,6 +69,10 @@ impl App {
                 Ok(())
             })?;
         }
+        Ok(())
+    }
+
+    fn handle_event(&mut self, e: Event) -> Result<()> {
         match e {
             Event::Quit => {
                 self.quitting = true;
@@ -90,29 +93,17 @@ impl App {
             Event::Crossterm(_) => {}
             Event::Command(command) => self.handle_command(command.as_str())?,
             Event::AddKeymap(keymap) => self.state.add_keymap(keymap),
-            Event::PageSetEntries(entries) => {
-                self.state.current_page = Some(Page {
-                    list: entries,
-                    ..Default::default()
-                })
-            }
             Event::AddEventHook(name, cb) => self.event_hooks.entry(name).or_default().push(cb),
             Event::Enter(path) => {
-                {
-                    self.state.current_path = path;
-                }
-                if let Some(cbs) = self.event_hooks.get(&EventName::Enter) {
-                    plugin::scope(&self.lua, &mut self.state, &self.event_sender, || {
-                        for cb in cbs {
-                            cb.call::<()>(())?;
-                        }
-                        Ok(())
-                    })?;
-                }
+                self.state.go_to(path);
+                self.run_event_hooks(EventHook::EnterPost)?;
                 self.event_sender.send(Event::Render).unwrap();
             }
             Event::LuaCallback(cb) => {
-                cb();
+                plugin::scope(&self.lua, &mut self.state, &self.event_sender, || {
+                    cb(&self.lua)?;
+                    Ok(())
+                })?;
             }
         };
         Ok(())
@@ -138,6 +129,8 @@ impl App {
                 } else {
                     self.state.scroll_down_by(num);
                 }
+                self.run_event_hooks(EventHook::HoverPost)?;
+                self.state.current_preview.clear();
                 self.event_sender.send(Event::Render).unwrap();
             }
             _ => bail!("Unsupported command {}", command),

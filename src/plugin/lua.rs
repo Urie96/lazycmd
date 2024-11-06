@@ -1,11 +1,8 @@
 use mlua::Lua;
 
-use crate::{events::EventSender, State};
-
 use super::lc;
 
-pub fn new_lua(state: &mut State, sender: &EventSender) -> mlua::Result<Lua> {
-    let lua = Lua::new();
+pub fn init_lua(lua: &Lua) -> mlua::Result<()> {
     lc::register(&lua)?;
 
     macro_rules! preset {
@@ -35,9 +32,5 @@ pub fn new_lua(state: &mut State, sender: &EventSender) -> mlua::Result<Lua> {
             }
         }};
     }
-    super::scope(&lua, state, sender, || {
-        lua.load(preset!("init")).call::<()>(())
-    })?;
-
-    Ok(lua)
+    lua.load(preset!("init")).call(())
 }
