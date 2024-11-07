@@ -14,7 +14,6 @@ mod log;
 mod mode;
 mod page;
 mod plugin;
-mod preview;
 mod state;
 mod term;
 mod widgets;
@@ -27,13 +26,13 @@ async fn main() -> anyhow::Result<()> {
     local
         .run_until(async move {
             log::Logs::start()?;
-            errors::install_hooks()?;
+            errors::install_hooks();
 
             let events = events::Events::new();
 
             App::new(events.sender()).run(events).await?;
 
-            term::restore()?;
+            term::restore();
             Ok::<_, anyhow::Error>(())
         })
         .await?;

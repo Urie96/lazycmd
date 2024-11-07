@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use mlua::prelude::*;
 use ratatui::{
     prelude::*,
-    widgets::{Block, Paragraph},
+    widgets::{Block, BorderType, Paragraph},
 };
 use tokio::sync::mpsc;
 
@@ -18,7 +18,6 @@ use crate::{
 };
 
 pub struct App {
-    frame_count: usize,
     event_sender: mpsc::UnboundedSender<Event>,
     state: State,
     term: Term,
@@ -40,7 +39,6 @@ impl App {
             event_sender,
             state,
             term,
-            frame_count: Default::default(),
             quitting: Default::default(),
             event_hooks: Default::default(),
         }
@@ -119,18 +117,24 @@ impl App {
             "quit" => {
                 self.quitting = true;
             }
-            cmd @ ("scroll_up" | "scroll_down") => {
+            "scroll_by" => {
                 let num = match it.next() {
-                    Some(num) => num.parse::<u16>().context("wrong format for scroll")?,
+                    Some(num) => num.parse::<i16>().context("wrong format for scroll_by")?,
                     None => 1,
                 };
-                if cmd == "scroll_up" {
-                    self.state.scroll_up_by(num);
-                } else {
-                    self.state.scroll_down_by(num);
-                }
+                self.state.scroll_by(num);
+                self.state.current_preview.take();
                 self.run_event_hooks(EventHook::HoverPost)?;
-                self.state.current_preview.clear();
+                self.event_sender.send(Event::Render).unwrap();
+            }
+            "scroll_preview_by" => {
+                let num = match it.next() {
+                    Some(num) => num
+                        .parse::<i16>()
+                        .context("wrong format for scroll_preview_by")?,
+                    None => 1,
+                };
+                self.state.scroll_preview_by(num);
                 self.event_sender.send(Event::Render).unwrap();
             }
             _ => bail!("Unsupported command {}", command),
@@ -142,7 +146,6 @@ impl App {
     fn draw(&mut self) -> Result<()> {
         self.term.draw(|frame| {
             frame.render_stateful_widget(AppWidget, frame.area(), &mut self.state);
-            self.frame_count = frame.count()
         })?;
         Ok(())
     }
@@ -154,21 +157,27 @@ impl StatefulWidget for AppWidget {
     type State = State;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut State) {
-        // Background color
-        Block::default()
-            // .bg(config::get().color.base00)
-            .render(area, buf);
-
         use Constraint::*;
-        let [header, main, _footer] = Layout::vertical([Length(3), Min(3), Length(1)]).areas(area);
-        let [list, preview] = Layout::horizontal([Percentage(50), Fill(1)]).areas(main);
+        let [header_area, main_area, _footer] =
+            Layout::vertical([Length(3), Min(3), Length(1)]).areas(area);
+        let [list_area, preview_area] =
+            Layout::horizontal([Percentage(50), Fill(1)]).areas(main_area);
 
-        HeaderWidget.render(header, buf);
+        HeaderWidget.render(header_area, buf);
         if let Some(page) = &mut state.current_page {
-            ListWidget.render(list, buf, page);
+            ListWidget.render(list_area, buf, page);
         } else {
-            Paragraph::new("loading...").render(list, buf)
+            Paragraph::new("loading...").render(list_area, buf);
         }
-        state.current_preview.render(preview, buf);
+
+        {
+            let preview_block = Block::bordered().border_type(BorderType::Rounded);
+            let preview_inner = preview_block.inner(preview_area);
+            preview_block.render(preview_area, buf);
+
+            if let Some(p) = state.current_preview.as_mut() {
+                p.render(preview_inner, buf);
+            }
+        }
     }
 }

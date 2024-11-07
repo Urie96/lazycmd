@@ -1,4 +1,4 @@
-use crate::{plugin, preview::Renderable, Event, PageEntry};
+use crate::{plugin, widgets::Renderable, Event, PageEntry};
 use mlua::prelude::*;
 
 pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
@@ -33,7 +33,7 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
                         .map(|h| &h.key == path.last().unwrap())
                         .unwrap_or(false)
                 {
-                    state.current_preview.content = Some(preview);
+                    state.current_preview = Some(preview);
                     plugin::send_event(lua, Event::Render)?;
                 }
                 Ok(())

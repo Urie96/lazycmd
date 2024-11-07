@@ -3,7 +3,7 @@ use mlua::Lua;
 use super::lc;
 
 pub fn init_lua(lua: &Lua) -> mlua::Result<()> {
-    lc::register(&lua)?;
+    lc::register(lua)?;
 
     macro_rules! preset {
         ($name:literal) => {{

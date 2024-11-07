@@ -1,7 +1,7 @@
 use crossterm::event::KeyEvent;
 use mlua::prelude::*;
 
-use crate::{preview::Preview, Keymap, Mode, Page, PageEntry};
+use crate::{widgets::Renderable, Keymap, Mode, Page, PageEntry};
 
 #[derive(Default)]
 pub struct State {
@@ -10,7 +10,7 @@ pub struct State {
     pub current_page: Option<Page>,
     pub keymap_config: Vec<Keymap>,
     pub last_key_event_buffer: Vec<KeyEvent>,
-    pub current_preview: Preview,
+    pub current_preview: Option<Box<dyn Renderable>>,
 }
 
 impl State {
@@ -71,27 +71,22 @@ impl State {
     pub fn go_to(&mut self, path: Vec<String>) {
         self.current_path = path;
         self.current_page = None;
-        self.current_preview.clear();
+        self.current_preview.take();
     }
 
-    pub fn go_to_parent(&mut self) {
-        if self.current_path.is_empty() {
-            return;
-        }
-        self.current_path.pop();
-        self.current_page = None;
-        self.current_preview.clear();
-    }
-
-    pub fn scroll_down_by(&mut self, amount: u16) {
+    pub fn scroll_by(&mut self, amount: i16) {
         if let Some(page) = &mut self.current_page {
-            page.list_state.scroll_down_by(amount)
+            if amount < 0 {
+                page.list_state.scroll_up_by(amount.unsigned_abs())
+            } else {
+                page.list_state.scroll_down_by(amount.unsigned_abs())
+            }
         }
     }
 
-    pub fn scroll_up_by(&mut self, amount: u16) {
-        if let Some(page) = &mut self.current_page {
-            page.list_state.scroll_up_by(amount)
+    pub fn scroll_preview_by(&mut self, amount: i16) {
+        if let Some(p) = &mut self.current_preview {
+            p.scroll_by(amount);
         }
     }
 }

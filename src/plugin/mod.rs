@@ -1,4 +1,3 @@
-mod converter;
 mod lc;
 mod lua;
 mod scope;

@@ -11,3 +11,5 @@ end
 function string.split(self, sep)
   return lc.split(self, sep)
 end
+
+unpack = unpack or table.unpack

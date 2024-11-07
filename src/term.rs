@@ -15,8 +15,7 @@ pub fn init() -> Result<Term> {
     Ok(terminal)
 }
 
-pub fn restore() -> Result<()> {
-    execute!(stdout(), LeaveAlternateScreen)?;
-    disable_raw_mode()?;
-    Ok(())
+pub fn restore() {
+    disable_raw_mode().ok();
+    execute!(stdout(), LeaveAlternateScreen).ok();
 }

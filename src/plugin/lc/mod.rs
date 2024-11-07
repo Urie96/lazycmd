@@ -1,6 +1,7 @@
 mod api;
 mod fs;
 mod keymap;
+mod path;
 mod ui;
 
 use crate::{events::EventHook, plugin, Event};
@@ -12,6 +13,7 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
     let keymap = keymap::new_table(lua)?.into_lua(lua)?;
     let api = api::new_table(lua)?.into_lua(lua)?;
     let fs = fs::new_table(lua)?.into_lua(lua)?;
+    let path = path::new_table(lua)?.into_lua(lua)?;
     let defer_fn = lua
         .create_function(|lua, (f, ms): (LuaFunction, u64)| {
             let sender = plugin::clone_sender(lua)?;
@@ -79,6 +81,7 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
         ("on_event", on_event),
         ("split", split),
         ("system", command_fn),
+        ("path", path),
     ])?;
     lua.globals().raw_set("lc", lc)
 }
