@@ -3,14 +3,52 @@ package.path = package.path .. ";./preset/?.lua"
 require("inject")
 local inspect = require("inspect")
 
-string.__add = function(a, b)
-  return a .. b
+---@param o1 any|table First object to compare
+---@param o2 any|table Second object to compare
+---@param ignore_mt boolean|nil True to ignore metatables (a recursive function to tests tables inside tables)
+local function equals(o1, o2, ignore_mt)
+  if o1 == o2 then
+    return true
+  end
+  local o1Type = type(o1)
+  local o2Type = type(o2)
+  if o1Type ~= o2Type then
+    return false
+  end
+  if o1Type ~= "table" then
+    return false
+  end
+
+  if not ignore_mt then
+    local mt1 = getmetatable(o1)
+    if mt1 and mt1.__eq then
+      --compare using built in method
+      return o1 == o2
+    end
+  end
+
+  local keySet = {}
+
+  for key1, value1 in pairs(o1) do
+    local value2 = o2[key1]
+    if value2 == nil or equals(value1, value2, ignore_mt) == false then
+      return false
+    end
+    keySet[key1] = true
+  end
+
+  for key2, _ in pairs(o2) do
+    if not keySet[key2] then
+      return false
+    end
+  end
+  return true
 end
 
 local M = {}
 
 local lc = lc or {}
-lc.print = function(...)
+lc.notify = function(...)
   print(lc.inspect(...))
 end
 lc.inspect = inspect
@@ -55,37 +93,53 @@ end)
 
 lc.on_event("EnterPost", function()
   local path = lc.api.get_current_path()
+  local files, err = lc.fs.read_dir_sync(lc.path.join(path))
+  if err then
+    lc.notify(err)
+    return
+  end
   local entries = lc.tbl_map(function(e)
+    local display = e.name
+    if e.is_dir then
+      display = e.name:fg("blue")
+    end
     return {
       key = e.name,
-      display = e.name,
       is_dir = e.is_dir,
+      display = display,
     }
-  end, lc.fs.read_dir_sync("/" .. table.concat(path, "/")))
+  end, files)
 
-  lc.api.page_set_entries(path, entries)
+  lc.api.page_set_entries(entries)
 end)
 
-lc.on_event("HoverPost", function()
-  local path = lc.api.get_current_path()
+lc.on_event("HoverPost", function(path)
+  local path = lc.api.get_hovered_path()
   local hovered = lc.api.page_get_hovered()
   if hovered then
-    table.insert(path, hovered.key)
     if hovered.is_dir == false then
-      local filepath = lc.path.join(path)
-      lc.system({ "bat", "-p", "--color=always", filepath }, nil, function(out)
+      lc.system({ "bat", "-p", "--color=always", lc.path.join(path) }, function(out)
+        local preview
         if out.code == 0 then
-          lc.api.page_set_preview(path, out.stdout:ansi())
+          preview = out.stdout:ansi()
         else
-          lc.api.page_set_preview(path, out.stderr:ansi())
+          preview = out.stderr:ansi()
+        end
+        if equals(path, lc.api.get_hovered_path()) then
+          lc.api.page_set_preview(preview)
         end
       end)
     elseif hovered.is_dir then
       local hovered_dir_path = lc.path.join(path)
+      local files, err = lc.fs.read_dir_sync(hovered_dir_path)
+      if err then
+        lc.notify(err)
+        return
+      end
       local filenames = lc.tbl_map(function(e)
         return e.name
-      end, lc.fs.read_dir_sync(hovered_dir_path))
-      lc.api.page_set_preview(path, table.concat(filenames, "\n"))
+      end, files)
+      lc.api.page_set_preview(table.concat(filenames, "\n"))
     end
   end
 end)

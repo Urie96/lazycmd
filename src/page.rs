@@ -1,3 +1,4 @@
+use crate::widgets::Span;
 use anyhow::bail;
 use mlua::prelude::*;
 use ratatui::widgets::{self, ListItem};
@@ -17,9 +18,17 @@ impl FromLua for PageEntry {
 
 impl PageEntry {
     pub fn display(&self) -> ListItem<'_> {
-        let f = || match self.tbl.get::<LuaValue>("displayer")? {
+        let f = || match self.tbl.get::<LuaValue>("display")? {
             LuaValue::Nil => Ok(ListItem::new(self.key.as_str())),
-            _ => bail!("displayer is expected a function"),
+            LuaValue::String(s) => Ok(ListItem::new(s.to_string_lossy())),
+            LuaValue::UserData(ud) => {
+                if let Ok(span) = ud.borrow::<Span>() {
+                    Ok(ListItem::new(span.clone().0))
+                } else {
+                    bail!("Expected Span or nil")
+                }
+            }
+            _ => bail!("Expected Span or nil"),
         };
         f().unwrap_or_else(|e| ListItem::new(e.to_string()))
     }

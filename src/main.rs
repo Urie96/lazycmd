@@ -20,17 +20,16 @@ mod widgets;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
+    log::Logs::start()?;
+    errors::install_hooks();
     let local = task::LocalSet::new();
 
     // Run the local task set.
     local
         .run_until(async move {
-            log::Logs::start()?;
-            errors::install_hooks();
-
             let events = events::Events::new();
 
-            App::new(events.sender()).run(events).await?;
+            App::new(events.sender()).run(events).await.unwrap();
 
             term::restore();
             Ok::<_, anyhow::Error>(())

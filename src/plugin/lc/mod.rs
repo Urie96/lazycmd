@@ -33,31 +33,29 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
         .into_lua(lua)?;
 
     let command_fn = lua
-        .create_function(
-            |lua, (cmd, opt, on_exit): (Vec<String>, Option<LuaTable>, LuaFunction)| {
-                let sender = plugin::clone_sender(lua)?;
+        .create_function(|lua, (cmd, on_exit): (Vec<String>, LuaFunction)| {
+            let sender = plugin::clone_sender(lua)?;
 
-                tokio::task::spawn_local(async move {
-                    let mut it = cmd.into_iter();
-                    let output = Command::new(it.next().unwrap()).args(it).output().await;
-                    sender
-                        .send(Event::LuaCallback(Box::new(move |lua| {
-                            let out = output.into_lua_err().and_then(|out| {
-                                lua.create_table_from([
-                                    ("code", out.status.code().into_lua(lua)?),
-                                    ("stdout", lua.create_string(out.stdout)?.into_lua(lua)?),
-                                    ("stderr", lua.create_string(out.stderr)?.into_lua(lua)?),
-                                ])
-                            })?;
-                            // let b = a;
-                            on_exit.call(out)
-                        })))
-                        .unwrap();
-                });
+            tokio::task::spawn_local(async move {
+                let mut it = cmd.into_iter();
+                let output = Command::new(it.next().unwrap()).args(it).output().await;
+                sender
+                    .send(Event::LuaCallback(Box::new(move |lua| {
+                        let out = output.into_lua_err().and_then(|out| {
+                            lua.create_table_from([
+                                ("code", out.status.code().into_lua(lua)?),
+                                ("stdout", lua.create_string(out.stdout)?.into_lua(lua)?),
+                                ("stderr", lua.create_string(out.stderr)?.into_lua(lua)?),
+                            ])
+                        })?;
+                        // let b = a;
+                        on_exit.call(out)
+                    })))
+                    .unwrap();
+            });
 
-                Ok(())
-            },
-        )?
+            Ok(())
+        })?
         .into_lua(lua)?;
 
     let on_event = lua

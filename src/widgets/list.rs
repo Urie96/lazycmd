@@ -15,7 +15,7 @@ impl StatefulWidget for ListWidget {
             .title("header");
         let list = widgets::List::new(page.list.iter().map(|entry| entry.display()))
             .block(block)
-            .highlight_style(Style::default().fg(Color::Blue))
+            .highlight_style(Style::default().bg(Color::Red).fg(Color::White))
             .highlight_spacing(widgets::HighlightSpacing::Always);
         StatefulWidget::render(list, area, buf, &mut page.list_state);
     }

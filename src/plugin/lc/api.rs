@@ -3,11 +3,9 @@ use mlua::prelude::*;
 
 pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
     let page_set_entries = lua
-        .create_function(|lua, (path, entries): (Vec<String>, Vec<PageEntry>)| {
+        .create_function(|lua, entries: Vec<PageEntry>| {
             plugin::mut_scope_state(lua, |state| {
-                if state.current_path == path {
-                    state.set_current_page_entries(entries);
-                }
+                state.set_current_page_entries(entries);
                 Ok(())
             })
         })?
@@ -19,23 +17,34 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
 
     let get_current_path = lua
         .create_function(|lua, ()| {
-            plugin::borrow_scope_state(lua, |state| Ok(state.current_path.clone()))
+            plugin::borrow_scope_state(lua, |state| {
+                lua.create_sequence_from(state.current_path.iter().map(|v| v.as_str()))
+            })
+        })?
+        .into_lua(lua)?;
+
+    let get_hovered_path = lua
+        .create_function(|lua, ()| {
+            plugin::borrow_scope_state(lua, |state| match state.hovered() {
+                None => Ok(LuaNil),
+                Some(hovered) => lua
+                    .create_sequence_from(
+                        state
+                            .current_path
+                            .iter()
+                            .map(|v| v.as_str())
+                            .chain([hovered.key.as_str()]),
+                    )?
+                    .into_lua(lua),
+            })
         })?
         .into_lua(lua)?;
 
     let page_set_preview = lua
-        .create_function(|lua, (path, preview): (Vec<String>, Box<dyn Renderable>)| {
+        .create_function(|lua, preview: Box<dyn Renderable>| {
             plugin::mut_scope_state(lua, |state| {
-                if !path.is_empty()
-                    && path[..path.len() - 1] == state.current_path
-                    && state
-                        .hovered()
-                        .map(|h| &h.key == path.last().unwrap())
-                        .unwrap_or(false)
-                {
-                    state.current_preview = Some(preview);
-                    plugin::send_event(lua, Event::Render)?;
-                }
+                state.current_preview = Some(preview);
+                plugin::send_event(lua, Event::Render)?;
                 Ok(())
             })
         })?
@@ -53,5 +62,6 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
         ("page_set_preview", page_set_preview),
         ("go_to", go_to),
         ("get_current_path", get_current_path),
+        ("get_hovered_path", get_hovered_path),
     ])
 }

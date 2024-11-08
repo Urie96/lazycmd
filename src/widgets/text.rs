@@ -4,6 +4,7 @@ pub struct Text(pub ratatui::text::Text<'static>);
 
 impl LuaUserData for Text {}
 
+#[derive(Clone)]
 pub struct Span(pub ratatui::text::Span<'static>);
 
 impl LuaUserData for Span {
