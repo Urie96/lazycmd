@@ -15,6 +15,11 @@ pub fn scope<R>(
     })
 }
 
+pub(super) fn send_render_event(lua: &Lua) -> LuaResult<()> {
+    lua.named_registry_value::<LuaAnyUserData>("sender")?
+        .borrow_scoped::<EventSender, _>(|sender| sender.send(Event::Render).unwrap())
+}
+
 pub(super) fn send_event(lua: &Lua, e: Event) -> LuaResult<()> {
     lua.named_registry_value::<LuaAnyUserData>("sender")?
         .borrow_scoped::<EventSender, _>(|sender| sender.send(e).unwrap())

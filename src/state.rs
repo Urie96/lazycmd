@@ -18,11 +18,7 @@ impl State {
         if self.current_page.is_none() {
             self.current_page = Some(Default::default())
         }
-        let page = self.current_page.as_mut().unwrap();
-        page.list = entries;
-        if !page.list.is_empty() && page.list_state.selected().is_none() {
-            page.list_state.select(Some(0));
-        }
+        self.current_page.as_mut().unwrap().list = entries;
     }
     pub fn add_keymap(&mut self, keymap: Keymap) {
         self.keymap_config
@@ -75,6 +71,10 @@ impl State {
     }
 
     pub fn scroll_by(&mut self, amount: i16) {
+        let page = self.current_page.as_mut().unwrap();
+        if !page.list.is_empty() && page.list_state.selected().is_none() {
+            page.list_state.select(Some(0));
+        }
         if let Some(page) = &mut self.current_page {
             if amount < 0 {
                 page.list_state.scroll_up_by(amount.unsigned_abs())

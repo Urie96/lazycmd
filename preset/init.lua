@@ -113,7 +113,7 @@ lc.on_event("EnterPost", function()
   lc.api.page_set_entries(entries)
 end)
 
-lc.on_event("HoverPost", function(path)
+lc.on_event("HoverPost", function()
   local path = lc.api.get_hovered_path()
   local hovered = lc.api.page_get_hovered()
   if hovered then

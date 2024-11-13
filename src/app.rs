@@ -22,6 +22,7 @@ pub struct App {
     state: State,
     term: Term,
     quitting: bool,
+    should_render: bool,
     event_hooks: HashMap<EventHook, Vec<LuaFunction>>,
     lua: Lua,
 }
@@ -39,7 +40,8 @@ impl App {
             event_sender,
             state,
             term,
-            quitting: Default::default(),
+            should_render: false,
+            quitting: false,
             event_hooks: Default::default(),
         }
     }
@@ -53,6 +55,9 @@ impl App {
             }
             if self.quitting {
                 break;
+            }
+            if self.should_render {
+                self.draw()?;
             }
         }
         Ok(())
@@ -77,7 +82,7 @@ impl App {
             }
             // Event::Tick => Some(Action::Tick),
             Event::Render => {
-                self.draw()?;
+                self.should_render = true;
             }
             // Event::Crossterm(CrosstermEvent::Resize(x, y)) => Some(Action::Resize(x, y)),
             Event::Crossterm(CrosstermEvent::Key(key)) => {
@@ -95,7 +100,7 @@ impl App {
             Event::Enter(path) => {
                 self.state.go_to(path);
                 self.run_event_hooks(EventHook::EnterPost)?;
-                self.event_sender.send(Event::Render).unwrap();
+                self.should_render = true;
             }
             Event::LuaCallback(cb) => {
                 plugin::scope(&self.lua, &mut self.state, &self.event_sender, || {
@@ -125,7 +130,7 @@ impl App {
                 self.state.scroll_by(num);
                 self.state.current_preview.take();
                 self.run_event_hooks(EventHook::HoverPost)?;
-                self.event_sender.send(Event::Render).unwrap();
+                self.should_render = true;
             }
             "scroll_preview_by" => {
                 let num = match it.next() {
@@ -135,7 +140,7 @@ impl App {
                     None => 1,
                 };
                 self.state.scroll_preview_by(num);
-                self.event_sender.send(Event::Render).unwrap();
+                self.should_render = true;
             }
             _ => bail!("Unsupported command {}", command),
         };
