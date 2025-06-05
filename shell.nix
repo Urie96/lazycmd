@@ -39,6 +39,8 @@ pkgs.mkShell {
     cargo-watch
     rust-analyzer
     lua5_4_compat
+
+    pstree
   ];
 
   env = {
