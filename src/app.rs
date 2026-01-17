@@ -22,7 +22,7 @@ pub struct App {
     state: State,
     term: Term,
     quitting: bool,
-    should_render: bool,
+    dirty: bool,
     event_hooks: HashMap<EventHook, Vec<LuaFunction>>,
     lua: Lua,
 }
@@ -40,7 +40,7 @@ impl App {
             event_sender,
             state,
             term,
-            should_render: false,
+            dirty: false,
             quitting: false,
             event_hooks: Default::default(),
         }
@@ -56,8 +56,10 @@ impl App {
             if self.quitting {
                 break;
             }
-            if self.should_render {
-                self.draw()?;
+            if self.dirty {
+                self.term.draw(|frame| {
+                    frame.render_stateful_widget(AppWidget, frame.area(), &mut self.state);
+                })?;
             }
         }
         Ok(())
@@ -82,7 +84,7 @@ impl App {
             }
             // Event::Tick => Some(Action::Tick),
             Event::Render => {
-                self.should_render = true;
+                self.dirty = true;
             }
             // Event::Crossterm(CrosstermEvent::Resize(x, y)) => Some(Action::Resize(x, y)),
             Event::Crossterm(CrosstermEvent::Key(key)) => {
@@ -100,7 +102,7 @@ impl App {
             Event::Enter(path) => {
                 self.state.go_to(path);
                 self.run_event_hooks(EventHook::EnterPost)?;
-                self.should_render = true;
+                self.dirty = true;
             }
             Event::LuaCallback(cb) => {
                 plugin::scope(&self.lua, &mut self.state, &self.event_sender, || {
@@ -130,7 +132,7 @@ impl App {
                 self.state.scroll_by(num);
                 self.state.current_preview.take();
                 self.run_event_hooks(EventHook::HoverPost)?;
-                self.should_render = true;
+                self.dirty = true;
             }
             "scroll_preview_by" => {
                 let num = match it.next() {
@@ -140,18 +142,10 @@ impl App {
                     None => 1,
                 };
                 self.state.scroll_preview_by(num);
-                self.should_render = true;
+                self.dirty = true;
             }
             _ => bail!("Unsupported command {}", command),
         };
-        Ok(())
-    }
-
-    // Render the `AppWidget` as a stateful widget using `self` as the `State`
-    fn draw(&mut self) -> Result<()> {
-        self.term.draw(|frame| {
-            frame.render_stateful_widget(AppWidget, frame.area(), &mut self.state);
-        })?;
         Ok(())
     }
 }
