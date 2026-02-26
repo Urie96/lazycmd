@@ -73,7 +73,7 @@ fn parse_key_code_with_modifiers(
         _ => {
             return Ok(raw
                 .chars()
-                .map(|c| KeyEvent::new(KeyCode::Char(c), KeyModifiers::empty()))
+                .map(|c| KeyEvent::new(KeyCode::Char(c), modifiers))
                 .collect());
         }
     };
@@ -103,4 +103,48 @@ fn extract_modifiers(raw: &str) -> (&str, KeyModifiers) {
     }
 
     (current, modifiers)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ctrl_d() {
+        let keyseq = KeySequence::from("ctrl-d");
+        assert_eq!(keyseq.0.len(), 1);
+        assert!(keyseq.0[0].modifiers.contains(KeyModifiers::CONTROL));
+        assert_eq!(keyseq.0[0].code, KeyCode::Char('d'));
+    }
+
+    #[test]
+    fn test_ctrl_c() {
+        let keyseq = KeySequence::from("ctrl-c");
+        assert_eq!(keyseq.0.len(), 1);
+        assert!(keyseq.0[0].modifiers.contains(KeyModifiers::CONTROL));
+        assert_eq!(keyseq.0[0].code, KeyCode::Char('c'));
+    }
+
+    #[test]
+    fn test_alt_a() {
+        let keyseq = KeySequence::from("alt-a");
+        assert_eq!(keyseq.0.len(), 1);
+        assert!(keyseq.0[0].modifiers.contains(KeyModifiers::ALT));
+        assert_eq!(keyseq.0[0].code, KeyCode::Char('a'));
+    }
+
+    #[test]
+    fn test_simple_char() {
+        let keyseq = KeySequence::from("x");
+        assert_eq!(keyseq.0.len(), 1);
+        assert_eq!(keyseq.0[0].modifiers, KeyModifiers::empty());
+        assert_eq!(keyseq.0[0].code, KeyCode::Char('x'));
+    }
+
+    #[test]
+    fn test_plain_down() {
+        let keyseq = KeySequence::from("down");
+        assert_eq!(keyseq.0.len(), 1);
+        assert_eq!(keyseq.0[0].code, KeyCode::Down);
+    }
 }

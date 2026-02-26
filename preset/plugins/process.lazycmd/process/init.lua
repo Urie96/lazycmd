@@ -1,6 +1,16 @@
 local M = {}
 
-function M.setup() end
+function M.setup()
+  lc.keymap.set('main', 'ctrl-d', function()
+    local entry = lc.api.page_get_hovered()
+    if entry and entry.pid then
+      lc.system({ 'kill', tostring(entry.pid) }, function()
+        lc.notify('进程已终止, PID:', entry.pid)
+        lc.cmd 'reload'
+      end)
+    end
+  end)
+end
 
 function M.list(_, cb)
   lc.system({ 'ps', '-eo', 'pid,command' }, function(out)

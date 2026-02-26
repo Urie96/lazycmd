@@ -144,6 +144,10 @@ impl App {
                 self.state.scroll_preview_by(num);
                 self.dirty = true;
             }
+            "reload" => {
+                self.run_event_hooks(EventHook::EnterPost)?;
+                self.dirty = true;
+            }
             _ => bail!("Unsupported command {}", command),
         };
         Ok(())

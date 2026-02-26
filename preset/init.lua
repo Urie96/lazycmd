@@ -3,6 +3,7 @@ package.path = package.path
 
 require 'inject'
 local inspect = require 'inspect'
+lc.json = require 'json'
 
 ---@param o1 any|table First object to compare
 ---@param o2 any|table Second object to compare
@@ -52,11 +53,13 @@ end
 
 map('main', 'up', 'scroll_by -1')
 map('main', 'down', 'scroll_by 1')
+-- map('main', 'ctrl-d', 'scroll_by 1')
 map('main', 'pageup', 'scroll_preview_by -30')
 map('main', 'pagedown', 'scroll_preview_by 30')
+map('main', 'ctrl-r', 'reload')
 map('main', 'q', 'quit')
-map('main', 'gh', function() lc.api.go_to(lc.path.split(os.getenv 'HOME')) end)
-map('main', 'gd', function() lc.api.go_to(lc.path.split(os.getenv 'PWD')) end)
+map('main', 'gh', function() lc.api.go_to(lc.path.split(os.getenv 'HOME' or '')) end)
+map('main', 'gd', function() lc.api.go_to(lc.path.split(os.getenv 'PWD' or '')) end)
 map('main', 'left', function()
   local path = lc.api.get_current_path()
   if #path > 0 then
@@ -74,10 +77,14 @@ map('main', 'right', function()
   end
 end)
 
+local args = lc.api.argv()
+local plugin_name = args[2]
+local plugin = require(plugin_name)
+plugin.setup()
+
 lc.on_event('EnterPost', function()
   local path = lc.api.get_current_path()
-  local process = require 'process'
-  process.list(path, function(entries)
+  plugin.list(path, function(entries)
     if equals(path, lc.api.get_current_path()) then lc.api.page_set_entries(entries) end
   end)
   -- local files, err = lc.fs.read_dir_sync(lc.path.join(path))
@@ -100,8 +107,7 @@ end)
 
 lc.on_event('HoverPost', function()
   local path = lc.api.get_hovered_path()
-  local process = require 'process'
-  process.preview(path, function(entries)
+  plugin.preview(path, function(entries)
     if equals(path, lc.api.get_hovered_path()) then lc.api.page_set_preview(entries) end
   end)
   -- local hovered = lc.api.page_get_hovered()
