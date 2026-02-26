@@ -1,18 +1,53 @@
 mod api;
 mod fs;
+mod http;
 mod keymap;
 mod path;
 mod ui;
 
 use crate::{events::EventHook, plugin, Event};
 use mlua::prelude::*;
+use std::io::{self, Write};
+use std::path::PathBuf;
 use std::time::Duration;
 use tokio::{process::Command, time::sleep};
+use base64::Engine;
+
+/// Get the log file path for Lua plugin logs
+fn get_log_path() -> PathBuf {
+    if let Ok(home) = std::env::var("HOME") {
+        PathBuf::from(home).join(".local/state/lazycmd/lua.log")
+    } else {
+        PathBuf::from("/tmp/lazycmd.log")
+    }
+}
+
+/// Write a log entry to the log file
+fn write_log(level: &str, message: &str) {
+    let log_path = get_log_path();
+
+    // Ensure the directory exists
+    if let Some(parent) = log_path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+
+    // Format the log entry with timestamp
+    let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f");
+    let log_entry = format!("[{}][{}] {}\n", timestamp, level, message);
+
+    // Append to log file
+    let _ = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path)
+        .and_then(|mut file| file.write_all(log_entry.as_bytes()));
+}
 
 pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
     let keymap = keymap::new_table(lua)?.into_lua(lua)?;
     let api = api::new_table(lua)?.into_lua(lua)?;
     let fs = fs::new_table(lua)?.into_lua(lua)?;
+    let http = http::new_table(lua)?.into_lua(lua)?;
     let path = path::new_table(lua)?.into_lua(lua)?;
     let defer_fn = lua
         .create_function(|lua, (f, ms): (LuaFunction, u64)| {
@@ -58,6 +93,15 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
         })?
         .into_lua(lua)?;
 
+    let interactive_fn = lua
+        .create_function(|lua, (cmd, on_complete): (Vec<String>, Option<LuaFunction>)| {
+            if cmd.is_empty() {
+                return Err(LuaError::RuntimeError("Command cannot be empty".to_string()));
+            }
+            plugin::send_event(lua, Event::InteractiveCommand(cmd, on_complete))
+        })?
+        .into_lua(lua)?;
+
     let on_event = lua
         .create_function(|lua, (event_name, cb): (EventHook, LuaFunction)| {
             plugin::send_event(lua, Event::AddEventHook(event_name, cb))
@@ -68,6 +112,69 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
         .create_function(|lua, (s, sep): (String, String)| lua.create_sequence_from(s.split(&sep)))?
         .into_lua(lua)?;
 
+    let log_fn = lua
+        .create_function(|lua, (level, format, args): (String, LuaString, LuaMultiValue)| {
+            // Convert all args to strings
+            let mut arg_strings = Vec::new();
+            for arg in args {
+                match String::from_lua(arg, lua) {
+                    Ok(s) => arg_strings.push(s),
+                    Err(_) => arg_strings.push("[unconvertible]".to_string()),
+                }
+            }
+
+            // Format the message using the format string and args
+            let message = if arg_strings.is_empty() {
+                format.to_string_lossy().to_string()
+            } else {
+                // Simple format: replace {} with args sequentially
+                let fmt_str = format.to_string_lossy().to_string();
+                let mut result = fmt_str.clone();
+                let mut arg_idx = 0;
+                while let Some(pos) = result.find("{}") {
+                    if arg_idx < arg_strings.len() {
+                        result.replace_range(pos..pos + 2, &arg_strings[arg_idx]);
+                        arg_idx += 1;
+                    } else {
+                        break;
+                    }
+                }
+                result
+            };
+
+            write_log(&level, &message);
+            Ok(())
+        })?
+        .into_lua(lua)?;
+
+    let osc52_copy = lua
+        .create_function(|_, text: String| {
+            // Encode text as base64
+            let encoded = base64::engine::general_purpose::STANDARD.encode(&text);
+
+            // Build OSC 52 escape sequence: ESC ] 52 ; c ; <base64_data> BEL
+            let osc_sequence = format!("\x1b]52;c;{}\x07", encoded);
+
+            // Write to terminal stdout
+            if let Err(e) = io::stdout().write_all(osc_sequence.as_bytes()) {
+                return Err(LuaError::RuntimeError(format!("Failed to write OSC 52 sequence: {}", e)));
+            }
+
+            // Flush to ensure the sequence is sent
+            if let Err(e) = io::stdout().flush() {
+                return Err(LuaError::RuntimeError(format!("Failed to flush stdout: {}", e)));
+            }
+
+            Ok(())
+        })?
+        .into_lua(lua)?;
+
+    let notify_fn = lua
+        .create_function(|lua, message: String| {
+            plugin::send_event(lua, Event::Notify(message))
+        })?
+        .into_lua(lua)?;
+
     ui::inject_string_meta_method(lua)?;
 
     let lc = lua.create_table_from([
@@ -75,11 +182,16 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
         ("keymap", keymap),
         ("api", api),
         ("fs", fs),
+        ("http", http),
         ("cmd", cmd),
         ("on_event", on_event),
         ("split", split),
         ("system", command_fn),
+        ("interactive", interactive_fn),
         ("path", path),
+        ("log", log_fn),
+        ("osc52_copy", osc52_copy),
+        ("notify", notify_fn),
     ])?;
     lua.globals().raw_set("lc", lc)
 }

@@ -1,2 +1,2 @@
 run:
-    cargo run -- process
+    cargo run -- memos

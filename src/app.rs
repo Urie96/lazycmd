@@ -84,7 +84,9 @@ impl App {
             }
             // Event::Tick => Some(Action::Tick),
             Event::Render => {
-                self.dirty = true;
+                if self.state.check_notification_expiry() {
+                    self.dirty = true;
+                }
             }
             // Event::Crossterm(CrosstermEvent::Resize(x, y)) => Some(Action::Resize(x, y)),
             Event::Crossterm(CrosstermEvent::Key(key)) => {
@@ -110,8 +112,57 @@ impl App {
                     Ok(())
                 })?;
             }
-        };
+            Event::InteractiveCommand(cmd, on_complete) => {
+                // Execute the interactive command
+                let result = self.execute_interactive_command(cmd);
+
+                // Call the completion callback if provided
+                if let Some(cb) = on_complete {
+                    let exit_code = match result {
+                        Ok(code) => code,
+                        Err(e) => {
+                            // Log the error and use -1 as exit code
+                            eprintln!("Error executing interactive command: {}", e);
+                            -1
+                        }
+                    };
+                    plugin::scope(&self.lua, &mut self.state, &self.event_sender, || {
+                        cb.call::<()>(exit_code)?;
+                        Ok(())
+                    })?;
+                }
+            }
+            Event::Notify(message) => {
+                self.state.set_notification(message);
+                self.dirty = true;
+            }
+        }
         Ok(())
+    }
+
+    fn execute_interactive_command(&mut self, cmd: Vec<String>) -> Result<i32> {
+        if cmd.is_empty() {
+            bail!("Interactive command cannot be empty");
+        }
+
+        let mut it = cmd.iter();
+        let program = it.next().unwrap();
+        let args: Vec<&String> = it.collect();
+
+        // Temporarily restore the terminal to let the subprocess take control
+        term::restore();
+
+        // Execute the command and wait for it to complete
+        let result = std::process::Command::new(program)
+            .args(&args)
+            .status()
+            .context(format!("Failed to execute command: {}", program))?;
+
+        // Re-initialize the terminal for TUI
+        self.term = term::init()?;
+
+        // Return the exit code
+        Ok(result.code().unwrap_or(-1))
     }
 
     fn handle_command(&mut self, command: &str) -> Result<()> {
@@ -181,6 +232,33 @@ impl StatefulWidget for AppWidget {
             if let Some(p) = state.current_preview.as_mut() {
                 p.render(preview_inner, buf);
             }
+        }
+
+        // Draw notification in bottom-right corner
+        if let Some((message, _)) = &state.notification {
+            // Fixed size notification box
+            let notification_width = 40u16;  // Fixed width
+            let notification_height = 3u16;    // Fixed height (1 line + borders)
+
+            // Calculate bottom-right position (fixed offset from bottom-right corner)
+            let x = area.width.saturating_sub(notification_width + 2);
+            let y = area.height.saturating_sub(notification_height + 1);
+
+            let notification_area = Rect {
+                x,
+                y,
+                width: notification_width.min(area.width),
+                height: notification_height.min(area.height),
+            };
+
+            let block = Block::bordered()
+                .border_type(BorderType::Rounded)
+                .border_style(Style::default().fg(Color::Yellow));
+            let inner = block.inner(notification_area);
+            block.render(notification_area, buf);
+            Paragraph::new(message.as_str())
+                .style(Style::default().fg(Color::Yellow))
+                .render(inner, buf);
         }
     }
 }

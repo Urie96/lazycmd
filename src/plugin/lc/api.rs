@@ -57,12 +57,6 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
         })?
         .into_lua(lua)?;
 
-    let get_hovered_entry = lua
-        .create_function(|lua, ()| {
-            plugin::borrow_scope_state(lua, |state| Ok(state.hovered().map(|p| p.tbl.clone())))
-        })?
-        .into_lua(lua)?;
-
     let argv = lua
         .create_function(|lua, ()| lua.create_sequence_from(std::env::args()))?
         .into_lua(lua)?;
@@ -70,7 +64,6 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
     lua.create_table_from([
         ("page_set_entries", page_set_entries),
         ("page_get_hovered", page_get_hovered),
-        ("get_hovered_entry", get_hovered_entry),
         ("page_set_preview", page_set_preview),
         ("go_to", go_to),
         ("get_current_path", get_current_path),

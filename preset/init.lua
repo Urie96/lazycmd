@@ -1,9 +1,9 @@
-package.path = package.path
-  .. ';./preset/?.lua;./preset/plugins/process.lazycmd/?.lua;./preset/plugins/process.lazycmd/?/init.lua;'
+package.path = package.path .. ';./preset/?.lua;./preset/plugins/?.lazycmd/?/init.lua;'
 
 require 'inject'
 local inspect = require 'inspect'
 lc.json = require 'json'
+local plugins = require 'plugins'
 
 ---@param o1 any|table First object to compare
 ---@param o2 any|table Second object to compare
@@ -40,7 +40,6 @@ end
 local M = {}
 
 local lc = lc or {}
-lc.notify = function(...) print(lc.inspect(...)) end
 lc.inspect = inspect
 
 local function map(mode, key, cb)
@@ -51,16 +50,16 @@ local function map(mode, key, cb)
   end
 end
 
-map('main', 'up', 'scroll_by -1')
-map('main', 'down', 'scroll_by 1')
--- map('main', 'ctrl-d', 'scroll_by 1')
-map('main', 'pageup', 'scroll_preview_by -30')
-map('main', 'pagedown', 'scroll_preview_by 30')
-map('main', 'ctrl-r', 'reload')
+map('main', '<up>', 'scroll_by -1')
+map('main', '<down>', 'scroll_by 1')
+map('main', 'g', 'scroll_by 9999')
+-- map('main', '<C-d>', 'scroll_by 1')
+map('main', '<pageup>', 'scroll_preview_by -30')
+map('main', '<pagedown>', 'scroll_preview_by 30')
+map('main', '<C-r>', 'reload')
 map('main', 'q', 'quit')
-map('main', 'gh', function() lc.api.go_to(lc.path.split(os.getenv 'HOME' or '')) end)
-map('main', 'gd', function() lc.api.go_to(lc.path.split(os.getenv 'PWD' or '')) end)
-map('main', 'left', function()
+map('main', '<C-q>', 'quit')
+map('main', '<left>', function()
   local path = lc.api.get_current_path()
   if #path > 0 then
     table.remove(path)
@@ -68,9 +67,9 @@ map('main', 'left', function()
   end
 end)
 
-map('main', 'right', function()
+map('main', '<right>', function()
   local hovered = lc.api.page_get_hovered()
-  if hovered and hovered.is_dir then
+  if hovered then
     local path = lc.api.get_current_path()
     table.insert(path, hovered.key)
     lc.api.go_to(path)
@@ -79,60 +78,31 @@ end)
 
 local args = lc.api.argv()
 local plugin_name = args[2]
+
+for _, plugin in ipairs(plugins) do
+  if plugin[1] == plugin_name then
+    if plugin.config then plugin.config() end
+    break
+  end
+end
+
 local plugin = require(plugin_name)
-plugin.setup()
 
 lc.on_event('EnterPost', function()
   local path = lc.api.get_current_path()
   plugin.list(path, function(entries)
     if equals(path, lc.api.get_current_path()) then lc.api.page_set_entries(entries) end
   end)
-  -- local files, err = lc.fs.read_dir_sync(lc.path.join(path))
-  -- if err then
-  --   lc.notify(err)
-  --   return
-  -- end
-  -- local entries = lc.tbl_map(function(e)
-  --   local display = e.name
-  --   if e.is_dir then display = e.name:fg 'blue' end
-  --   return {
-  --     key = e.name,
-  --     is_dir = e.is_dir,
-  --     display = display,
-  --   }
-  -- end, files)
-  --
-  -- lc.api.page_set_entries(entries)
 end)
 
 lc.on_event('HoverPost', function()
+  local entry = lc.api.page_get_hovered()
   local path = lc.api.get_hovered_path()
-  plugin.preview(path, function(entries)
-    if equals(path, lc.api.get_hovered_path()) then lc.api.page_set_preview(entries) end
-  end)
-  -- local hovered = lc.api.page_get_hovered()
-  -- if hovered then
-  --   if hovered.is_dir == false then
-  --     lc.system({ 'bat', '-p', '--color=always', lc.path.join(path) }, function(out)
-  --       local preview
-  --       if out.code == 0 then
-  --         preview = out.stdout:ansi()
-  --       else
-  --         preview = out.stderr:ansi()
-  --       end
-  --       if equals(path, lc.api.get_hovered_path()) then lc.api.page_set_preview(preview) end
-  --     end)
-  --   elseif hovered.is_dir then
-  --     local hovered_dir_path = lc.path.join(path)
-  --     local files, err = lc.fs.read_dir_sync(hovered_dir_path)
-  --     if err then
-  --       lc.notify(err)
-  --       return
-  --     end
-  --     local filenames = lc.tbl_map(function(e) return e.name end, files)
-  --     lc.api.page_set_preview(table.concat(filenames, '\n'))
-  --   end
-  -- end
+  if entry then
+    plugin.preview(entry, function(entries)
+      if equals(path, lc.api.get_hovered_path()) then lc.api.page_set_preview(entries) end
+    end)
+  end
 end)
 
 return M

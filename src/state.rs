@@ -1,5 +1,6 @@
 use crossterm::event::KeyEvent;
 use mlua::prelude::*;
+use std::time::Instant;
 
 use crate::{widgets::Renderable, Keymap, Mode, Page, PageEntry};
 
@@ -11,6 +12,7 @@ pub struct State {
     pub keymap_config: Vec<Keymap>,
     pub last_key_event_buffer: Vec<KeyEvent>,
     pub current_preview: Option<Box<dyn Renderable>>,
+    pub notification: Option<(String, Instant)>,
 }
 
 impl State {
@@ -88,5 +90,19 @@ impl State {
         if let Some(p) = &mut self.current_preview {
             p.scroll_by(amount);
         }
+    }
+
+    pub fn set_notification(&mut self, message: String) {
+        self.notification = Some((message, Instant::now() + std::time::Duration::from_secs(3)));
+    }
+
+    pub fn check_notification_expiry(&mut self) -> bool {
+        if let Some((_, expires_at)) = &self.notification {
+            if Instant::now() > *expires_at {
+                self.notification.take();
+                return true;
+            }
+        }
+        false
     }
 }

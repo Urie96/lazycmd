@@ -3,12 +3,7 @@ local M = {}
 function M.setup()
   lc.keymap.set('main', 'ctrl-d', function()
     local entry = lc.api.page_get_hovered()
-    if entry and entry.pid then
-      lc.system({ 'kill', tostring(entry.pid) }, function()
-        lc.notify('进程已终止, PID:', entry.pid)
-        lc.cmd 'reload'
-      end)
-    end
+    if entry and entry.pid then lc.system({ 'kill', tostring(entry.pid) }, function() lc.cmd 'reload' end) end
   end)
 end
 
@@ -31,9 +26,8 @@ function M.list(_, cb)
   end)
 end
 
-function M.preview(path, cb)
-  local pid = path[#path]
-  lc.system({ 'pstree', '-p', pid }, function(out)
+function M.preview(entry, cb)
+  lc.system({ 'pstree', '-p', entry.pid }, function(out)
     local preview
     if out.code == 0 then
       preview = out.stdout:ansi()

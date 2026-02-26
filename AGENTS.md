@@ -65,16 +65,19 @@ plugin::scope(&lua, &mut state, &sender, || {
 
 Lua 中的全局表 `lc` 提供以下子系统：
 
-| Lua 模块      | Rust 源文件               | 用途                                            |
-| ------------- | ------------------------- | ----------------------------------------------- |
-| `lc.api`      | `src/plugin/lc/api.rs`    | 页面管理（entries、预览、导航）、命令行参数访问 |
-| `lc.fs`       | `src/plugin/lc/fs.rs`     | 同步文件系统操作                                |
-| `lc.keymap`   | `src/plugin/lc/keymap.rs` | 注册键盘快捷键                                  |
-| `lc.path`     | `src/plugin/lc/path.rs`   | 路径操作（split/join）                          |
-| `lc.defer_fn` | `src/plugin/lc/mod.rs`    | 调度异步 Lua 回调                               |
-| `lc.system`   | `src/plugin/lc/mod.rs`    | 异步执行外部命令                                |
-| `lc.on_event` | `src/plugin/lc/mod.rs`    | 注册事件钩子                                    |
-| `lc.cmd`      | `src/plugin/lc/mod.rs`    | 向 Rust 发送内部命令                            |
+| Lua 模块        | Rust 源文件               | 用途                                            |
+| --------------- | ------------------------- | ----------------------------------------------- |
+| `lc.api`        | `src/plugin/lc/api.rs`    | 页面管理（entries、预览、导航）、命令行参数访问 |
+| `lc.fs`         | `src/plugin/lc/fs.rs`     | 同步文件系统操作                                |
+| `lc.keymap`     | `src/plugin/lc/keymap.rs` | 注册键盘快捷键                                  |
+| `lc.path`       | `src/plugin/lc/path.rs`   | 路径操作（split/join）                          |
+| `lc.defer_fn`   | `src/plugin/lc/mod.rs`    | 调度异步 Lua 回调                               |
+| `lc.system`     | `src/plugin/lc/mod.rs`    | 异步执行外部命令                                |
+| `lc.interactive`| `src/plugin/lc/mod.rs`    | 执行交互式命令（有终端访问权限）                |
+| `lc.on_event`   | `src/plugin/lc/mod.rs`    | 注册事件钩子                                    |
+| `lc.cmd`        | `src/plugin/lc/mod.rs`    | 向 Rust 发送内部命令                            |
+| `lc.osc52_copy` | `src/plugin/lc/mod.rs`    | 通过 OSC 52 复制文本到剪贴板                    |
+| `lc.notify`     | `src/plugin/lc/mod.rs`    | 在右下角显示通知消息（3 秒后自动消失）          |
 
 #### 事件钩子
 
@@ -109,16 +112,70 @@ ansi_string:ansi()  -- 返回一个 Text widget
 - **FromLua trait**：允许从 Lua 值转换为 Rust widgets
   - 字符串 → `StatefulParagraph`
   - UserData（Text/Span）→ widgets
-  - `PageEntry`：带有 `{key, display?, is_dir?, ...}` 的 Lua 表
+  - `PageEntry`：带有 `{key, display?, ...}` 的 Lua 表
 
 ### 键盘映射系统
 
 键盘映射在 Lua 中配置并注册到 Rust：
 
 ```lua
-lc.keymap.set('main', 'ctrl-j', function() ... end)
-lc.keymap.set('main', 'down', 'scroll_by 1')  -- 命令字符串简写
+-- 单字符键（直接写字符）
+lc.keymap.set('main', 'd', function() ... end)
+lc.keymap.set('main', 'x', function() ... end)
+lc.keymap.set('main', 'q', function() ... end)
+
+-- 角括号内的多字符键（功能键）
+lc.keymap.set('main', '<C-x>', function() ... end)
+lc.keymap.set('main', '<A-k>', function() ... end)
+lc.keymap.set('main', '<up>', 'scroll_by -1')
+lc.keymap.set('main', '<down>', 'scroll_by 1')
+lc.keymap.set('main', '<enter>', function() ... end)
+
+-- 多键序列（按顺序连续按键）
+lc.keymap.set('main', 'dd', function() ... end)  -- 按 d d 触发
+lc.keymap.set('main', '<C-x><C-c>', function() ... end)  -- 连续按键
+lc.keymap.set('main', 'gg', 'scroll_to_top')
 ```
+
+#### 支持的按键格式
+
+| 格式                     | 示例                  | 说明                              |
+| ------------------------ | --------------------- | --------------------------------- |
+| 单字符                    | `d`, `x`, `j`         | 直接按键，作为单个字符                |
+| 角括号格式（功能键）    | `<C-x>`, `<A-k>`, `<down>` | Vim 风格，用于功能键和带修饰符的键  |
+| 多键序列                 | `dd`, `<C-x><C-c>`     | 连续按键，需要完全匹配才能触发        |
+| 简写修饰符（角括号内） | `<C-x>`, `<A-k>`, `<S-tab>`  | 角括号内支持简写：C, A, S          |
+
+#### 注意事项
+
+- **多字符键名必须用角括号**：`<down>`, `<up>`, `<enter>`, `<tab>`, `<space>`, `<f5>` 等
+- **单字符不需要角括号**：`d`, `x`, `j`, `k`, `q` 等
+- **未包裹的 "down" 会被视为 4 个字符**：d, o, w, n
+- **修饰符简写仅限角括号内**：`<C-x>` 有效，`ctrl-x` 也有效（向后兼容）
+
+#### 支持的功能键
+
+| 键名                     | 说明                  |
+| ------------------------ | --------------------- |
+| `<up>`, `<down>`, `<left>`, `<right>` | 方向键              |
+| `<enter>`                 | 回车键                |
+| `<esc>`                  | Esc 键                |
+| `<tab>`, `<backtab>`      | Tab 和 Shift+Tab       |
+| `<space>`                 | 空格键                |
+| `<backspace>`             | 退格键                |
+| `<delete>`                | Delete 键              |
+| `<insert>`                | Insert 键              |
+| `<home>`, `<end>`         | Home 和 End 键         |
+| `<pageup>`, `<pagedown>`  | PageUp 和 PageDown 键    |
+| `<f1>` ~ `<f12>`         | F1 ~ F12 功能键        |
+
+#### 支持的修饰符
+
+| 格式                     | 说明    | 示例                  |
+| ------------------------ | ------- | --------------------- |
+| `ctrl-` 或 `C-`  | Ctrl    | `<C-x>`, `<ctrl-a>`     |
+| `alt-` 或 `A-`   | Alt     | `<A-k>`, `<alt-s>`      |
+| `shift-` 或 `S-` | Shift   | `<S-enter>`, `<shift-tab>` |
 
 Rust 通过**前缀匹配缓冲区**（`src/state.rs::tap_key()`）处理键盘事件：
 
@@ -165,9 +222,11 @@ UI 布局在 `src/app.rs::AppWidget::render()` 中硬编码：
 │ (50%)    │ (remaining)          │
 │          │                      │
 ├──────────┴──────────────────────┤
-│ Footer (height: 1) - empty     │
+│ Notification (bottom-right)       │
 └─────────────────────────────────┘
 ```
+
+**通知区域**：位于预览区域右下角，用于显示临时通知消息，3 秒后自动消失。
 
 ## 插件示例：进程查看器
 
@@ -208,6 +267,101 @@ for i, arg in ipairs(lc.api.argv()) do
 end
 ```
 
+### lc.fs 模块
+
+同步文件系统操作函数：
+
+| 函数                         | 参数                     | 返回值                         | 用途                         |
+| ---------------------------- | ------------------------ | ------------------------------ | ---------------------------- |
+| `lc.fs.read_dir_sync(path)`  | `string`                 | `table[] \| string` (entries \| error) | 读取目录内容                 |
+| `lc.fs.read_file_sync(path)` | `string`                 | `string \| string` (content \| error) | 读取文件内容                 |
+| `lc.fs.write_file_sync(path, content)` | `string`, `string` | `boolean \| string` (success \| error) | 写入内容到文件               |
+
+**示例**：
+
+```lua
+-- 读取文件内容
+local content, err = lc.fs.read_file_sync('/tmp/memo.txt')
+if err then
+  lc.log('error', 'Failed to read file: {}', err)
+else
+  print('Content:', content)
+end
+
+-- 写入内容到文件
+local success, err = lc.fs.write_file_sync('/tmp/memo.txt', 'Hello World')
+if not success then
+  lc.log('error', 'Failed to write file: {}', err)
+end
+
+-- 读取目录
+local entries, err = lc.fs.read_dir_sync('/tmp')
+if err then
+  lc.log('error', 'Failed to read directory: {}', err)
+else
+  for _, entry in ipairs(entries) do
+    print(entry.name)
+  end
+end
+```
+
+### lc.osc52_copy 函数
+
+通过 OSC 52 转义序列复制文本到系统剪贴板：
+
+| 函数                        | 参数     | 返回值  | 用途                              |
+| --------------------------- | -------- | ------- | --------------------------------- |
+| `lc.osc52_copy(text)`       | `string` | `nil`   | 将文本复制到系统剪贴板            |
+
+**说明**：
+
+OSC 52 是一种终端转义序列，允许应用程序读写系统剪贴板。它通过标准输出向终端发送特殊的转义序列，终端将其转发到剪贴板管理器。
+
+**注意事项**：
+
+- 此功能要求终端模拟器支持 OSC 52 序列（大多数现代终端都支持，如 iTerm2、Kitty、WezTerm、Alacritty 等）
+- 内容会先进行 base64 编码，然后通过转义序列发送
+- 使用此功能可能需要在终端设置中启用剪贴板访问（某些默认禁用）
+
+**示例**：
+
+```lua
+-- 复制备忘录内容到剪贴板
+local entry = lc.api.get_hovered_entry()
+if entry and entry.content then
+  lc.osc52_copy(entry.content)
+  lc.notify 'Copied to clipboard'
+end
+
+-- 复制自定义文本
+lc.osc52_copy('Hello, world!')
+```
+
+### lc.notify 函数
+
+在应用右下角显示临时通知消息：
+
+| 函数             | 参数     | 返回值  | 用途              |
+| ---------------- | -------- | ------- | ----------------- |
+| `lc.notify(message)` | `string` | `nil`   | 显示通知消息（3 秒后自动消失） |
+
+**说明**：
+
+通知消息会显示在预览区域的右下角，带有边框。通知会自动在 3 秒后过期并从屏幕上消失。
+
+**示例**：
+
+```lua
+-- 显示简单的通知
+lc.notify('Copied to clipboard')
+
+-- 显示操作结果通知
+lc.notify('Memo updated successfully')
+
+-- 显示错误信息
+lc.notify('Failed to delete memo')
+```
+
 ### 内部命令
 
 通过 `lc.cmd()` 可以发送内部命令到 Rust 端处理：
@@ -218,6 +372,10 @@ end
 | `scroll_by <num>` | 可选数字 | 列表滚动指定行数（默认 1） |
 | `scroll_preview_by <num>` | 可选数字 | 预览面板滚动指定行数（默认 1） |
 | `reload` | 无 | 刷新当前列表（重新调用插件的 `list()` 函数） |
+
+**通知样式**：
+
+通知框固定 40x3 尺寸，圆角边框，黄色文字和边框，显示在预览区域右下角。
 
 **示例**：
 
@@ -246,10 +404,13 @@ tail -f ~/.local/state/lazycmd/lazycmd.log
 
 ### 添加新的 LC API 函数
 
+**重要**：每次修改或添加新的 LC API 函数后，必须同步更新 `preset/types.lua` 文件，以保持类型定义与实现的一致性。
+
 1. 在适当的 `src/plugin/lc/*.rs` 文件中添加函数
 2. 在 `new_table()` 中注册它以添加到 lc 全局
 3. 如果需要状态访问，使用 `plugin::borrow_scope_state()` 或 `plugin::mut_scope_state()`
 4. 如果需要触发更新，调用 `plugin::send_render_event()`
+5. 在 `preset/types.lua` 中添加对应的类型定义（ EmmyLua 注释格式）
 
 ### 添加新的内部命令
 
@@ -308,8 +469,25 @@ tail -f ~/.local/state/lazycmd/lazycmd.log
 
 键盘映射字符串在 `src/keymap.rs` 中解析，支持以下格式：
 
-- 简单按键：`"down"`, `"up"`, `"q"` 等
-- 带修饰符的按键：`"ctrl-d"`, `"alt-a"`, `"shift-b"` 等
-- 支持的修饰符前缀：`ctrl-`, `alt-`, `shift-`
+- 单字符键（无需角括号）：`"d"`, `"x"`, `"q"` 等
+- 角括号内的功能键：`"<down>"`, `"<up>"`, `"<enter>"` 等
+- 角括号内的带修饰符按键：`"<C-x>"`, `"<A-k>"`, `"<S-tab>"` 等
+- 简写修饰符（仅角括号内）：`C-`, `A-`, `S-`
+- 多键序列：`"dd"`, `"<C-x><C-c>"`, `"gg"` 等
 
-**重要**：当使用单字符按键（如 `"d"`）配合修饰符时，解析函数会保留修饰符。例如 `ctrl-d` 会生成 `KeyEvent { code: Char('d'), modifiers: CONTROL }`。键盘映射的单元测试位于 `src/keymap.rs` 的测试模块中。
+**重要规则**：
+
+1. 角括号外的任何内容（包括 `down`, `up`, `enter`）都会被当作单独字符解析
+   - `"down"` → d, o, w, n（4 个字符）
+   - `"<down>"` → Down（1 个功能键）
+
+2. 角括号内的内容视为功能键名，支持修饰符简写
+   - `"<C-x>"` → Ctrl+x
+   - `"<A-k>"` → Alt+k
+   - `"<down>"` → Down
+
+3. 多键序列需要完全匹配才能触发
+   - `"dd"` → 按两次 d
+   - `"<C-x><C-c>"` → Ctrl+x 然后 Ctrl+c
+
+键盘映射的单元测试位于 `src/keymap.rs` 的测试模块中。

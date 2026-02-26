@@ -24,19 +24,42 @@ impl KeySequence {
 
 impl From<&str> for KeySequence {
     fn from(raw: &str) -> Self {
-        let (remaining, modifiers) = extract_modifiers(raw);
-        let keyseq = parse_key_code_with_modifiers(remaining, modifiers).unwrap();
+        let mut events = Vec::new();
+        let mut current = raw.trim();
 
-        Self(keyseq)
+        while !current.is_empty() {
+            if current.starts_with('<') {
+                // Find the closing '>'
+                if let Some(end) = current.find('>') {
+                    let bracket_content = &current[1..end];
+                    let keyseq = parse_angle_bracket_notation(bracket_content);
+                    events.extend(keyseq.0);
+                    current = current[end + 1..].trim();
+                } else {
+                    break;
+                }
+            } else {
+                // Parse single character (anything outside angle brackets is treated as individual chars)
+                let (key_part, modifiers) = extract_modifiers(current);
+
+                // Only parse as a single character
+                let key_char = key_part.chars().next();
+                if let Some(c) = key_char {
+                    events.push(KeyEvent::new(KeyCode::Char(c), modifiers));
+                    current = &current[1 + (current.len() - key_part.len())..].trim();
+                } else {
+                    break;
+                }
+            }
+        }
+
+        Self(events)
     }
 }
 
-// FIXME - seems excessively verbose. Use strum to simplify?
-fn parse_key_code_with_modifiers(
-    raw: &str,
-    mut modifiers: KeyModifiers,
-) -> anyhow::Result<Vec<KeyEvent>> {
-    let c = match raw.to_lowercase().as_str() {
+fn parse_angle_bracket_notation(inner: &str) -> KeySequence {
+    let (remaining, mut modifiers) = extract_modifiers(inner);
+    let c = match remaining.to_lowercase().as_str() {
         "esc" => KeyCode::Esc,
         "enter" => KeyCode::Enter,
         "left" => KeyCode::Left,
@@ -54,6 +77,8 @@ fn parse_key_code_with_modifiers(
         "backspace" => KeyCode::Backspace,
         "delete" => KeyCode::Delete,
         "insert" => KeyCode::Insert,
+        "tab" => KeyCode::Tab,
+        "space" => KeyCode::Char(' '),
         "f1" => KeyCode::F(1),
         "f2" => KeyCode::F(2),
         "f3" => KeyCode::F(3),
@@ -66,18 +91,13 @@ fn parse_key_code_with_modifiers(
         "f10" => KeyCode::F(10),
         "f11" => KeyCode::F(11),
         "f12" => KeyCode::F(12),
-        "space" => KeyCode::Char(' '),
-        "hyphen" => KeyCode::Char('-'),
-        "minus" => KeyCode::Char('-'),
-        "tab" => KeyCode::Tab,
-        _ => {
-            return Ok(raw
-                .chars()
-                .map(|c| KeyEvent::new(KeyCode::Char(c), modifiers))
-                .collect());
+        // Treat remaining as single character
+        c => {
+            let char = c.chars().next().unwrap_or(' ');
+            KeyCode::Char(char)
         }
     };
-    Ok(vec![KeyEvent::new(c, modifiers)])
+    KeySequence(vec![KeyEvent::new(c, modifiers)])
 }
 
 fn extract_modifiers(raw: &str) -> (&str, KeyModifiers) {
@@ -86,17 +106,17 @@ fn extract_modifiers(raw: &str) -> (&str, KeyModifiers) {
 
     loop {
         match current {
-            rest if rest.to_lowercase().starts_with("ctrl-") => {
+            rest if rest.to_lowercase().starts_with("ctrl-") || rest.starts_with("C-") => {
                 modifiers.insert(KeyModifiers::CONTROL);
-                current = &rest[5..];
+                current = if rest.starts_with("C-") { &rest[2..] } else { &rest[5..] };
             }
-            rest if rest.to_lowercase().starts_with("alt-") => {
+            rest if rest.to_lowercase().starts_with("alt-") || rest.starts_with("A-") => {
                 modifiers.insert(KeyModifiers::ALT);
-                current = &rest[4..];
+                current = if rest.starts_with("A-") { &rest[2..] } else { &rest[4..] };
             }
-            rest if rest.to_lowercase().starts_with("shift-") => {
+            rest if rest.to_lowercase().starts_with("shift-") || rest.starts_with("S-") => {
                 modifiers.insert(KeyModifiers::SHIFT);
-                current = &rest[6..];
+                current = if rest.starts_with("S-") { &rest[2..] } else { &rest[6..] };
             }
             _ => break, // break out of the loop if no known prefix is detected
         };
@@ -118,11 +138,27 @@ mod tests {
     }
 
     #[test]
+    fn test_ctrl_x_angle_bracket() {
+        let keyseq = KeySequence::from("<C-x>");
+        assert_eq!(keyseq.0.len(), 1);
+        assert!(keyseq.0[0].modifiers.contains(KeyModifiers::CONTROL));
+        assert_eq!(keyseq.0[0].code, KeyCode::Char('x'));
+    }
+
+    #[test]
     fn test_ctrl_c() {
         let keyseq = KeySequence::from("ctrl-c");
         assert_eq!(keyseq.0.len(), 1);
         assert!(keyseq.0[0].modifiers.contains(KeyModifiers::CONTROL));
         assert_eq!(keyseq.0[0].code, KeyCode::Char('c'));
+    }
+
+    #[test]
+    fn test_alt_k_angle_bracket() {
+        let keyseq = KeySequence::from("<A-k>");
+        assert_eq!(keyseq.0.len(), 1);
+        assert!(keyseq.0[0].modifiers.contains(KeyModifiers::ALT));
+        assert_eq!(keyseq.0[0].code, KeyCode::Char('k'));
     }
 
     #[test]
@@ -142,9 +178,75 @@ mod tests {
     }
 
     #[test]
-    fn test_plain_down() {
+    fn test_double_d() {
+        let keyseq = KeySequence::from("dd");
+        assert_eq!(keyseq.0.len(), 2);
+        assert_eq!(keyseq.0[0].code, KeyCode::Char('d'));
+        assert_eq!(keyseq.0[1].code, KeyCode::Char('d'));
+        assert!(!keyseq.0[0].modifiers.contains(KeyModifiers::CONTROL));
+        assert!(!keyseq.0[1].modifiers.contains(KeyModifiers::CONTROL));
+    }
+
+    #[test]
+    fn test_down_as_four_chars() {
         let keyseq = KeySequence::from("down");
+        assert_eq!(keyseq.0.len(), 4);
+        assert_eq!(keyseq.0[0].code, KeyCode::Char('d'));
+        assert_eq!(keyseq.0[1].code, KeyCode::Char('o'));
+        assert_eq!(keyseq.0[2].code, KeyCode::Char('w'));
+        assert_eq!(keyseq.0[3].code, KeyCode::Char('n'));
+    }
+
+    #[test]
+    fn test_down_angle_bracket() {
+        let keyseq = KeySequence::from("<down>");
         assert_eq!(keyseq.0.len(), 1);
         assert_eq!(keyseq.0[0].code, KeyCode::Down);
+    }
+
+    #[test]
+    fn test_up_angle_bracket() {
+        let keyseq = KeySequence::from("<up>");
+        assert_eq!(keyseq.0.len(), 1);
+        assert_eq!(keyseq.0[0].code, KeyCode::Up);
+    }
+
+    #[test]
+    fn test_double_w_angle_bracket() {
+        let keyseq = KeySequence::from("ww");
+        assert_eq!(keyseq.0.len(), 2);
+        assert_eq!(keyseq.0[0].code, KeyCode::Char('w'));
+        assert_eq!(keyseq.0[1].code, KeyCode::Char('w'));
+    }
+
+    #[test]
+    fn test_mixed_sequence() {
+        let keyseq = KeySequence::from("<C-x><C-c>");
+        assert_eq!(keyseq.0.len(), 2);
+        assert!(keyseq.0[0].modifiers.contains(KeyModifiers::CONTROL));
+        assert_eq!(keyseq.0[0].code, KeyCode::Char('x'));
+        assert!(keyseq.0[1].modifiers.contains(KeyModifiers::CONTROL));
+        assert_eq!(keyseq.0[1].code, KeyCode::Char('c'));
+    }
+
+    #[test]
+    fn test_space() {
+        let keyseq = KeySequence::from("<space>");
+        assert_eq!(keyseq.0.len(), 1);
+        assert_eq!(keyseq.0[0].code, KeyCode::Char(' '));
+    }
+
+    #[test]
+    fn test_f_key() {
+        let keyseq = KeySequence::from("<f5>");
+        assert_eq!(keyseq.0.len(), 1);
+        assert_eq!(keyseq.0[0].code, KeyCode::F(5));
+    }
+
+    #[test]
+    fn test_enter() {
+        let keyseq = KeySequence::from("<enter>");
+        assert_eq!(keyseq.0.len(), 1);
+        assert_eq!(keyseq.0[0].code, KeyCode::Enter);
     }
 }

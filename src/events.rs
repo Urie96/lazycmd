@@ -31,6 +31,8 @@ pub enum Event {
     AddKeymap(Keymap),
     AddEventHook(EventHook, LuaFunction),
     LuaCallback(Box<dyn FnOnce(&Lua) -> mlua::Result<()>>),
+    InteractiveCommand(Vec<String>, Option<LuaFunction>),
+    Notify(String),
 }
 
 #[derive(PartialEq, Eq, Hash)]

@@ -1,7 +1,10 @@
 use crate::widgets::Span;
 use anyhow::bail;
 use mlua::prelude::*;
-use ratatui::widgets::{self, ListItem};
+use ratatui::{
+    text::Line,
+    widgets::{self, ListItem},
+};
 
 pub struct PageEntry {
     pub key: String,
@@ -19,8 +22,8 @@ impl FromLua for PageEntry {
 impl PageEntry {
     pub fn display(&self) -> ListItem<'_> {
         let f = || match self.tbl.get::<LuaValue>("display")? {
-            LuaValue::Nil => Ok(ListItem::new(self.key.as_str())),
-            LuaValue::String(s) => Ok(ListItem::new(s.to_string_lossy())),
+            LuaValue::Nil => Ok(ListItem::new(Line::from(self.key.as_str()))),
+            LuaValue::String(s) => Ok(ListItem::new(Line::from(s.to_string_lossy()))),
             LuaValue::UserData(ud) => {
                 if let Ok(span) = ud.borrow::<Span>() {
                     Ok(ListItem::new(span.clone().0))
