@@ -61,6 +61,18 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
         .create_function(|lua, ()| lua.create_sequence_from(std::env::args()))?
         .into_lua(lua)?;
 
+    let enter_filter_mode = lua
+        .create_function(|lua, ()| plugin::send_command(lua, "enter_filter_mode"))?
+        .into_lua(lua)?;
+
+    let exit_filter_mode = lua
+        .create_function(|lua, ()| plugin::send_command(lua, "exit_filter_mode"))?
+        .into_lua(lua)?;
+
+    let accept_filter = lua
+        .create_function(|lua, ()| plugin::send_command(lua, "accept_filter"))?
+        .into_lua(lua)?;
+
     lua.create_table_from([
         ("page_set_entries", page_set_entries),
         ("page_get_hovered", page_get_hovered),
@@ -69,5 +81,8 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
         ("get_current_path", get_current_path),
         ("get_hovered_path", get_hovered_path),
         ("argv", argv),
+        ("enter_filter_mode", enter_filter_mode),
+        ("exit_filter_mode", exit_filter_mode),
+        ("accept_filter", accept_filter),
     ])
 }

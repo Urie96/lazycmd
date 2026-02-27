@@ -5,10 +5,6 @@ use crate::widgets::{Span, Text};
 use mlua::prelude::*;
 use ratatui::style::{Color, Stylize};
 
-pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
-    lua.create_table_from([("test", "a")])
-}
-
 pub(super) fn inject_string_meta_method(lua: &Lua) -> mlua::Result<()> {
     let string: LuaTable = lua.globals().get("string")?;
     string.raw_set(

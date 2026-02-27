@@ -13,6 +13,8 @@ pub struct State {
     pub last_key_event_buffer: Vec<KeyEvent>,
     pub current_preview: Option<Box<dyn Renderable>>,
     pub notification: Option<(String, Instant)>,
+    pub filter_input: String,
+    pub input_cursor_position: usize,
 }
 
 impl State {
@@ -20,7 +22,10 @@ impl State {
         if self.current_page.is_none() {
             self.current_page = Some(Default::default())
         }
-        self.current_page.as_mut().unwrap().list = entries;
+        let page = self.current_page.as_mut().unwrap();
+        page.list = entries;
+        // Apply current filter to new entries
+        page.apply_filter(&self.filter_input);
     }
     pub fn add_keymap(&mut self, keymap: Keymap) {
         self.keymap_config
@@ -51,9 +56,11 @@ impl State {
     }
 
     pub fn hovered(&self) -> Option<&PageEntry> {
-        self.current_page
-            .as_ref()
-            .and_then(|p| p.list_state.selected().and_then(|s| p.list.get(s)))
+        self.current_page.as_ref().and_then(|p| {
+            p.list_state
+                .selected()
+                .and_then(|s| p.filtered_list.get(s))
+        })
     }
 
     fn keymap_candidates_iter(&self) -> impl Iterator<Item = &Keymap> {
@@ -78,11 +85,19 @@ impl State {
             page.list_state.select(Some(0));
         }
         if let Some(page) = &mut self.current_page {
-            if amount < 0 {
-                page.list_state.scroll_up_by(amount.unsigned_abs())
-            } else {
-                page.list_state.scroll_down_by(amount.unsigned_abs())
+            let len = page.list.len();
+            if len == 0 {
+                return;
             }
+
+            let current = page.list_state.selected().unwrap_or(0);
+            let new = if amount > 0 {
+                current.saturating_add(amount as usize).min(len - 1)
+            } else {
+                current.saturating_sub(amount.unsigned_abs() as usize)
+            };
+
+            page.list_state.select(Some(new));
         }
     }
 

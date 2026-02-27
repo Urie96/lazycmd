@@ -1,5 +1,5 @@
 use anyhow::{bail, Context, Result};
-use crossterm::event::Event as CrosstermEvent;
+use crossterm::event::{Event as CrosstermEvent, KeyCode, KeyEventKind};
 use std::collections::HashMap;
 
 use mlua::prelude::*;
@@ -13,7 +13,7 @@ use crate::{
     events::{Event, EventHook, Events},
     plugin,
     term::{self, Term},
-    widgets::{header::HeaderWidget, list::ListWidget},
+    widgets::{header::HeaderWidget, input::InputWidget, list::ListWidget},
     State,
 };
 
@@ -28,8 +28,7 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(event_sender: mpsc::UnboundedSender<Event>) -> Self {
-        let term = term::init().unwrap();
+    pub fn new(event_sender: mpsc::UnboundedSender<Event>, term: Term) -> Self {
         let mut state = State::default();
         let lua = Lua::new();
 
@@ -90,11 +89,26 @@ impl App {
             }
             // Event::Crossterm(CrosstermEvent::Resize(x, y)) => Some(Action::Resize(x, y)),
             Event::Crossterm(CrosstermEvent::Key(key)) => {
-                let cb = { self.state.tap_key(key)? };
-                if let Some(cb) = cb {
-                    plugin::scope(&self.lua, &mut self.state, &self.event_sender, || {
-                        cb.call::<()>(())
-                    })?;
+                // Handle character input in Input mode
+                if self.state.current_mode == crate::Mode::Input {
+                    if self.handle_input_mode_key(key)? {
+                        self.dirty = true;
+                    } else {
+                        // Try keymap first
+                        let cb = { self.state.tap_key(key)? };
+                        if let Some(cb) = cb {
+                            plugin::scope(&self.lua, &mut self.state, &self.event_sender, || {
+                                cb.call::<()>(())
+                            })?;
+                        }
+                    }
+                } else {
+                    let cb = { self.state.tap_key(key)? };
+                    if let Some(cb) = cb {
+                        plugin::scope(&self.lua, &mut self.state, &self.event_sender, || {
+                            cb.call::<()>(())
+                        })?;
+                    }
                 }
             }
             Event::Crossterm(_) => {}
@@ -199,8 +213,141 @@ impl App {
                 self.run_event_hooks(EventHook::EnterPost)?;
                 self.dirty = true;
             }
+            "enter_filter_mode" => {
+                self.enter_filter_mode();
+            }
+            "exit_filter_mode" => {
+                self.exit_filter_mode(false);
+            }
+            "accept_filter" => {
+                self.exit_filter_mode(true);
+            }
+            "filter_backspace" => {
+                self.handle_filter_backspace();
+            }
+            "filter_clear" => {
+                self.handle_filter_clear();
+            }
             _ => bail!("Unsupported command {}", command),
         };
+        Ok(())
+    }
+
+    /// Handle character input in Input mode
+    /// Returns true if the key was handled, false if it should be passed to keymap
+    fn handle_input_mode_key(&mut self, key: crossterm::event::KeyEvent) -> Result<bool> {
+        use crossterm::event::KeyModifiers;
+
+        // Ignore release events
+        if key.kind == KeyEventKind::Release {
+            return Ok(false);
+        }
+
+        // For keys with modifiers (except SHIFT), let keymap handle them
+        if key.modifiers.contains(KeyModifiers::CONTROL)
+            || key.modifiers.contains(KeyModifiers::ALT)
+        {
+            return Ok(false);
+        }
+
+        match key.code {
+            KeyCode::Char(c) => {
+                // Insert character at cursor position
+                self.state.filter_input.insert(self.state.input_cursor_position, c);
+                self.state.input_cursor_position += 1;
+                self.apply_filter()?;
+                Ok(true)
+            }
+            KeyCode::Backspace => {
+                if self.state.input_cursor_position > 0 {
+                    self.state.filter_input.remove(self.state.input_cursor_position - 1);
+                    self.state.input_cursor_position -= 1;
+                    self.apply_filter()?;
+                }
+                Ok(true)
+            }
+            KeyCode::Delete => {
+                if self.state.input_cursor_position < self.state.filter_input.len() {
+                    self.state.filter_input.remove(self.state.input_cursor_position);
+                    self.apply_filter()?;
+                }
+                Ok(true)
+            }
+            KeyCode::Left => {
+                self.state.input_cursor_position =
+                    self.state.input_cursor_position.saturating_sub(1);
+                self.dirty = true;
+                Ok(true)
+            }
+            KeyCode::Right => {
+                self.state.input_cursor_position = self.state
+                    .input_cursor_position
+                    .saturating_add(1)
+                    .min(self.state.filter_input.len());
+                self.dirty = true;
+                Ok(true)
+            }
+            KeyCode::Home => {
+                self.state.input_cursor_position = 0;
+                self.dirty = true;
+                Ok(true)
+            }
+            KeyCode::End => {
+                self.state.input_cursor_position = self.state.filter_input.len();
+                self.dirty = true;
+                Ok(true)
+            }
+            _ => Ok(false),
+        }
+    }
+
+    fn enter_filter_mode(&mut self) {
+        self.state.current_mode = crate::Mode::Input;
+        // Preserve current filter if already set, otherwise start fresh
+        if self.state.filter_input.is_empty() {
+            self.state.input_cursor_position = 0;
+        } else {
+            self.state.input_cursor_position = self.state.filter_input.len();
+        }
+        self.state.last_key_event_buffer.clear();
+        self.dirty = true;
+    }
+
+    fn exit_filter_mode(&mut self, keep_filter: bool) {
+        if !keep_filter {
+            self.state.filter_input.clear();
+            self.state.input_cursor_position = 0;
+            let _ = self.apply_filter();
+        }
+        self.state.current_mode = crate::Mode::Main;
+        self.state.last_key_event_buffer.clear();
+        let _ = self.run_event_hooks(EventHook::HoverPost);
+        self.dirty = true;
+    }
+
+    fn handle_filter_backspace(&mut self) {
+        if self.state.input_cursor_position > 0 {
+            self.state.filter_input.remove(self.state.input_cursor_position - 1);
+            self.state.input_cursor_position -= 1;
+            let _ = self.apply_filter();
+            self.dirty = true;
+        }
+    }
+
+    fn handle_filter_clear(&mut self) {
+        self.state.filter_input.clear();
+        self.state.input_cursor_position = 0;
+        let _ = self.apply_filter();
+        self.dirty = true;
+    }
+
+    fn apply_filter(&mut self) -> Result<()> {
+        if let Some(page) = &mut self.state.current_page {
+            page.apply_filter(&self.state.filter_input);
+            // Update preview for newly selected item
+            self.state.current_preview.take();
+            self.run_event_hooks(EventHook::HoverPost)?;
+        }
         Ok(())
     }
 }
@@ -212,12 +359,30 @@ impl StatefulWidget for AppWidget {
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut State) {
         use Constraint::*;
-        let [header_area, main_area, _footer] =
-            Layout::vertical([Length(3), Min(3), Length(1)]).areas(area);
+
+        // Layout depends on mode
+        let (header_area, input_area, main_area) = if state.current_mode == crate::Mode::Input {
+            let [header_area, input_area, main_area, _footer] =
+                Layout::vertical([Length(3), Length(3), Min(3), Length(1)]).areas(area);
+            (header_area, Some(input_area), main_area)
+        } else {
+            let [header_area, main_area, _footer] =
+                Layout::vertical([Length(3), Min(3), Length(1)]).areas(area);
+            (header_area, None, main_area)
+        };
+
         let [list_area, preview_area] =
             Layout::horizontal([Percentage(50), Fill(1)]).areas(main_area);
 
-        HeaderWidget.render(header_area, buf);
+        HeaderWidget.render(header_area, buf, state);
+
+        // Render input widget if in filter mode
+        if let Some(input_area) = input_area {
+            let mut input_state = crate::InputState::from_str(&state.filter_input);
+            input_state.cursor_position = state.input_cursor_position;
+            InputWidget.render(input_area, buf, &mut input_state);
+        }
+
         if let Some(page) = &mut state.current_page {
             ListWidget.render(list_area, buf, page);
         } else {

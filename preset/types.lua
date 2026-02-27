@@ -270,6 +270,20 @@ function lc.split(s, sep) end
 function lc.notify(message) end
 
 -- ============================================
+-- Filter Mode - Filtering entries
+-- ============================================
+
+---Enter filter mode (search/filter mode)
+---In filter mode, character input will filter the displayed entries
+function api.enter_filter_mode() end
+
+---Exit filter mode and clear the filter
+function api.exit_filter_mode() end
+
+---Exit filter mode but keep the current filter applied
+function api.accept_filter() end
+
+-- ============================================
 -- lc.inspect - Pretty print values
 -- ============================================
 

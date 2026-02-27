@@ -44,7 +44,7 @@ local function edit_current_memo()
 
   -- Create temporary file with current content
   local temp_file = create_temp_file('memo', '.md')
-  local content = memo.memo.content or ''
+  local content = memo.content or ''
 
   -- Write current content to temp file
   local success, err = lc.fs.write_file_sync(temp_file, content)
@@ -104,7 +104,7 @@ local function yank_current_memo()
     return
   end
 
-  local entry = entry.memo
+  local memo = entry.memo
 
   lc.log('info', 'Yanking memo #{} content', memo.id)
 
@@ -197,7 +197,6 @@ function M.setup(opt)
   lc.keymap.set('main', 'n', create_new_memo)
   lc.keymap.set('main', 'y', yank_current_memo)
   lc.keymap.set('main', '<C-e>', edit_current_memo)
-  lc.keymap.set('main', '<right>', edit_current_memo)
   lc.keymap.set('main', '<enter>', edit_current_memo)
   lc.keymap.set('main', 'dd', delete_current_memo)
 end

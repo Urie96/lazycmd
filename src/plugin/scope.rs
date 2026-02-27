@@ -45,3 +45,7 @@ pub(super) fn mut_scope_state<R>(
     lua.named_registry_value::<LuaAnyUserData>("state")?
         .borrow_mut_scoped::<State, _>(f)?
 }
+
+pub(super) fn send_command(lua: &Lua, cmd: &str) -> LuaResult<()> {
+    send_event(lua, Event::Command(cmd.to_string()))
+}

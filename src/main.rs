@@ -4,6 +4,7 @@ pub use keymap::*;
 pub use mode::*;
 pub use page::*;
 pub use state::*;
+pub use widgets::InputState;
 use tokio::task;
 
 mod app;
@@ -27,9 +28,12 @@ async fn main() -> anyhow::Result<()> {
     // Run the local task set.
     local
         .run_until(async move {
+            // Initialize terminal first (required for crossterm event stream)
+            let term = term::init()?;
+
             let events = events::Events::new();
 
-            App::new(events.sender()).run(events).await.unwrap();
+            App::new(events.sender(), term).run(events).await.unwrap();
 
             term::restore();
             Ok::<_, anyhow::Error>(())

@@ -2,7 +2,7 @@ use mlua::{prelude::*, FromLua};
 use ratatui::{
     layout::Rect,
     prelude::*,
-    widgets::{List, ListItem, ListState, Widget},
+    widgets::Widget,
 };
 
 use super::Text;
@@ -84,45 +84,6 @@ impl Renderable for StatefulParagraph {
             .begin_symbol(None)
             .end_symbol(None)
             .render(scrollbar_area, buf, &mut self.scrollbar_state);
-    }
-
-    fn scroll_by(&mut self, offset: i16) {
-        self.offset = self.offset.saturating_add_signed(offset);
-    }
-}
-
-#[derive(Default)]
-pub struct StatefulList {
-    list: List<'static>,
-    offset: u16,
-    total_height: u16,
-    scrollbar_state: ratatui::widgets::ScrollbarState,
-}
-
-impl<T> From<T> for StatefulList
-where
-    T: IntoIterator,
-    T::Item: Into<ListItem<'static>>,
-{
-    fn from(value: T) -> Self {
-        let list = List::new(value);
-        let total_height = list.len().clamp(0, u16::MAX as usize) as u16;
-        Self {
-            list,
-            total_height,
-            ..Default::default()
-        }
-    }
-}
-
-impl Renderable for StatefulList {
-    fn render(&mut self, area: Rect, buf: &mut ratatui::buffer::Buffer) {
-        self.offset = self
-            .offset
-            .clamp(0, self.total_height.saturating_sub(area.height));
-
-        let mut state = ListState::default().with_offset(self.offset as usize);
-        StatefulWidget::render(&self.list, area, buf, &mut state);
     }
 
     fn scroll_by(&mut self, offset: i16) {

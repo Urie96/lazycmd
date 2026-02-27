@@ -52,13 +52,20 @@ end
 
 map('main', '<up>', 'scroll_by -1')
 map('main', '<down>', 'scroll_by 1')
-map('main', 'g', 'scroll_by 9999')
--- map('main', '<C-d>', 'scroll_by 1')
+map('main', 'gg', 'scroll_by -9999')
+map('main', 'G', 'scroll_by 9999')
 map('main', '<pageup>', 'scroll_preview_by -30')
 map('main', '<pagedown>', 'scroll_preview_by 30')
 map('main', '<C-r>', 'reload')
 map('main', 'q', 'quit')
 map('main', '<C-q>', 'quit')
+map('main', '/', 'enter_filter_mode')
+map('main', '<esc>', 'filter_clear')
+
+-- Input mode keymaps
+map('input', '<esc>', 'exit_filter_mode')
+map('input', '<enter>', 'accept_filter')
+map('input', '<C-u>', 'filter_clear')
 map('main', '<left>', function()
   local path = lc.api.get_current_path()
   if #path > 0 then
