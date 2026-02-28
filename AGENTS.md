@@ -4,23 +4,35 @@
 
 ## 插件开发工作流
 
-lazycmd 的核心是其 Lua 插件系统。插件在启动时从 `preset/` 目录加载。
+lazycmd 的核心是其 Lua 插件系统。插件在启动时从 `preset/` 目录和用户配置目录加载。
 
 ### 调试预设 Lua 文件
 
-在 debug 构建（`cargo build`）中，Lua 预设文件直接从磁盘读取，允许实时编辑：
+在 debug 构建（`cargo build`）中，Lua 文件从磁盘读取：
+
+- **预设文件**：直接从 `preset/` 目录读取
+- **用户配置**：从 `examples/` 目录读取（`init.lua` 和 `plugins/`）
 
 1. 运行 `cargo run -- process`
-2. 编辑 `preset/` 中的文件（如 `preset/init.lua`）
-3. 重启应用以查看更改
+2. 编辑 `preset/` 中的文件（如 `preset/init.lua`, `preset/util.lua`）
+3. 编辑 `examples/` 中的用户配置（如 `examples/init.lua`, `examples/plugins/`）
+4. 重启应用以查看更改
 
-在 release 构建（`cargo run --release`）中，预设文件在编译时使用 `include_bytes!` 嵌入。
+在 release 构建（`cargo run --release`）中：
+
+- **预设文件**：在编译时使用 `include_bytes!` 嵌入到二进制中
+- **用户配置**：从 `~/.config/lazycmd/` 目录读取（`init.lua` 和 `plugins/`）
 
 ### 插件加载流程
 
 1. `src/plugin/lua.rs::init_lua()` 在 `App::new()` 期间被调用
-2. 加载 `preset/init.lua` 设置全局 `lc` API
-3. 可通过 `require()` 加载其他插件 - 参见 `preset/plugins/process.lazycmd/`
+2. 设置 `package.path` 以包含用户配置目录
+3. 调用 `lc::register()` 注册内置 LC API（包括 `lc.json`, `lc.inspect`）
+4. 加载 `preset/util.lua` 设置工具函数（`tbl_map`, `tbl_extend`, `equals`, `trim`）
+5. 加载 `preset/init.lua` 设置默认键盘映射和事件钩子
+6. `preset/init.lua` 调用 `require 'init'` 加载用户配置文件
+7. 用户配置通过 `lc.config()` 设置插件配置
+8. 通过 `require()` 加载插件 - 参见 `examples/plugins/process.lazycmd/`
 
 ## 架构概览
 
@@ -65,19 +77,29 @@ plugin::scope(&lua, &mut state, &sender, || {
 
 Lua 中的全局表 `lc` 提供以下子系统：
 
-| Lua 模块        | Rust 源文件               | 用途                                            |
-| --------------- | ------------------------- | ----------------------------------------------- |
-| `lc.api`        | `src/plugin/lc/api.rs`    | 页面管理（entries、预览、导航）、命令行参数访问 |
-| `lc.fs`         | `src/plugin/lc/fs.rs`     | 同步文件系统操作                                |
-| `lc.keymap`     | `src/plugin/lc/keymap.rs` | 注册键盘快捷键                                  |
-| `lc.path`       | `src/plugin/lc/path.rs`   | 路径操作（split/join）                          |
-| `lc.defer_fn`   | `src/plugin/lc/mod.rs`    | 调度异步 Lua 回调                               |
-| `lc.system`     | `src/plugin/lc/mod.rs`    | 异步执行外部命令                                |
-| `lc.interactive`| `src/plugin/lc/mod.rs`    | 执行交互式命令（有终端访问权限）                |
-| `lc.on_event`   | `src/plugin/lc/mod.rs`    | 注册事件钩子                                    |
-| `lc.cmd`        | `src/plugin/lc/mod.rs`    | 向 Rust 发送内部命令                            |
-| `lc.osc52_copy` | `src/plugin/lc/mod.rs`    | 通过 OSC 52 复制文本到剪贴板                    |
-| `lc.notify`     | `src/plugin/lc/mod.rs`    | 在右下角显示通知消息（3 秒后自动消失）          |
+| Lua 模块        | 来源                     | 用途                                            |
+| --------------- | ------------------------ | ----------------------------------------------- |
+| `lc.api`        | `src/plugin/lc/api.rs`   | 页面管理（entries、预览、导航）、命令行参数访问 |
+| `lc.fs`         | `src/plugin/lc/fs.rs`    | 同步文件系统操作                                |
+| `lc.keymap`     | `src/plugin/lc/keymap.rs`| 注册键盘快捷键                                  |
+| `lc.path`       | `src/plugin/lc/path.rs`  | 路径操作（split/join）                          |
+| `lc.http`       | `src/plugin/lc/http.rs`  | HTTP 请求                                       |
+| `lc.json`       | `preset/json.lua`        | JSON 编解码                                     |
+| `lc.inspect`    | `preset/inspect.lua`     | 调试输出                                        |
+| `lc.defer_fn`   | `src/plugin/lc/mod.rs`   | 调度异步 Lua 回调                               |
+| `lc.system`     | `src/plugin/lc/mod.rs`   | 异步执行外部命令                                |
+| `lc.interactive`| `src/plugin/lc/mod.rs`   | 执行交互式命令（有终端访问权限）                |
+| `lc.on_event`   | `src/plugin/lc/mod.rs`   | 注册事件钩子                                    |
+| `lc.cmd`        | `src/plugin/lc/mod.rs`   | 向 Rust 发送内部命令                            |
+| `lc.osc52_copy` | `src/plugin/lc/mod.rs`   | 通过 OSC 52 复制文本到剪贴板                    |
+| `lc.notify`     | `src/plugin/lc/mod.rs`   | 在右下角显示通知消息（3 秒后自动消失）          |
+| `lc.log`        | `src/plugin/lc/mod.rs`   | 写入日志文件                                    |
+| `lc.split`      | `src/plugin/lc/mod.rs`   | 字符串分割                                      |
+| `lc.tbl_map`    | `preset/util.lua`        | 对表值映射函数                                  |
+| `lc.tbl_extend` | `preset/util.lua`        | 深度扩展表                                      |
+| `lc.equals`     | `preset/util.lua`        | 深度比较值                                      |
+| `lc.trim`       | `preset/util.lua`        | 去除字符串空白                                  |
+| `lc.config`     | `preset/init.lua`        | 配置插件和设置                                  |
 
 #### 事件钩子
 
@@ -230,11 +252,49 @@ UI 布局在 `src/app.rs::AppWidget::render()` 中硬编码：
 
 ## 插件示例：进程查看器
 
-`preset/plugins/process.lazycmd/` 演示了一个完整的插件：
+`examples/plugins/process.lazycmd/` 演示了一个完整的插件：
 
 1. **列出**：使用 `lc.system({ 'ps', '-eo', 'pid,command' }, ...)` 获取进程列表
 2. **预览**：使用 `lc.system({ 'pstree', '-p', pid }, ...)` 显示进程树
 3. **集成**：从 `preset/init.lua` 事件钩子调用
+
+### 插件配置文件结构
+
+用户配置文件 `examples/init.lua`（debug 模式）或 `~/.config/lazycmd/init.lua`（release 模式）：
+
+```lua
+lc.config {
+  plugins = {
+    {
+      'memos',
+      config = function()
+        require('memos').setup {
+          token = 'your_token',
+          base_url = 'https://your-memos-server.com',
+        }
+      end,
+    },
+    {
+      'process',
+      config = function() require('process').setup() end,
+    },
+  },
+}
+```
+
+### 插件目录结构
+
+```
+examples/plugins/          (debug) 或 ~/.config/lazycmd/plugins/ (release)
+├── memos.lazycmd/
+│   └── memos/
+│       └── init.lua
+└── process.lazycmd/
+    └── process/
+        └── init.lua
+```
+
+**注意**：插件目录名使用 `*.lazycmd` 后缀，内部子目录与插件名相同，包含 `init.lua` 文件。
 
 ## LC API 参考
 
@@ -305,6 +365,91 @@ else
 end
 ```
 
+### lc.http 模块
+
+HTTP 请求函数：
+
+| 函数                       | 参数                           | 返回值                       | 用途              |
+| -------------------------- | ------------------------------ | ---------------------------- | ----------------- |
+| `lc.http.get(url, cb)`     | `string`, `function`           | `nil`                        | 发送 GET 请求    |
+| `lc.http.post(url, body, cb)` | `string`, `string`, `function` | `nil`                    | 发送 POST 请求   |
+| `lc.http.put(url, body, cb)` | `string`, `string`, `function` | `nil`                    | 发送 PUT 请求    |
+| `lc.http.delete(url, cb)`  | `string`, `function`           | `nil`                        | 发送 DELETE 请求 |
+| `lc.http.patch(url, body, cb)` | `string`, `string`, `function` | `nil`                   | 发送 PATCH 请求  |
+| `lc.http.request(opts, cb)` | `RequestOptions`, `function` | `nil`                     | 发送自定义请求  |
+
+**回调函数参数** (`HttpResponse`)：
+- `success`: 请求是否成功
+- `status`: HTTP 状态码
+- `body`: 响应体
+- `headers`: 响应头（table）
+- `error`: 错误信息（如果有）
+
+**示例**：
+
+```lua
+-- GET 请求
+lc.http.get('https://api.example.com/data', function(res)
+  if res.success then
+    local data = lc.json.decode(res.body)
+    lc.log('info', 'Received data: {}', lc.inspect(data))
+  else
+    lc.log('error', 'Request failed: {}', res.error)
+  end
+end)
+
+-- POST 请求
+lc.http.post('https://api.example.com/memos', lc.json.encode({
+  content = 'Hello, world!',
+  visibility = 'PRIVATE'
+}), function(res)
+  if res.success then
+    lc.notify 'Memo created'
+    lc.cmd 'reload'
+  else
+    lc.notify('Failed to create memo: ' .. (res.error or 'Unknown'))
+  end
+end)
+
+-- 自定义请求
+lc.http.request({
+  url = 'https://api.example.com/memos',
+  method = 'PATCH',
+  headers = {
+    ['Authorization'] = 'Bearer ' .. token,
+    ['Content-Type'] = 'application/json',
+  },
+  body = lc.json.encode({content = 'Updated'}),
+  timeout = 30000,
+}, function(res)
+  -- handle response
+end)
+```
+
+### lc.json 模块
+
+JSON 编解码函数：
+
+| 函数                       | 参数     | 返回值   | 用途           |
+| -------------------------- | -------- | -------- | -------------- |
+| `lc.json.encode(value)`    | `any`    | `string` | 编码为 JSON 字符串 |
+| `lc.json.decode(json_str)` | `string` | `any`    | 解码 JSON 为 Lua 值 |
+
+**示例**：
+
+```lua
+-- 编码
+local json_str = lc.json.encode({
+  name = 'test',
+  values = {1, 2, 3},
+})
+-- json_str = '{"name":"test","values":[1,2,3]}'
+
+-- 解码
+local data = lc.json.decode('{"name":"test","values":[1,2,3]}')
+-- data = {name = "test", values = {1, 2, 3}}
+```
+
 ### lc.osc52_copy 函数
 
 通过 OSC 52 转义序列复制文本到系统剪贴板：
@@ -362,6 +507,156 @@ lc.notify('Memo updated successfully')
 lc.notify('Failed to delete memo')
 ```
 
+### lc.log 函数
+
+写入日志到文件：
+
+| 函数             | 参数                                   | 返回值  | 用途                    |
+| ---------------- | -------------------------------------- | ------- | ----------------------- |
+| `lc.log(level, format, ...)` | `string`, `string`, `...` | `nil`   | 写入日志到日志文件      |
+
+**参数**：
+- `level`: 日志级别（如 `"info"`, `"warn"`, `"error"`, `"debug"`）
+- `format`: 格式化字符串，使用 `{}` 作为占位符
+- `...`: 格式化参数
+
+**日志位置**：`~/.local/state/lazycmd/lua.log`
+
+**示例**：
+
+```lua
+lc.log('info', 'Loading memos list')
+lc.log('debug', 'API call: {} {}', method, path)
+lc.log('error', 'Failed to read file: {}', err)
+```
+
+### lc.split 函数
+
+分割字符串：
+
+| 函数             | 参数               | 返回值      | 用途           |
+| ---------------- | ------------------ | ----------- | -------------- |
+| `lc.split(s, sep)` | `string`, `string` | `string[]`  | 按分隔符分割字符串 |
+
+**示例**：
+
+```lua
+local lines = lc.split("a,b,c", ",")  -- {"a", "b", "c"}
+local lines = lc.split(output.stdout, "\n")
+```
+
+### lc.inspect 函数
+
+将值转换为可读的字符串表示：
+
+| 函数             | 参数    | 返回值    | 用途                   |
+| ---------------- | ------- | --------- | ---------------------- |
+| `lc.inspect(value)` | `any`  | `string`  | 返回值的调试输出字符串 |
+
+**示例**：
+
+```lua
+print(lc.inspect(args))
+local result = lc.inspect({a = 1, b = {c = 2}})
+```
+
+### lc.tbl_map 函数
+
+对表值应用映射函数：
+
+| 函数                    | 参数                     | 返回值   | 用途            |
+| ----------------------- | ------------------------ | -------- | --------------- |
+| `lc.tbl_map(func, t)`   | `function`, `table`      | `table`  | 返回映射后的新表 |
+
+**示例**：
+
+```lua
+local doubled = lc.tbl_map(function(x) return x * 2 end, {1, 2, 3})
+-- {2, 4, 6}
+```
+
+### lc.tbl_extend 函数
+
+深度扩展目标表：
+
+| 函数                        | 参数               | 返回值   | 用途              |
+| --------------------------- | ------------------ | -------- | ----------------- |
+| `lc.tbl_extend(target, ...)` | `table`, `table...` | `table`  | 返回扩展后的目标表 |
+
+**示例**：
+
+```lua
+local config = {a = 1}
+lc.tbl_extend(config, {b = 2}, {c = 3})
+-- config = {a = 1, b = 2, c = 3}
+```
+
+### lc.equals 函数
+
+深度比较两个值：
+
+| 函数                          | 参数                    | 返回值    | 用途               |
+| ----------------------------- | ----------------------- | --------- | ------------------ |
+| `lc.equals(o1, o2, ignore_mt)` | `any`, `any`, `boolean?` | `boolean` | 值是否相等        |
+
+**示例**：
+
+```lua
+if lc.equals(path, lc.api.get_current_path()) then
+  lc.api.page_set_entries(entries)
+end
+```
+
+### lc.trim 函数
+
+去除字符串首尾空白：
+
+| 函数             | 参数     | 返回值    | 用途           |
+| ---------------- | -------- | --------- | -------------- |
+| `lc.trim(s)`     | `string` | `string`  | 返回修剪后的字符串 |
+
+**示例**：
+
+```lua
+local trimmed = lc.trim("  hello  ")  -- "hello"
+```
+
+### lc.config 函数
+
+配置插件和设置：
+
+| 函数                    | 参数     | 返回值  | 用途              |
+| ----------------------- | -------- | ------- | ----------------- |
+| `lc.config(opt)`        | `table`  | `nil`   | 配置插件          |
+
+**配置选项**：
+- `default_plugin`: 默认插件名称（来自命令行参数）
+- `plugins`: 插件列表，每个插件包含：
+  - `[1]`: 插件名称（如 `"memos"`, `"process"`）
+  - `config`: 可选的配置函数
+
+**示例**：
+
+```lua
+lc.config {
+  plugins = {
+    {
+      'memos',
+      config = function()
+        require('memos').setup {
+          token = 'your_token',
+          base_url = 'https://your-server.com',
+        }
+      end,
+    },
+    {
+      'process',
+      config = function() require('process').setup() end,
+    },
+  },
+}
+```
+
 ### 内部命令
 
 通过 `lc.cmd()` 可以发送内部命令到 Rust 端处理：
@@ -372,10 +667,10 @@ lc.notify('Failed to delete memo')
 | `scroll_by <num>` | 可选数字 | 列表滚动指定行数（默认 1） |
 | `scroll_preview_by <num>` | 可选数字 | 预览面板滚动指定行数（默认 1） |
 | `reload` | 无 | 刷新当前列表（重新调用插件的 `list()` 函数） |
-
-**通知样式**：
-
-通知框固定 40x3 尺寸，圆角边框，黄色文字和边框，显示在预览区域右下角。
+| `enter_filter_mode` | 无 | 进入过滤模式 |
+| `exit_filter_mode` | 无 | 退出过滤模式 |
+| `accept_filter` | 无 | 接受当前过滤 |
+| `filter_clear` | 无 | 清除过滤条件 |
 
 **示例**：
 
@@ -387,17 +682,36 @@ lc.keymap.set('main', 'k', 'scroll_by -1')
 -- 使用 reload 命令
 lc.keymap.set('main', 'ctrl-r', 'reload')
 
--- 自定义刷新按键
-map('main', 'f5', 'reload')
+-- 使用过滤模式
+lc.keymap.set('main', '/', 'enter_filter_mode')
+lc.keymap.set('main', '<esc>', 'filter_clear')
 ```
 
 ## 日志
 
-日志使用 `tracing` crate 写入 `~/.local/state/lazycmd/lazycmd.log`：
+有两种日志：
+
+### Rust 日志
+使用 `tracing` crate 写入 `~/.local/state/lazycmd/lazycmd.log`：
 
 ```bash
 # 实时查看日志
 tail -f ~/.local/state/lazycmd/lazycmd.log
+```
+
+### Lua 日志
+使用 `lc.log()` 函数写入 `~/.local/state/lazycmd/lua.log`：
+
+```lua
+lc.log('info', 'Loading memos list')
+lc.log('debug', 'API call: {} {}', method, path)
+lc.log('error', 'Failed to read file: {}', err)
+```
+
+查看 Lua 日志：
+```bash
+# 实时查看 Lua 日志
+tail -f ~/.local/state/lazycmd/lua.log
 ```
 
 ## 添加新功能
@@ -438,10 +752,58 @@ tail -f ~/.local/state/lazycmd/lazycmd.log
 
 ### 创建新插件
 
-1. 在 `preset/plugins/myplugin.lazycmd/` 下创建目录
+1. 在 `examples/plugins/myplugin.lazycmd/myplugin/` 下创建目录（debug 模式）
+   或 `~/.config/lazycmd/plugins/myplugin.lazycmd/myplugin/`（release 模式）
 2. 添加 `init.lua` 返回带有函数的表
-3. 在 `preset/init.lua` 中更新 `package.path` 以包含你的插件目录
-4. 在 `preset/init.lua` 或其他插件中使用 `require 'myplugin'`
+3. 在 `examples/init.lua`（debug）或 `~/.config/lazycmd/init.lua`（release）中添加插件配置
+4. 使用 `require 'myplugin'` 加载插件
+
+**插件目录结构**：
+```
+examples/plugins/           (debug) 或 ~/.config/lazycmd/plugins/ (release)
+└── myplugin.lazycmd/
+    └── myplugin/
+        └── init.lua
+```
+
+**插件示例**：
+```lua
+-- examples/plugins/myplugin.lazycmd/myplugin/init.lua
+local M = {}
+
+function M.setup()
+  -- 设置键盘映射
+  lc.keymap.set('main', 'x', function()
+    lc.notify 'Plugin action'
+  end)
+end
+
+function M.list(path, cb)
+  -- 返回 entries 列表
+  local entries = {
+    {key = "1", display = "Item 1"},
+    {key = "2", display = "Item 2"},
+  }
+  cb(entries)
+end
+
+function M.preview(entry, cb)
+  -- 返回预览内容
+  cb("Preview for: " .. entry.key)
+end
+
+return M
+```
+
+**用户配置**：
+```lua
+-- examples/init.lua
+lc.config {
+  plugins = {
+    {'myplugin', config = function() require('myplugin').setup() end},
+  },
+}
+```
 
 ## 重要实现细节
 
@@ -463,7 +825,21 @@ tail -f ~/.local/state/lazycmd/lazycmd.log
 
 ### 预设文件加载
 
+**预设文件**（嵌入到二进制中）：
+
+- `preset/util.lua` - 工具函数（tbl_map, tbl_extend, equals, trim）
+- `preset/init.lua` - 默认初始化和键盘映射
+- `preset/json.lua` - JSON 编解码
+- `preset/inspect.lua` - 调试输出
+
 `src/plugin/lua.rs` 中的宏 `preset!($name)` 处理 debug（文件读取）和 release（嵌入字节）两种构建。添加新预设文件时，确保将它们放置在 `preset/` 目录中。
+
+**用户配置文件**（从磁盘读取）：
+
+- debug 模式：`examples/init.lua`, `examples/plugins/`
+- release 模式：`~/.config/lazycmd/init.lua`, `~/.config/lazycmd/plugins/`
+
+用户配置文件通过 `preset/init.lua` 末尾的 `require 'init'` 加载。
 
 ### 键盘映射解析
 

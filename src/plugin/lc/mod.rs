@@ -13,6 +13,34 @@ use std::time::Duration;
 use tokio::{process::Command, time::sleep};
 use base64::Engine;
 
+/// Load a preset Lua file (handles both debug and release builds)
+macro_rules! load_preset {
+    ($lua:expr, $name:literal) => {{
+        #[cfg(debug_assertions)]
+        {
+            let content = std::fs::read(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/preset/",
+                $name,
+                ".lua"
+            ))
+            .expect(concat!("Failed to read preset ", $name, ".lua"));
+            $lua.load(&content).set_name(concat!("preset/", $name, ".lua")).eval::<LuaTable>()
+        }
+        #[cfg(not(debug_assertions))]
+        {
+            $lua.load(&include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/preset/",
+                $name,
+                ".lua"
+            ))[..])
+            .set_name(concat!("preset/", $name, ".lua"))
+            .eval::<LuaTable>()
+        }
+    }};
+}
+
 /// Get the log file path for Lua plugin logs
 fn get_log_path() -> PathBuf {
     if let Ok(home) = std::env::var("HOME") {
@@ -49,6 +77,11 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
     let fs = fs::new_table(lua)?.into_lua(lua)?;
     let http = http::new_table(lua)?.into_lua(lua)?;
     let path = path::new_table(lua)?.into_lua(lua)?;
+
+    // Load json and inspect modules from preset files
+    let json_mod = load_preset!(lua, "json")?.into_lua(lua)?;
+    let inspect_mod = load_preset!(lua, "inspect")?.into_lua(lua)?;
+
     let defer_fn = lua
         .create_function(|lua, (f, ms): (LuaFunction, u64)| {
             let sender = plugin::clone_sender(lua)?;
@@ -192,6 +225,8 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
         ("log", log_fn),
         ("osc52_copy", osc52_copy),
         ("notify", notify_fn),
+        ("json", json_mod),
+        ("inspect", inspect_mod),
     ])?;
     lua.globals().raw_set("lc", lc)
 }

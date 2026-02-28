@@ -244,7 +244,7 @@ function lc.cmd(command) end
 -- lc.on_event - Register event hooks
 -- ============================================
 
----@alias EventHook 'EnterPost' | 'HoverPost
+---@alias EventHook 'EnterPost' | 'HoverPost'
 
 ---Register a callback for an event
 ---@param event_name EventHook The event name
@@ -313,20 +313,33 @@ function lc.tbl_map(func, t) end
 function lc.tbl_extend(target, ...) end
 
 -- ============================================
--- lc.validate - Validate arguments (vim.validate style)
+-- lc.config - Configure plugins
 -- ============================================
 
----Validate arguments using vim.validate-style API
----Errors are shown via lc.notify instead of throwing
----@param args table<string, {value: any, type: string, optional?: boolean}|any[]> Validation specifications
----@return boolean valid Whether all validations passed
----@example
----lc.validate({
----  name = {name, 'string'},
----  age = {age, 'number'},
----  optional = {optional_value, 'string', true},
----})
-function lc.validate(args) end
+---Configure plugins and settings
+---@param opt {default_plugin?: string, plugins?: table[]} Configuration options
+---| {default_plugin: string, plugins: {name: string, config: fun()}[]} Plugin configuration
+function lc.config(opt) end
+
+-- ============================================
+-- lc.equals - Compare two values for equality
+-- ============================================
+
+---Compare two values for deep equality (including tables)
+---@param o1 any First value to compare
+---@param o2 any Second value to compare
+---@param ignore_mt boolean? Whether to ignore metatables (default: false)
+---@return boolean equal Whether the values are equal
+function lc.equals(o1, o2, ignore_mt) end
+
+-- ============================================
+-- lc.trim - Trim whitespace from string
+-- ============================================
+
+---Trim leading and trailing whitespace from a string
+---@param s string The string to trim
+---@return string trimmed The trimmed string
+function lc.trim(s) end
 
 -- ============================================
 -- Type aliases

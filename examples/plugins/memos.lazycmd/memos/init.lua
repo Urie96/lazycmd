@@ -109,7 +109,7 @@ local function yank_current_memo()
   lc.log('info', 'Yanking memo #{} content', memo.id)
 
   -- Copy content to clipboard using OSC 52
-  local success, err = pcall(lc.osc52_copy, memo.memo.content)
+  local success, err = pcall(lc.osc52_copy, lc.trim(memo.content))
 
   if not success then
     lc.notify('Failed to copy: ' .. tostring(err))
