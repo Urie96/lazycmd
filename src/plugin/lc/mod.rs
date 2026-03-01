@@ -5,7 +5,7 @@ mod keymap;
 mod path;
 mod ui;
 
-use crate::{events::EventHook, plugin, Event};
+use crate::{plugin, Event};
 use mlua::prelude::*;
 use std::io::{self, Write};
 use std::path::PathBuf;
@@ -135,12 +135,6 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
         })?
         .into_lua(lua)?;
 
-    let on_event = lua
-        .create_function(|lua, (event_name, cb): (EventHook, LuaFunction)| {
-            plugin::send_event(lua, Event::AddEventHook(event_name, cb))
-        })?
-        .into_lua(lua)?;
-
     let split = lua
         .create_function(|lua, (s, sep): (String, String)| lua.create_sequence_from(s.split(&sep)))?
         .into_lua(lua)?;
@@ -217,7 +211,6 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
         ("fs", fs),
         ("http", http),
         ("cmd", cmd),
-        ("on_event", on_event),
         ("split", split),
         ("system", command_fn),
         ("interactive", interactive_fn),

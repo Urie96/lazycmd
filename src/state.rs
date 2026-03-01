@@ -1,5 +1,6 @@
 use crossterm::event::KeyEvent;
 use mlua::prelude::*;
+use std::collections::HashMap;
 use std::time::Instant;
 
 use crate::{widgets::Renderable, Keymap, Mode, Page, PageEntry};
@@ -15,6 +16,8 @@ pub struct State {
     pub notification: Option<(String, Instant)>,
     pub filter_input: String,
     pub input_cursor_position: usize,
+    /// Cache for pages to preserve cursor position, entries and filter when navigating back
+    page_cache: HashMap<Vec<String>, Page>,
 }
 
 impl State {
@@ -24,6 +27,9 @@ impl State {
         }
         let page = self.current_page.as_mut().unwrap();
         page.list = entries;
+        // Sync filter state from State to Page
+        page.filter_input = self.filter_input.clone();
+        page.input_cursor_position = self.input_cursor_position;
         // Apply current filter to new entries
         page.apply_filter(&self.filter_input);
     }
@@ -73,10 +79,36 @@ impl State {
         })
     }
 
-    pub fn go_to(&mut self, path: Vec<String>) {
-        self.current_path = path;
-        self.current_page = None;
+    pub fn go_to(&mut self, path: Vec<String>) -> bool {
+        // Cache current page before navigating away
+        if let Some(mut page) = self.current_page.take() {
+            // Sync filter state from State to Page before caching
+            page.filter_input = self.filter_input.clone();
+            page.input_cursor_position = self.input_cursor_position;
+            self.page_cache.insert(self.current_path.clone(), page);
+        }
+
+        self.current_path = path.clone();
         self.current_preview.take();
+
+        // Try to restore page from cache
+        if let Some(page) = self.page_cache.remove(&path) {
+            // Sync filter state from Page to State after restoring
+            self.filter_input = page.filter_input.clone();
+            self.input_cursor_position = page.input_cursor_position;
+            self.current_page = Some(page);
+            true // Restored from cache
+        } else {
+            // Clear filter for new paths
+            self.filter_input.clear();
+            self.input_cursor_position = 0;
+            false // Not in cache, needs to be loaded
+        }
+    }
+
+    /// Clear cache for current path (used by reload command)
+    pub fn clear_current_cache(&mut self) {
+        self.page_cache.remove(&self.current_path);
     }
 
     pub fn scroll_by(&mut self, amount: i16) {

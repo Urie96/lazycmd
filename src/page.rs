@@ -43,6 +43,8 @@ pub struct Page {
     pub list: Vec<PageEntry>,
     pub filtered_list: Vec<PageEntry>,
     pub list_state: widgets::ListState,
+    pub filter_input: String,
+    pub input_cursor_position: usize,
 }
 
 impl Page {

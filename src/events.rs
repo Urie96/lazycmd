@@ -29,26 +29,9 @@ pub enum Event {
     Command(String),
     Crossterm(CrosstermEvent),
     AddKeymap(Keymap),
-    AddEventHook(EventHook, LuaFunction),
     LuaCallback(Box<dyn FnOnce(&Lua) -> mlua::Result<()>>),
     InteractiveCommand(Vec<String>, Option<LuaFunction>),
     Notify(String),
-}
-
-#[derive(PartialEq, Eq, Hash)]
-pub enum EventHook {
-    EnterPost,
-    HoverPost,
-}
-
-impl FromLua for EventHook {
-    fn from_lua(value: mlua::Value, lua: &mlua::Lua) -> mlua::Result<Self> {
-        Ok(match String::from_lua(value, lua)?.as_str() {
-            "EnterPost" => EventHook::EnterPost,
-            "HoverPost" => EventHook::HoverPost,
-            other => Err(format!("Unable to cast string '{other}' into EventName").into_lua_err())?,
-        })
-    }
 }
 
 impl Events {

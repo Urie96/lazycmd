@@ -1,6 +1,5 @@
 use anyhow::{bail, Context, Result};
 use crossterm::event::{Event as CrosstermEvent, KeyCode, KeyEventKind};
-use std::collections::HashMap;
 
 use mlua::prelude::*;
 use ratatui::{
@@ -10,7 +9,7 @@ use ratatui::{
 use tokio::sync::mpsc;
 
 use crate::{
-    events::{Event, EventHook, Events},
+    events::{Event, Events},
     plugin,
     term::{self, Term},
     widgets::{header::HeaderWidget, input::InputWidget, list::ListWidget},
@@ -23,7 +22,6 @@ pub struct App {
     term: Term,
     quitting: bool,
     dirty: bool,
-    event_hooks: HashMap<EventHook, Vec<LuaFunction>>,
     lua: Lua,
 }
 
@@ -41,7 +39,6 @@ impl App {
             term,
             dirty: false,
             quitting: false,
-            event_hooks: Default::default(),
         }
     }
 
@@ -64,16 +61,26 @@ impl App {
         Ok(())
     }
 
-    fn run_event_hooks(&mut self, e: EventHook) -> Result<()> {
-        if let Some(hooks) = self.event_hooks.get(&e) {
+    fn call_list(&mut self) -> Result<()> {
+        anyhow::Context::context(
             plugin::scope(&self.lua, &mut self.state, &self.event_sender, || {
-                for hook in hooks {
-                    hook.call::<()>(())?;
-                }
-                Ok(())
-            })?;
-        }
-        Ok(())
+                let lc: LuaTable = self.lua.globals().get("lc")?;
+                let list_fn: LuaFunction = lc.get("_list")?;
+                list_fn.call::<()>(())
+            }),
+            "Failed to call lc._list",
+        )
+    }
+
+    fn call_preview(&mut self) -> Result<()> {
+        anyhow::Context::context(
+            plugin::scope(&self.lua, &mut self.state, &self.event_sender, || {
+                let lc: LuaTable = self.lua.globals().get("lc")?;
+                let preview_fn: LuaFunction = lc.get("_preview")?;
+                preview_fn.call::<()>(())
+            }),
+            "Failed to call lc._preview",
+        )
     }
 
     fn handle_event(&mut self, e: Event) -> Result<()> {
@@ -114,10 +121,14 @@ impl App {
             Event::Crossterm(_) => {}
             Event::Command(command) => self.handle_command(command.as_str())?,
             Event::AddKeymap(keymap) => self.state.add_keymap(keymap),
-            Event::AddEventHook(name, cb) => self.event_hooks.entry(name).or_default().push(cb),
             Event::Enter(path) => {
-                self.state.go_to(path);
-                self.run_event_hooks(EventHook::EnterPost)?;
+                let from_cache = self.state.go_to(path);
+                if !from_cache {
+                    self.call_list()?;
+                } else {
+                    // Restore preview for cached page
+                    self.call_preview()?;
+                }
                 self.dirty = true;
             }
             Event::LuaCallback(cb) => {
@@ -196,7 +207,7 @@ impl App {
                 };
                 self.state.scroll_by(num);
                 self.state.current_preview.take();
-                self.run_event_hooks(EventHook::HoverPost)?;
+                self.call_preview()?;
                 self.dirty = true;
             }
             "scroll_preview_by" => {
@@ -210,7 +221,8 @@ impl App {
                 self.dirty = true;
             }
             "reload" => {
-                self.run_event_hooks(EventHook::EnterPost)?;
+                self.state.clear_current_cache();
+                self.call_list()?;
                 self.dirty = true;
             }
             "enter_filter_mode" => {
@@ -227,6 +239,34 @@ impl App {
             }
             "filter_clear" => {
                 self.handle_filter_clear();
+            }
+            "enter" => {
+                if let Some(hovered) = self.state.hovered() {
+                    let mut path = self.state.current_path.clone();
+                    path.push(hovered.key.clone());
+                    let from_cache = self.state.go_to(path);
+                    if !from_cache {
+                        self.call_list()?;
+                    } else {
+                        // Restore preview for cached page
+                        self.call_preview()?;
+                    }
+                    self.dirty = true;
+                }
+            }
+            "back" => {
+                let mut path = self.state.current_path.clone();
+                if !path.is_empty() {
+                    path.pop();
+                    let from_cache = self.state.go_to(path);
+                    if !from_cache {
+                        self.call_list()?;
+                    } else {
+                        // Restore preview for cached page
+                        self.call_preview()?;
+                    }
+                    self.dirty = true;
+                }
             }
             _ => bail!("Unsupported command {}", command),
         };
@@ -321,7 +361,7 @@ impl App {
         }
         self.state.current_mode = crate::Mode::Main;
         self.state.last_key_event_buffer.clear();
-        let _ = self.run_event_hooks(EventHook::HoverPost);
+        let _ = self.call_preview();
         self.dirty = true;
     }
 
@@ -343,10 +383,13 @@ impl App {
 
     fn apply_filter(&mut self) -> Result<()> {
         if let Some(page) = &mut self.state.current_page {
+            // Sync filter state from State to Page
+            page.filter_input = self.state.filter_input.clone();
+            page.input_cursor_position = self.state.input_cursor_position;
             page.apply_filter(&self.state.filter_input);
             // Update preview for newly selected item
             self.state.current_preview.take();
-            self.run_event_hooks(EventHook::HoverPost)?;
+            self.call_preview()?;
         }
         Ok(())
     }

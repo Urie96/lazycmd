@@ -3,6 +3,39 @@
 
 local M = {}
 
+-- 缓存系统
+local cache = {
+  -- system: lc.system 命令输出缓存，键为命令行参数的连接字符串
+  system = {},
+}
+
+-- 生成缓存键（用于 lc.system）
+local function system_cache_key(cmd_args)
+  -- 将命令参数表连接成字符串作为缓存键
+  return table.concat(cmd_args, '\x00')
+end
+
+-- 带缓存的 lc.system 包装函数
+local function cached_system(cmd_args, cb)
+  local key = system_cache_key(cmd_args)
+
+  -- 检查缓存
+  if cache.system[key] then
+    lc.log('debug', 'Cache hit for command: {}', table.concat(cmd_args, ' '))
+    cb(cache.system[key])
+    return
+  end
+
+  lc.log('debug', 'Cache miss for command: {}', table.concat(cmd_args, ' '))
+
+  -- 执行命令
+  lc.system(cmd_args, function(output)
+    -- 保存到缓存
+    cache.system[key] = output
+    cb(output)
+  end)
+end
+
 -- 解析账号列表
 local function parse_accounts(output)
   local success, data = pcall(lc.json.decode, output.stdout)
@@ -162,7 +195,7 @@ end
 function M.list(path, cb)
   -- 根路径：列出所有账号
   if #path == 0 then
-    lc.system({ 'himalaya', '--output', 'json', 'account', 'list' }, function(output)
+    cached_system({ 'himalaya', '--output', 'json', 'account', 'list' }, function(output)
       if output.code ~= 0 then
         lc.log('error', 'Failed to list accounts: {}', output.stderr or 'Unknown error')
         cb {}
@@ -182,7 +215,7 @@ function M.list(path, cb)
   -- 账号路径：列出该账号的文件夹
   elseif #path == 1 then
     local account = path[1]
-    lc.system({ 'himalaya', '--output', 'json', 'folder', 'list', '--account', account }, function(output)
+    cached_system({ 'himalaya', '--output', 'json', 'folder', 'list', '--account', account }, function(output)
       if output.code ~= 0 then
         lc.log('error', 'Failed to list folders: {}', output.stderr or 'Unknown error')
         cb {}
@@ -203,7 +236,7 @@ function M.list(path, cb)
   elseif #path == 2 then
     local account = path[1]
     local folder = path[2]
-    lc.system({
+    cached_system({
       'himalaya',
       '--output',
       'json',
@@ -229,10 +262,6 @@ function M.list(path, cb)
 
       cb(entries)
     end)
-
-  -- 其他路径：返回空
-  else
-    cb {}
   end
 end
 
@@ -243,7 +272,7 @@ function M.preview(entry, cb)
     return
   end
 
-  lc.system({
+  cached_system({
     'himalaya',
     '--output',
     'json',
@@ -275,49 +304,6 @@ function M.preview(entry, cb)
 end
 
 -- 设置插件
-function M.setup()
-  -- 右键：进入下一级
-  lc.keymap.set('main', '<right>', function()
-    local path = lc.api.get_current_path()
-    local entry = lc.api.page_get_hovered()
-
-    if not entry then
-      lc.notify 'No entry selected'
-      return
-    end
-
-    -- 在信封层级，不能再进入下一级
-    if #path >= 2 then
-      lc.notify 'Cannot enter further'
-      return
-    end
-
-    -- 构建下一级路径
-    local new_path = {}
-    for _, p in ipairs(path) do
-      table.insert(new_path, p)
-    end
-    table.insert(new_path, entry.key)
-
-    lc.api.go_to(new_path)
-  end)
-
-  -- 左键：返回上一级
-  lc.keymap.set('main', '<left>', function()
-    local path = lc.api.get_current_path()
-    if #path == 0 then
-      lc.notify 'Already at root'
-      return
-    end
-
-    -- 移除最后一级
-    local new_path = {}
-    for i = 1, #path - 1 do
-      table.insert(new_path, path[i])
-    end
-
-    lc.api.go_to(new_path)
-  end)
-end
+function M.setup() end
 
 return M

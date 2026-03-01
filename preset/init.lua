@@ -18,9 +18,7 @@ function lc.config(opt)
   end
 end
 
-local function map(mode, key, cb)
-  lc.keymap.set(mode, key, cb)
-end
+local function map(mode, key, cb) lc.keymap.set(mode, key, cb) end
 
 map('main', '<up>', 'scroll_by -1')
 map('main', '<down>', 'scroll_by 1')
@@ -33,40 +31,26 @@ map('main', 'q', 'quit')
 map('main', '<C-q>', 'quit')
 map('main', '/', 'enter_filter_mode')
 map('main', '<esc>', 'filter_clear')
+map('main', '<left>', 'back')
+map('main', '<right>', 'enter')
 
 -- Input mode keymaps
 map('input', '<esc>', 'exit_filter_mode')
 map('input', '<enter>', 'accept_filter')
 map('input', '<C-u>', 'filter_clear')
-map('main', '<left>', function()
-  local path = lc.api.get_current_path()
-  if #path > 0 then
-    table.remove(path)
-    lc.api.go_to(path)
-  end
-end)
-
-map('main', '<right>', function()
-  local hovered = lc.api.page_get_hovered()
-  if hovered then
-    local path = lc.api.get_current_path()
-    table.insert(path, hovered.key)
-    lc.api.go_to(path)
-  end
-end)
 
 require 'init'
 
 local plugin = require(cfg.default_plugin)
 
-lc.on_event('EnterPost', function()
+function lc._list()
   local path = lc.api.get_current_path()
   plugin.list(path, function(entries)
     if lc.equals(path, lc.api.get_current_path()) then lc.api.page_set_entries(entries) end
   end)
-end)
+end
 
-lc.on_event('HoverPost', function()
+function lc._preview()
   local entry = lc.api.page_get_hovered()
   local path = lc.api.get_hovered_path()
   if entry then
@@ -74,4 +58,4 @@ lc.on_event('HoverPost', function()
       if lc.equals(path, lc.api.get_hovered_path()) then lc.api.page_set_preview(entries) end
     end)
   end
-end)
+end
