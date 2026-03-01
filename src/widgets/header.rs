@@ -1,6 +1,5 @@
-use ratatui::{prelude::*, widgets::*};
-use symbols::border::ROUNDED;
 use crate::State;
+use ratatui::{prelude::*, widgets::*};
 
 pub struct HeaderWidget;
 
@@ -15,14 +14,35 @@ impl StatefulWidget for HeaderWidget {
             format!("/{}", state.current_path.join("/"))
         };
 
-        // Format filter if active
-        let content = if !state.filter_input.is_empty() {
-            format!("{} [filter: {}]", path_str, state.filter_input)
+        // Build styled spans
+        let text = if state.current_plugin.is_empty() {
+            // Just path in cyan, plus filter if active
+            let mut spans = vec![Span::styled(path_str, Style::default().fg(Color::Cyan))];
+            if !state.filter_input.is_empty() {
+                spans.push(Span::styled(
+                    format!(" [filter: {}]", state.filter_input),
+                    Style::default().fg(Color::Yellow),
+                ));
+            }
+            Text::from(Line::from(spans))
         } else {
-            path_str
+            // Plugin name with colon (green) + path (cyan) + filter (yellow)
+            let mut spans = vec![
+                Span::styled(
+                    format!("{}:", state.current_plugin),
+                    Style::default().fg(Color::Green),
+                ),
+                Span::styled(path_str, Style::default().fg(Color::Cyan)),
+            ];
+            if !state.filter_input.is_empty() {
+                spans.push(Span::styled(
+                    format!(" [filter: {}]", state.filter_input),
+                    Style::default().fg(Color::Yellow),
+                ));
+            }
+            Text::from(Line::from(spans))
         };
 
-        let block = Block::bordered().border_set(ROUNDED).title("header");
-        Paragraph::new(content).block(block).render(area, buf);
+        Paragraph::new(text).render(area, buf);
     }
 }

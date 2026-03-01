@@ -6,7 +6,7 @@
 -- ============================================
 
 ---@class lc
----@field style lc.style Style utilities for creating widgets
+---@field ui lc.ui UI utilities for creating widgets
 lc = {}
 
 -- ============================================
@@ -25,7 +25,7 @@ function api.page_set_entries(entries) end
 function api.page_get_hovered() end
 
 ---Set the preview panel content
----@param widget Renderable|string The widget to display in the preview panel
+---@param widget string|Text|Line The widget to display in the preview panel
 function api.page_set_preview(widget) end
 
 ---Navigate to a specific path
@@ -77,6 +77,36 @@ function fs.read_file_sync(path) end
 function fs.write_file_sync(path, content) end
 
 lc.fs = fs
+
+-- ============================================
+-- lc.cache - Persistent caching
+-- ============================================
+
+---@class CacheOptions
+---@field ttl number? Time-to-live in seconds (optional)
+
+---@class lc.cache
+local cache = {}
+
+---Get a value from cache
+---@param key string The cache key
+---@return any value The cached value, or nil if not found or expired
+function cache.get(key) end
+
+---Set a value in cache
+---@param key string The cache key
+---@param value any The value to cache (nil, boolean, number, string, table, array)
+---@param opts CacheOptions? Optional options (e.g., {ttl = 3600} for 1 hour TTL)
+function cache.set(key, value, opts) end
+
+---Delete a value from cache
+---@param key string The cache key to delete
+function cache.delete(key) end
+
+---Clear all cached values
+function cache.clear() end
+
+lc.cache = cache
 
 -- ============================================
 -- lc.http - HTTP requests
@@ -196,6 +226,33 @@ function path.split(path) end
 function path.join(components) end
 
 lc.path = path
+
+-- ============================================
+-- lc.time - Time and timestamp operations
+-- ============================================
+
+---@class lc.time
+local time = {}
+
+---Get the current Unix timestamp
+---@return number timestamp The current Unix timestamp (seconds since epoch)
+function time.now() end
+
+---Parse an ISO 8601 datetime string and return Unix timestamp
+---@param time_str string The time string to parse (e.g., "2023-12-25T15:30:45Z", "2023-12-25T15:30:45+08:00")
+---@return number timestamp The Unix timestamp (seconds since epoch)
+function time.parse(time_str) end
+
+---Format a Unix timestamp to an ISO 8601 string (or custom format)
+---@param timestamp number The Unix timestamp (seconds since epoch)
+---@param format_str string? Optional format string:
+--- - "compact" - Compact format: HH:MM for today, MM-DD for this year, YYYY-MM for older dates
+--- - "%Y-%m-%d" or any chrono format string
+--- - Defaults to ISO 8601 (e.g., "2023-12-25T15:30:45Z")
+---@return string formatted The formatted datetime string
+function time.format(timestamp, format_str) end
+
+lc.time = time
 
 -- ============================================
 -- lc.system - Execute external commands
@@ -318,16 +375,21 @@ function lc.tbl_map(func, t) end
 function lc.tbl_extend(target, ...) end
 
 -- ============================================
--- lc.style - Style utilities
+-- lc.ui - UI utilities
 -- ============================================
 
----@class lc.style
-local style = {}
+---@class lc.ui
+local ui = {}
 
----Create a Line from multiple Spans or Strings
----@vararg Span|string The Spans or Strings to combine into a Line
+---Create a Line from a table of Spans or Strings
+---@param args (Span|string)[] The Spans or Strings to combine into a Line
 ---@return Line A Line widget containing the combined Spans
-function lc.style.line(...) end
+function lc.ui.line(args) end
+
+---Create a Text from a table of Lines, Spans, or Strings
+---@param args (Line|Span|string)[] The Lines, Spans, or Strings to combine into a Text
+---@return Text A Text widget containing the combined content
+function lc.ui.text(args) end
 
 -- ============================================
 -- lc.config - Configure plugins
@@ -370,17 +432,34 @@ function lc.trim(s) end
 ---@field pid? number Process ID (for process plugin)
 ---@field [string] any Additional custom fields
 
----@class Renderable
----A renderable widget (string, Text, or Span)
-
 ---@class Text
 ---A TUI Text widget
 
 ---@class Span
 ---A TUI Span widget
 
+---Set foreground color for the Span (modifies in place and returns self)
+---@param color string Color name (e.g., "blue", "red", "green")
+---@return Span self Returns self for method chaining
+function Span:fg(color) end
+
+---Set background color for the Span (modifies in place and returns self)
+---@param color string Color name (e.g., "blue", "red", "green")
+---@return Span self Returns self for method chaining
+function Span:bg(color) end
+
 ---@class Line
 ---A TUI Line widget containing multiple Spans
+
+---Set foreground color for the Line (modifies in place and returns self)
+---@param color string Color name (e.g., "blue", "red", "green")
+---@return Line self Returns self for method chaining
+function Line:fg(color) end
+
+---Set background color for the Line (modifies in place and returns self)
+---@param color string Color name (e.g., "blue", "red", "green")
+---@return Line self Returns self for method chaining
+function Line:bg(color) end
 
 ---@class PathBuf
 ---A path buffer

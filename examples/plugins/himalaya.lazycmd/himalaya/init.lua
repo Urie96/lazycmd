@@ -72,18 +72,6 @@ local function parse_folders(output, account)
   return entries
 end
 
--- 格式化日期时间
-local function format_datetime(date_str)
-  if not date_str then return '' end
-
-  -- 尝试匹配格式：2026-02-16 18:09+08:00 或 ISO 8601: 2026-02-16T18:09:00+08:00
-  local year, month, day, hour, min = date_str:match '(%d+)-(%d+)-(%d+)[T%s](%d+):(%d+)'
-  if not year then return date_str end
-
-  -- 返回简化的日期时间格式：月/日 时:分
-  return string.format('%02d/%02d %02d:%02d', tonumber(month), tonumber(day), tonumber(hour), tonumber(min))
-end
-
 -- 解析信封列表
 local function parse_envelopes(output, account, folder)
   local success, data = pcall(lc.json.decode, output.stdout)
@@ -93,108 +81,165 @@ local function parse_envelopes(output, account, folder)
   for _, envelope in ipairs(data) do
     local display_parts = {}
 
-    -- 添加时间（用灰色显示）
+    -- 解析日期为时间戳
     if envelope.date then
-      table.insert(display_parts, format_datetime(envelope.date):fg 'darkgray')
-      table.insert(display_parts, ' ')
+      local success, parsed = pcall(lc.time.parse, envelope.date)
+      if success then
+        envelope.timestamp = parsed
+        table.insert(display_parts, lc.time.format(envelope.timestamp, 'compact'):fg 'yellow')
+        table.insert(display_parts, ' ')
+      end
     end
 
     -- 添加主题
-    table.insert(display_parts, envelope.subject or '(no subject)')
+    table.insert(display_parts, (envelope.subject or '(no subject)'):fg 'green')
 
     -- 添加发件人信息
     if envelope.from and envelope.from.name then
-      table.insert(display_parts, ' - ' .. envelope.from.name)
-    elseif envelope.from and envelope.from.address then
-      table.insert(display_parts, ' - ' .. envelope.from.address)
+      table.insert(display_parts, ' - ')
+      table.insert(display_parts, envelope.from.name:fg 'blue')
+    elseif envelope.from and envelope.from.addr then
+      table.insert(display_parts, ' - ' .. envelope.from.addr)
     end
 
     -- 添加附件标记
-    if envelope.has_attachments then table.insert(display_parts, (' [A]'):fg 'yellow') end
+    if envelope.has_attachment then table.insert(display_parts, (' [A]'):fg 'yellow') end
 
     table.insert(entries, {
       key = tostring(envelope.id),
-      display = lc.style.line(unpack(display_parts)),
+      display = lc.ui.line(display_parts),
       id = envelope.id,
       account = account,
       folder = folder,
+      -- 存储信封数据用于快速预览
+      envelope = envelope,
     })
   end
 
   return entries
 end
 
--- 解析邮件内容
+-- 解析邮件内容（从 himalaya 输出中提取正文）
 local function parse_message(output)
-  -- 先尝试解码 JSON（输出可能是 JSON 字符串格式）
-  local success1, decoded = pcall(lc.json.decode, output.stdout)
-  if not success1 then return nil, (decoded or 'Invalid JSON') end
+  local text = output.stdout
+  if not text or text == '' then return nil, 'Empty message' end
 
-  -- 如果解码后是字符串，说明输出是 JSON 字符串格式，将其包装为 body 字段
-  if type(decoded) == 'string' then return { body = decoded } end
+  -- 纯文本格式：解析头部并提取正文
+  -- 查找头部和正文的分隔位置（连续两个换行）
+  local header_end = string.find(text, '\n\n', 1, true)
 
-  return nil, 'Invalid message format'
+  if not header_end then
+    -- 没有找到分隔，整个文本作为正文
+    return { body = text }
+  end
+
+  -- 提取头部部分
+  local header_text = string.sub(text, 1, header_end - 1)
+
+  -- 解析 Cc 字段（直接提取，不做复杂解析）
+  local cc_str = nil
+  local cc_match = string.match(header_text, '\nCc:([^\n]*)')
+  if cc_match then
+    cc_str = lc.trim(cc_match)
+    if cc_str == '' then cc_str = nil end
+  end
+
+  -- 提取正文部分（跳过分隔符后的空行）
+  local body = string.sub(text, header_end + 2)
+  -- 去除开头和结尾的空白
+  body = lc.trim(body)
+
+  local result = { body = body }
+  if cc_str then
+    result.cc_str = cc_str -- 存储为字符串
+  end
+
+  return result
 end
 
--- 构建邮件预览
+-- 格式化单个地址对象
+local function format_addr(addr_obj)
+  if not addr_obj then return nil end
+  if addr_obj.name and addr_obj.addr then
+    return addr_obj.name .. ' <' .. addr_obj.addr .. '>'
+  elseif addr_obj.name then
+    return addr_obj.name
+  elseif addr_obj.addr then
+    return addr_obj.addr
+  end
+  return nil
+end
+
+-- 格式化地址列表（可能是对象、数组或 nil）
+local function format_addrs(addrs)
+  if not addrs then return nil end
+
+  -- 处理字符串格式
+  if type(addrs) == 'string' then return addrs ~= '' and addrs or nil end
+
+  -- 处理数组或单个对象
+  local addr_list = type(addrs) == 'table' and addrs[1] and addrs or { addrs }
+  local result = {}
+
+  for _, addr_obj in ipairs(addr_list) do
+    local formatted = format_addr(addr_obj)
+    if formatted then table.insert(result, formatted) end
+  end
+
+  return #result > 0 and table.concat(result, ', ') or nil
+end
+
+-- 构建邮件头部信息行
+local function build_header_lines(message)
+  local lines = {}
+
+  -- 主题
+  if message.subject then
+    table.insert(lines, lc.ui.line { ('Subject: '):fg 'cyan', message.subject:fg 'green' })
+    table.insert(lines, '')
+  end
+
+  -- 发件人
+  if message.from then
+    local from_str = format_addr(message.from)
+    table.insert(lines, lc.ui.line { ('From: '):fg 'cyan', (from_str or 'Unknown'):fg 'yellow' })
+  end
+
+  -- 收件人
+  local to_str = format_addrs(message.to)
+  if to_str then table.insert(lines, lc.ui.line { ('To: '):fg 'cyan', to_str:fg 'yellow' }) end
+
+  -- 抄送
+  local cc_str = message.cc_str or format_addrs(message.cc)
+  if cc_str then table.insert(lines, lc.ui.line { ('Cc: '):fg 'cyan', cc_str:fg 'yellow' }) end
+
+  -- 日期（格式化为 年/月/日 时:分:秒）
+  if message.timestamp then
+    table.insert(
+      lines,
+      lc.ui.line { ('Date: '):fg 'cyan', lc.time.format(message.timestamp, '%Y/%m/%d %H:%M:%S'):fg 'yellow' }
+    )
+  end
+
+  -- 附件
+  table.insert(lines, '')
+  if message.has_attachment then
+    table.insert(lines, lc.ui.line { ('Attachments: '):fg 'cyan', ('yes'):fg 'yellow' })
+  else
+    table.insert(lines, lc.ui.line { ('Attachments: '):fg 'cyan', ('none'):fg 'gray' })
+  end
+
+  return lines
+end
+
+-- 构建邮件预览（完整版）
 local function build_preview(message)
   if not message then return 'No message data' end
 
   -- 如果只有 body 字段且是纯文本，直接返回
   if type(message.body) == 'string' and not message.subject and not message.from then return message.body end
 
-  local lines = {}
-
-  -- 主题
-  if message.subject then
-    table.insert(lines, 'Subject: ' .. message.subject)
-    table.insert(lines, '')
-  end
-
-  -- 发件人
-  if message.from then
-    local from_str = message.from.name and (message.from.name .. ' <' .. message.from.address .. '>')
-      or message.from.address
-      or 'Unknown'
-    table.insert(lines, 'From: ' .. from_str)
-  end
-
-  -- 收件人
-  if message.to and #message.to > 0 then
-    local to_str = {}
-    for _, to in ipairs(message.to) do
-      local addr = to.name and (to.name .. ' <' .. to.address .. '>') or to.address
-      table.insert(to_str, addr)
-    end
-    table.insert(lines, 'To: ' .. table.concat(to_str, ', '))
-  end
-
-  -- 抄送
-  if message.cc and #message.cc > 0 then
-    local cc_str = {}
-    for _, cc in ipairs(message.cc) do
-      local addr = cc.name and (cc.name .. ' <' .. cc.address .. '>') or cc.address
-      table.insert(cc_str, addr)
-    end
-    table.insert(lines, 'Cc: ' .. table.concat(cc_str, ', '))
-  end
-
-  -- 日期
-  if message.date then table.insert(lines, 'Date: ' .. message.date) end
-
-  -- 附件
-  if message.attachments and #message.attachments > 0 then
-    table.insert(lines, '')
-    table.insert(lines, 'Attachments: ' .. tostring(#message.attachments))
-    for _, att in ipairs(message.attachments) do
-      local att_name = att.name or '(no name)'
-      local att_size = att.size and (' (' .. tostring(att.size) .. ' bytes)') or ''
-      table.insert(lines, '  - ' .. att_name .. att_size)
-    end
-  else
-    table.insert(lines, '')
-    table.insert(lines, 'Attachments: none')
-  end
+  local lines = build_header_lines(message)
 
   -- 分隔线
   table.insert(lines, '')
@@ -202,22 +247,41 @@ local function build_preview(message)
   table.insert(lines, '')
 
   -- 邮件正文
-  if message.body then
-    -- 如果 body 是文本
-    if type(message.body) == 'string' then
-      -- 分割成行
-      for line in string.gmatch(message.body, '[^\n]+') do
-        table.insert(lines, line)
-      end
-    elseif type(message.body) == 'table' and message.body.text then
-      -- 如果 body 有 text 字段
-      for line in string.gmatch(message.body.text, '[^\n]+') do
-        table.insert(lines, line)
-      end
-    end
-  end
+  if message.body then table.insert(lines, message.body) end
 
-  return table.concat(lines, '\n')
+  return lc.ui.text(lines)
+end
+
+-- 构建初始预览（使用信封数据，显示 loading 状态）
+local function build_loading_preview(envelope)
+  if not envelope then return 'No envelope data' end
+
+  local lines = build_header_lines(envelope)
+
+  -- 分隔线
+  table.insert(lines, '')
+  table.insert(lines, string.rep('─', 50))
+  table.insert(lines, '')
+
+  -- Loading 提示
+  table.insert(lines, '正文 loading 中...')
+
+  return lc.ui.text(lines)
+end
+
+-- 合并信封数据和消息正文
+local function merge_envelope_and_body(envelope, body_message)
+  local merged = {
+    subject = envelope.subject,
+    from = envelope.from,
+    to = envelope.to,
+    cc = envelope.cc,
+    cc_str = body_message.cc_str,
+    timestamp = envelope.timestamp,
+    has_attachment = envelope.has_attachment,
+    body = body_message.body,
+  }
+  return merged
 end
 
 -- 列出内容
@@ -244,7 +308,18 @@ function M.list(path, cb)
   -- 账号路径：列出该账号的文件夹
   elseif #path == 1 then
     local account = path[1]
-    cached_system({ 'himalaya', '--output', 'json', 'folder', 'list', '--account', account }, function(output)
+
+    -- 检查持久化缓存（14 天 TTL）
+    local cache_key = 'folders:' .. account
+    local cached_folders = lc.cache.get(cache_key)
+    if cached_folders then
+      lc.log('info', 'Using cached folders for account: {}', account)
+      cb(cached_folders)
+      return
+    end
+
+    -- 缓存未命中，执行命令
+    lc.system({ 'himalaya', '--output', 'json', 'folder', 'list', '--account', account }, function(output)
       if output.code ~= 0 then
         lc.log('error', 'Failed to list folders: {}', output.stderr or 'Unknown error')
         cb {}
@@ -257,6 +332,10 @@ function M.list(path, cb)
         cb {}
         return
       end
+
+      -- 缓存文件夹列表，TTL 14 天
+      lc.cache.set(cache_key, entries, { ttl = 14 * 24 * 3600 })
+      lc.log('info', 'Cached folders for account: {}', account)
 
       cb(entries)
     end)
@@ -301,10 +380,15 @@ function M.preview(entry, cb)
     return
   end
 
+  -- 第一阶段：如果有信封数据，先显示 loading 预览
+  if entry.envelope then
+    local loading_preview = build_loading_preview(entry.envelope)
+    cb(loading_preview)
+  end
+
+  -- 第二阶段：异步加载完整邮件内容
   cached_system({
     'himalaya',
-    '--output',
-    'json',
     'message',
     'read',
     tostring(entry.id),
@@ -320,19 +404,128 @@ function M.preview(entry, cb)
       return
     end
 
-    local message, err = parse_message(output)
+    -- 供<enter>键使用
+    entry.read_content = output and output.stdout
+
+    local body_message, err = parse_message(output)
     if err then
       lc.log('error', 'Failed to parse message: {}', err)
       cb('Error: ' .. err)
       return
     end
 
-    local preview = build_preview(message)
-    cb(preview)
+    -- 如果有信封数据，合并后构建完整预览
+    if entry.envelope then
+      local merged = merge_envelope_and_body(entry.envelope, body_message)
+      lc.api.page_set_preview(build_preview(merged))
+    else
+      -- 没有信封数据，直接显示 body
+      local preview = build_preview(body_message)
+      cb(preview)
+    end
   end)
 end
 
 -- 设置插件
-function M.setup() end
+function M.setup()
+  lc.api.append_hook_pre_reload(function() cache.system = {} end)
+
+  -- 添加 w 键写新邮件
+  lc.keymap.set('main', 'w', function()
+    local path = lc.api.get_current_path()
+    if #path < 1 then
+      lc.notify 'Please select an account first'
+      return
+    end
+
+    local account = path[1]
+
+    lc.log('info', 'Writing new message in {}', account)
+
+    lc.interactive({ 'himalaya', 'message', 'write', '--account', account }, function(exit_code)
+      if exit_code ~= 0 then
+        lc.notify 'Failed to send email'
+      else
+        lc.notify 'Email sent successfully'
+      end
+    end)
+  end)
+
+  -- 添加 r 键回复邮件
+  lc.keymap.set('main', 'r', function()
+    local entry = lc.api.page_get_hovered()
+    if not entry or not entry.id or not entry.account or not entry.folder then
+      lc.notify 'No email selected'
+      return
+    end
+
+    lc.log('info', 'Replying to message {} in {}/{}', entry.id, entry.account, entry.folder)
+
+    lc.interactive(
+      { 'himalaya', 'message', 'reply', tostring(entry.id), '--account', entry.account, '--folder', entry.folder },
+      function(exit_code)
+        if exit_code ~= 0 then lc.notify 'Failed to reply to message' end
+      end
+    )
+  end)
+
+  -- 添加 dd 键删除邮件
+  lc.keymap.set('main', 'dd', function()
+    local entry = lc.api.page_get_hovered()
+    if not entry or not entry.id or not entry.account or not entry.folder then
+      lc.notify 'No email selected'
+      return
+    end
+
+    lc.log('info', 'Deleting message {} in {}/{}', entry.id, entry.account, entry.folder)
+
+    lc.interactive(
+      { 'himalaya', 'message', 'delete', tostring(entry.id), '--account', entry.account, '--folder', entry.folder },
+      function(exit_code)
+        if exit_code ~= 0 then
+          lc.notify 'Failed to delete message'
+        else
+          lc.notify 'Message deleted'
+          lc.cmd 'reload' -- 刷新列表
+        end
+      end
+    )
+  end)
+
+  -- 添加 <enter> 键在编辑器中打开邮件正文
+  lc.keymap.set('main', '<enter>', function()
+    local entry = lc.api.page_get_hovered()
+    if not entry or not entry.id or not entry.account or not entry.folder then
+      lc.notify 'No email selected'
+      return
+    end
+
+    -- 如果没有预览过，需要先获取内容
+    if not entry.read_content then
+      lc.notify 'Preview not loaded yet'
+      return
+    end
+
+    lc.log('info', 'Opening message {} in editor', entry.id)
+
+    -- 写入临时文件
+    local temp_file = '/tmp/lazycmd-mail-' .. tostring(entry.id) .. '.eml'
+    local success, write_err = lc.fs.write_file_sync(temp_file, entry.read_content)
+    if not success then
+      lc.notify 'Failed to create temporary file'
+      lc.log('error', 'Failed to write temporary file {}: {}', temp_file, write_err)
+      return
+    end
+
+    lc.log('info', 'Created temporary file: {}', temp_file)
+
+    -- 使用 $EDITOR 打开文件
+    local editor = os.getenv 'EDITOR' or 'vim'
+    lc.interactive({ editor, temp_file }, function(exit_code)
+      -- 清理临时文件（可选）
+      -- os.remove(temp_file)
+    end)
+  end)
+end
 
 return M

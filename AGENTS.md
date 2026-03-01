@@ -84,6 +84,7 @@ Lua 中的全局表 `lc` 提供以下子系统：
 | `lc.keymap`     | `src/plugin/lc/keymap.rs`| 注册键盘快捷键                                  |
 | `lc.path`       | `src/plugin/lc/path.rs`  | 路径操作（split/join）                          |
 | `lc.http`       | `src/plugin/lc/http.rs`  | HTTP 请求                                       |
+| `lc.time`       | `src/plugin/lc/time.rs`  | 时间解析和格式化                                |
 | `lc.json`       | `preset/json.lua`        | JSON 编解码                                     |
 | `lc.inspect`    | `preset/inspect.lua`     | 调试输出                                        |
 | `lc.defer_fn`   | `src/plugin/lc/mod.rs`   | 调度异步 Lua 回调                               |

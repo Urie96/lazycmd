@@ -1,9 +1,10 @@
 mod api;
+mod cache;
 mod fs;
 mod http;
 mod keymap;
 mod path;
-mod style;
+mod time;
 mod ui;
 
 use crate::{plugin, Event};
@@ -75,9 +76,11 @@ fn write_log(level: &str, message: &str) {
 pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
     let keymap = keymap::new_table(lua)?.into_lua(lua)?;
     let api = api::new_table(lua)?.into_lua(lua)?;
+    let cache = cache::new_table(lua)?.into_lua(lua)?;
     let fs = fs::new_table(lua)?.into_lua(lua)?;
     let http = http::new_table(lua)?.into_lua(lua)?;
     let path = path::new_table(lua)?.into_lua(lua)?;
+    let time = time::new_table(lua)?.into_lua(lua)?;
 
     // Load json and inspect modules from preset files
     let json_mod = load_preset!(lua, "json")?.into_lua(lua)?;
@@ -205,12 +208,16 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
 
     ui::inject_string_meta_method(lua)?;
 
-    let style_tbl = lua.create_table_from([("line", style::line(lua)?)])?;
+    let ui_tbl = lua.create_table_from([
+        ("line", ui::line(lua)?),
+        ("text", ui::text(lua)?),
+    ])?;
 
     let lc = lua.create_table_from([
         ("defer_fn", defer_fn),
         ("keymap", keymap),
         ("api", api),
+        ("cache", cache),
         ("fs", fs),
         ("http", http),
         ("cmd", cmd),
@@ -218,12 +225,13 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
         ("system", command_fn),
         ("interactive", interactive_fn),
         ("path", path),
+        ("time", time),
         ("log", log_fn),
         ("osc52_copy", osc52_copy),
         ("notify", notify_fn),
         ("json", json_mod),
         ("inspect", inspect_mod),
-        ("style", mlua::Value::Table(style_tbl)),
+        ("ui", mlua::Value::Table(ui_tbl)),
     ])?;
     lua.globals().raw_set("lc", lc)
 }

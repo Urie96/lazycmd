@@ -847,6 +847,8 @@ dependencies = [
  "mlua",
  "ratatui",
  "reqwest",
+ "serde",
+ "serde_json",
  "shell-words",
  "tokio",
  "tokio-stream",

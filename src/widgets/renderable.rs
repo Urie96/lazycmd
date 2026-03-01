@@ -53,7 +53,8 @@ where
         let total_height = text.height().clamp(0, u16::MAX as usize) as u16;
         Self {
             total_height,
-            paragraph: ratatui::widgets::Paragraph::new(text),
+            paragraph: ratatui::widgets::Paragraph::new(text)
+                .wrap(ratatui::widgets::Wrap { trim: false }),
             scrollbar_state: ratatui::widgets::ScrollbarState::new(total_height as usize),
             ..Default::default()
         }

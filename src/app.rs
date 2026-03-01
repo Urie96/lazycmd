@@ -26,8 +26,11 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(event_sender: mpsc::UnboundedSender<Event>, term: Term) -> Self {
+    pub fn new(event_sender: mpsc::UnboundedSender<Event>, term: Term, plugin_name: Option<String>) -> Self {
         let mut state = State::default();
+        if let Some(name) = plugin_name {
+            state.current_plugin = name;
+        }
         let lua = Lua::new();
 
         plugin::scope(&lua, &mut state, &event_sender, || plugin::init_lua(&lua)).unwrap();
@@ -186,6 +189,13 @@ impl App {
         // Re-initialize the terminal for TUI
         self.term = term::init()?;
 
+        // Clear any pending input events to prevent spurious key presses
+        // This handles the case where the subprocess (e.g., vim) leaves
+        // input in the terminal buffer that would otherwise be captured
+        while crossterm::event::poll(std::time::Duration::from_millis(10)).unwrap_or(false) {
+            let _ = crossterm::event::read();
+        }
+
         // Return the exit code
         Ok(result.code().unwrap_or(-1))
     }
@@ -226,6 +236,12 @@ impl App {
                     plugin::scope(&self.lua, &mut self.state, &self.event_sender, || {
                         hook.call::<()>(())
                     })?;
+                }
+                // Clear current page entries
+                if let Some(page) = &mut self.state.current_page {
+                    page.list.clear();
+                    page.filtered_list.clear();
+                    page.list_state.select(None);
                 }
                 self.state.clear_current_cache();
                 self.call_list()?;
@@ -299,14 +315,18 @@ impl App {
         match key.code {
             KeyCode::Char(c) => {
                 // Insert character at cursor position
-                self.state.filter_input.insert(self.state.input_cursor_position, c);
+                self.state
+                    .filter_input
+                    .insert(self.state.input_cursor_position, c);
                 self.state.input_cursor_position += 1;
                 self.apply_filter()?;
                 Ok(true)
             }
             KeyCode::Backspace => {
                 if self.state.input_cursor_position > 0 {
-                    self.state.filter_input.remove(self.state.input_cursor_position - 1);
+                    self.state
+                        .filter_input
+                        .remove(self.state.input_cursor_position - 1);
                     self.state.input_cursor_position -= 1;
                     self.apply_filter()?;
                 }
@@ -314,7 +334,9 @@ impl App {
             }
             KeyCode::Delete => {
                 if self.state.input_cursor_position < self.state.filter_input.len() {
-                    self.state.filter_input.remove(self.state.input_cursor_position);
+                    self.state
+                        .filter_input
+                        .remove(self.state.input_cursor_position);
                     self.apply_filter()?;
                 }
                 Ok(true)
@@ -326,7 +348,8 @@ impl App {
                 Ok(true)
             }
             KeyCode::Right => {
-                self.state.input_cursor_position = self.state
+                self.state.input_cursor_position = self
+                    .state
                     .input_cursor_position
                     .saturating_add(1)
                     .min(self.state.filter_input.len());
@@ -373,7 +396,9 @@ impl App {
 
     fn handle_filter_backspace(&mut self) {
         if self.state.input_cursor_position > 0 {
-            self.state.filter_input.remove(self.state.input_cursor_position - 1);
+            self.state
+                .filter_input
+                .remove(self.state.input_cursor_position - 1);
             self.state.input_cursor_position -= 1;
             let _ = self.apply_filter();
             self.dirty = true;
@@ -412,16 +437,13 @@ impl StatefulWidget for AppWidget {
         // Layout depends on mode
         let (header_area, input_area, main_area) = if state.current_mode == crate::Mode::Input {
             let [header_area, input_area, main_area, _footer] =
-                Layout::vertical([Length(3), Length(3), Min(3), Length(1)]).areas(area);
+                Layout::vertical([Length(1), Length(3), Min(3), Length(1)]).areas(area);
             (header_area, Some(input_area), main_area)
         } else {
             let [header_area, main_area, _footer] =
-                Layout::vertical([Length(3), Min(3), Length(1)]).areas(area);
+                Layout::vertical([Length(1), Min(3), Length(1)]).areas(area);
             (header_area, None, main_area)
         };
-
-        let [list_area, preview_area] =
-            Layout::horizontal([Percentage(50), Fill(1)]).areas(main_area);
 
         HeaderWidget.render(header_area, buf, state);
 
@@ -432,27 +454,51 @@ impl StatefulWidget for AppWidget {
             InputWidget.render(input_area, buf, &mut input_state);
         }
 
+        let block_color = Color::DarkGray;
+
+        // Draw outer border and split into list/preview areas
+        let main_block = Block::bordered()
+            .border_type(BorderType::Rounded)
+            .border_style(Style::default().fg(block_color));
+        let main_inner = main_block.inner(main_area);
+        main_block.render(main_area, buf);
+
+        // Split into list, divider(1), preview areas
+        let [list_area, _divider_area, preview_area] =
+            Layout::horizontal([Percentage(50), Length(1), Fill(1)]).areas(main_inner);
+
         if let Some(page) = &mut state.current_page {
             ListWidget.render(list_area, buf, page);
         } else {
             Paragraph::new("loading...").render(list_area, buf);
         }
 
-        {
-            let preview_block = Block::bordered().border_type(BorderType::Rounded);
-            let preview_inner = preview_block.inner(preview_area);
-            preview_block.render(preview_area, buf);
+        // Draw vertical divider line from top to bottom of the outer border
+        for y in main_area.top()..main_area.bottom() {
+            buf[(_divider_area.left(), y)]
+                .set_symbol(symbols::line::VERTICAL)
+                .set_style(Style::default().fg(block_color));
+        }
 
-            if let Some(p) = state.current_preview.as_mut() {
-                p.render(preview_inner, buf);
-            }
+        // Connect divider to top border - replace corner with ┬
+        buf[(_divider_area.left(), main_area.top())]
+            .set_symbol("┬")
+            .set_style(Style::default().fg(block_color));
+
+        // Connect divider to bottom border - replace corner with ┴
+        buf[(_divider_area.left(), main_area.bottom() - 1)]
+            .set_symbol("┴")
+            .set_style(Style::default().fg(block_color));
+
+        if let Some(p) = state.current_preview.as_mut() {
+            p.render(preview_area, buf);
         }
 
         // Draw notification in bottom-right corner
         if let Some((message, _)) = &state.notification {
             // Fixed size notification box
-            let notification_width = 40u16;  // Fixed width
-            let notification_height = 3u16;    // Fixed height (1 line + borders)
+            let notification_width = 40u16; // Fixed width
+            let notification_height = 3u16; // Fixed height (1 line + borders)
 
             // Calculate bottom-right position (fixed offset from bottom-right corner)
             let x = area.width.saturating_sub(notification_width + 2);

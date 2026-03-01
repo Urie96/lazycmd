@@ -243,27 +243,18 @@ function M.list(_, cb)
   end)
 end
 
-local now_utc = os.time(os.date '!*t')
-local now_local = os.time(os.date '*t')
-local offset = now_local - now_utc
-
 -- Format timestamp to readable date
 local function format_timestamp(ts)
   if not ts then return 'Unknown' end
-  -- Parse ISO format: 2026-02-10T13:04:29Z
-  local year, month, day, hour, min, sec = ts:match '(%d+)%-(%d+)%-(%d+)T(%d+):(%d+):(%d+)%Z'
-  if year then
-    local utc_timestamp = os.time {
-      year = year,
-      month = month,
-      day = day,
-      hour = hour,
-      min = min,
-      sec = sec or 0,
-    }
 
-    return os.date('%Y-%m-%d %H:%M:%S', utc_timestamp + offset)
+  -- Use lc.time.parse to parse ISO 8601 format
+  local success, timestamp = pcall(lc.time.parse, ts)
+  if success and timestamp then
+    -- Format timestamp as local time
+    return os.date('%Y-%m-%d %H:%M:%S', timestamp)
   end
+
+  -- Fallback to original string if parsing fails
   return ts
 end
 

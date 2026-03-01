@@ -20,6 +20,8 @@ pub struct State {
     page_cache: HashMap<Vec<String>, Page>,
     /// Hooks to call before reload command
     pub pre_reload_hooks: Vec<LuaFunction>,
+    /// Current plugin name
+    pub current_plugin: String,
 }
 
 impl State {
