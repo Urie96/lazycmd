@@ -73,6 +73,15 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
         .create_function(|lua, ()| plugin::send_command(lua, "accept_filter"))?
         .into_lua(lua)?;
 
+    let append_hook_pre_reload = lua
+        .create_function(|lua, cb: LuaFunction| {
+            plugin::mut_scope_state(lua, |state| {
+                state.pre_reload_hooks.push(cb);
+                Ok(())
+            })
+        })?
+        .into_lua(lua)?;
+
     lua.create_table_from([
         ("page_set_entries", page_set_entries),
         ("page_get_hovered", page_get_hovered),
@@ -84,5 +93,6 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
         ("enter_filter_mode", enter_filter_mode),
         ("exit_filter_mode", exit_filter_mode),
         ("accept_filter", accept_filter),
+        ("append_hook_pre_reload", append_hook_pre_reload),
     ])
 }

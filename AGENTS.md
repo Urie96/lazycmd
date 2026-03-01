@@ -311,6 +311,7 @@ examples/plugins/          (debug) 或 ~/.config/lazycmd/plugins/ (release)
 | `lc.api.get_current_path()`        | 无               | `Vec<String>`        | 获取当前路径                         |
 | `lc.api.get_hovered_path()`        | 无               | `Vec<String> \| nil` | 获取当前选中项的完整路径             |
 | `lc.api.argv()`                    | 无               | `Vec<String>`        | 获取命令行参数（第一个元素为程序名） |
+| `lc.api.append_hook_pre_reload(cb)` | `function`       | `nil`                | 注册 reload 命令前的钩子回调        |
 
 **示例**：
 
@@ -325,6 +326,18 @@ print("所有参数:", lc.inspect(args))
 for i, arg in ipairs(lc.api.argv()) do
   print(i, arg)
 end
+
+-- 注册 pre_reload 钩子
+lc.api.append_hook_pre_reload(function()
+  lc.notify 'Reloading...'
+  lc.log('info', 'Pre-reload hook triggered')
+end)
+
+-- 可以注册多个钩子，按注册顺序调用
+lc.api.append_hook_pre_reload(function()
+  -- 执行清理或验证逻辑
+  lc.log('debug', 'Cleanup before reload')
+end)
 ```
 
 ### lc.fs 模块
@@ -666,7 +679,7 @@ lc.config {
 | `quit` | 无 | 退出应用 |
 | `scroll_by <num>` | 可选数字 | 列表滚动指定行数（默认 1） |
 | `scroll_preview_by <num>` | 可选数字 | 预览面板滚动指定行数（默认 1） |
-| `reload` | 无 | 刷新当前列表（重新调用插件的 `list()` 函数） |
+| `reload` | 无 | 刷新当前列表（重新调用插件的 `list()` 函数），执行前会调用所有 pre_reload 钩子 |
 | `enter_filter_mode` | 无 | 进入过滤模式 |
 | `exit_filter_mode` | 无 | 退出过滤模式 |
 | `accept_filter` | 无 | 接受当前过滤 |

@@ -18,6 +18,8 @@ pub struct State {
     pub input_cursor_position: usize,
     /// Cache for pages to preserve cursor position, entries and filter when navigating back
     page_cache: HashMap<Vec<String>, Page>,
+    /// Hooks to call before reload command
+    pub pre_reload_hooks: Vec<LuaFunction>,
 }
 
 impl State {

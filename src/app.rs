@@ -221,6 +221,12 @@ impl App {
                 self.dirty = true;
             }
             "reload" => {
+                // Call all pre_reload hooks before executing reload
+                for hook in self.state.pre_reload_hooks.clone() {
+                    plugin::scope(&self.lua, &mut self.state, &self.event_sender, || {
+                        hook.call::<()>(())
+                    })?;
+                }
                 self.state.clear_current_cache();
                 self.call_list()?;
                 self.dirty = true;

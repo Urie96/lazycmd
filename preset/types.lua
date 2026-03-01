@@ -43,6 +43,10 @@ function api.get_hovered_path() end
 ---@return string[] args Command line arguments (first element is program name)
 function api.argv() end
 
+---Append a hook callback to be called before reload command
+---@param callback fun() The callback function to execute before reload
+function api.append_hook_pre_reload(callback) end
+
 lc.api = api
 
 -- ============================================
