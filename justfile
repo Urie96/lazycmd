@@ -1,2 +1,2 @@
 run:
-    cargo run -- memos
+    cargo run -- himalaya

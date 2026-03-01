@@ -19,11 +19,7 @@ function lc.config(opt)
 end
 
 local function map(mode, key, cb)
-  if type(cb) == 'string' then
-    lc.keymap.set(mode, key, function() lc.cmd(cb) end)
-  elseif type(cb) == 'function' then
-    lc.keymap.set(mode, key, cb)
-  end
+  lc.keymap.set(mode, key, cb)
 end
 
 map('main', '<up>', 'scroll_by -1')

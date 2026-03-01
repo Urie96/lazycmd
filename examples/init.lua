@@ -13,5 +13,9 @@ lc.config {
       'process',
       config = function() require('process').setup() end,
     },
+    {
+      'himalaya',
+      config = function() require('himalaya').setup() end,
+    },
   },
 }
