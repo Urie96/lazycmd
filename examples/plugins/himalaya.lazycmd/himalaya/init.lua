@@ -72,6 +72,18 @@ local function parse_folders(output, account)
   return entries
 end
 
+-- 格式化日期时间
+local function format_datetime(date_str)
+  if not date_str then return '' end
+
+  -- 尝试匹配格式：2026-02-16 18:09+08:00 或 ISO 8601: 2026-02-16T18:09:00+08:00
+  local year, month, day, hour, min = date_str:match '(%d+)-(%d+)-(%d+)[T%s](%d+):(%d+)'
+  if not year then return date_str end
+
+  -- 返回简化的日期时间格式：月/日 时:分
+  return string.format('%02d/%02d %02d:%02d', tonumber(month), tonumber(day), tonumber(hour), tonumber(min))
+end
+
 -- 解析信封列表
 local function parse_envelopes(output, account, folder)
   local success, data = pcall(lc.json.decode, output.stdout)
@@ -79,21 +91,30 @@ local function parse_envelopes(output, account, folder)
 
   local entries = {}
   for _, envelope in ipairs(data) do
-    local display = envelope.subject or '(no subject)'
+    local display_parts = {}
+
+    -- 添加时间（用灰色显示）
+    if envelope.date then
+      table.insert(display_parts, format_datetime(envelope.date):fg 'darkgray')
+      table.insert(display_parts, ' ')
+    end
+
+    -- 添加主题
+    table.insert(display_parts, envelope.subject or '(no subject)')
 
     -- 添加发件人信息
     if envelope.from and envelope.from.name then
-      display = display .. ' - ' .. envelope.from.name
+      table.insert(display_parts, ' - ' .. envelope.from.name)
     elseif envelope.from and envelope.from.address then
-      display = display .. ' - ' .. envelope.from.address
+      table.insert(display_parts, ' - ' .. envelope.from.address)
     end
 
     -- 添加附件标记
-    if envelope.has_attachments then display = display .. ' [A]' end
+    if envelope.has_attachments then table.insert(display_parts, (' [A]'):fg 'yellow') end
 
     table.insert(entries, {
       key = tostring(envelope.id),
-      display = display,
+      display = lc.style.line(unpack(display_parts)),
       id = envelope.id,
       account = account,
       folder = folder,
@@ -105,14 +126,22 @@ end
 
 -- 解析邮件内容
 local function parse_message(output)
-  local success, data = pcall(lc.json.decode, output.stdout)
-  if not success or type(data) ~= 'table' then return nil, (data or 'Invalid JSON') end
-  return data
+  -- 先尝试解码 JSON（输出可能是 JSON 字符串格式）
+  local success1, decoded = pcall(lc.json.decode, output.stdout)
+  if not success1 then return nil, (decoded or 'Invalid JSON') end
+
+  -- 如果解码后是字符串，说明输出是 JSON 字符串格式，将其包装为 body 字段
+  if type(decoded) == 'string' then return { body = decoded } end
+
+  return nil, 'Invalid message format'
 end
 
 -- 构建邮件预览
 local function build_preview(message)
   if not message then return 'No message data' end
+
+  -- 如果只有 body 字段且是纯文本，直接返回
+  if type(message.body) == 'string' and not message.subject and not message.from then return message.body end
 
   local lines = {}
 

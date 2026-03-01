@@ -3,6 +3,7 @@ mod fs;
 mod http;
 mod keymap;
 mod path;
+mod style;
 mod ui;
 
 use crate::{plugin, Event};
@@ -204,6 +205,8 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
 
     ui::inject_string_meta_method(lua)?;
 
+    let style_tbl = lua.create_table_from([("line", style::line(lua)?)])?;
+
     let lc = lua.create_table_from([
         ("defer_fn", defer_fn),
         ("keymap", keymap),
@@ -220,6 +223,7 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
         ("notify", notify_fn),
         ("json", json_mod),
         ("inspect", inspect_mod),
+        ("style", mlua::Value::Table(style_tbl)),
     ])?;
     lua.globals().raw_set("lc", lc)
 }

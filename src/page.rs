@@ -1,8 +1,8 @@
-use crate::widgets::Span;
+use crate::widgets::{Line, Span, Text};
 use anyhow::bail;
 use mlua::prelude::*;
 use ratatui::{
-    text::Line,
+    text::Line as RatatuiLine,
     widgets::{self, ListItem},
 };
 
@@ -23,16 +23,25 @@ impl FromLua for PageEntry {
 impl PageEntry {
     pub fn display(&self) -> ListItem<'_> {
         let f = || match self.tbl.get::<LuaValue>("display")? {
-            LuaValue::Nil => Ok(ListItem::new(Line::from(self.key.as_str()))),
-            LuaValue::String(s) => Ok(ListItem::new(Line::from(s.to_string_lossy()))),
+            LuaValue::Nil => Ok(ListItem::new(RatatuiLine::from(self.key.as_str()))),
+            LuaValue::String(s) => Ok(ListItem::new(RatatuiLine::from(s.to_string_lossy()))),
             LuaValue::UserData(ud) => {
                 if let Ok(span) = ud.borrow::<Span>() {
-                    Ok(ListItem::new(span.clone().0))
+                    Ok(ListItem::new(span.0.clone()))
+                } else if let Ok(line) = ud.borrow::<Line>() {
+                    Ok(ListItem::new(line.0.clone()))
+                } else if let Ok(text) = ud.borrow::<Text>() {
+                    // Text -> 使用第一行
+                    if text.0.lines.is_empty() {
+                        Ok(ListItem::new(""))
+                    } else {
+                        Ok(ListItem::new(text.0.lines[0].clone()))
+                    }
                 } else {
-                    bail!("Expected Span or nil")
+                    bail!("Expected Span, Line, Text, or nil")
                 }
             }
-            _ => bail!("Expected Span or nil"),
+            _ => bail!("Expected Span, Line, Text, string, table, or nil"),
         };
         f().unwrap_or_else(|e| ListItem::new(e.to_string()))
     }

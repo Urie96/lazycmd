@@ -126,9 +126,23 @@ impl State {
 
             let current = page.list_state.selected().unwrap_or(0);
             let new = if amount > 0 {
-                current.saturating_add(amount as usize).min(len - 1)
+                // Calculate the target position
+                let target = current.saturating_add(amount as usize);
+                // Only wrap if single-step scroll and at the last entry
+                if amount == 1 && current == len - 1 {
+                    0
+                } else {
+                    target.min(len - 1)
+                }
             } else {
-                current.saturating_sub(amount.unsigned_abs() as usize)
+                // Calculate the target position
+                let target = current.saturating_sub(amount.unsigned_abs() as usize);
+                // Only wrap if single-step scroll and at the first entry
+                if amount == -1 && current == 0 {
+                    len - 1
+                } else {
+                    target
+                }
             };
 
             page.list_state.select(Some(new));

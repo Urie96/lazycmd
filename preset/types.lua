@@ -6,6 +6,7 @@
 -- ============================================
 
 ---@class lc
+---@field style lc.style Style utilities for creating widgets
 lc = {}
 
 -- ============================================
@@ -317,6 +318,18 @@ function lc.tbl_map(func, t) end
 function lc.tbl_extend(target, ...) end
 
 -- ============================================
+-- lc.style - Style utilities
+-- ============================================
+
+---@class lc.style
+local style = {}
+
+---Create a Line from multiple Spans or Strings
+---@vararg Span|string The Spans or Strings to combine into a Line
+---@return Line A Line widget containing the combined Spans
+function lc.style.line(...) end
+
+-- ============================================
 -- lc.config - Configure plugins
 -- ============================================
 
@@ -365,6 +378,9 @@ function lc.trim(s) end
 
 ---@class Span
 ---A TUI Span widget
+
+---@class Line
+---A TUI Line widget containing multiple Spans
 
 ---@class PathBuf
 ---A path buffer
