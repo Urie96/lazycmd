@@ -226,14 +226,26 @@ function M.list(_, cb)
     for _, memo in ipairs(memos.memos) do
       local content = memo.content or ''
       memo.id = memo.name:sub(7)
-      local display_title = content:sub(1, 60)
+      local display_parts = {}
 
-      -- Truncate and add ellipsis if content is too long
+      -- 解析创建时间并格式化为 compact 格式（黄色）
+      if memo.createTime then
+        local success, parsed = pcall(lc.time.parse, memo.createTime)
+        if success then
+          memo.timestamp = parsed
+          table.insert(display_parts, lc.time.format(memo.timestamp, 'compact'):fg 'yellow')
+          table.insert(display_parts, ' ')
+        end
+      end
+
+      -- 添加内容预览（绿色）
+      local display_title = content:sub(1, 60)
       if #content > 60 then display_title = display_title .. '...' end
+      table.insert(display_parts, display_title:fg 'green')
 
       table.insert(entries, {
         key = tostring(memo.id),
-        display = display_title,
+        display = lc.ui.line(display_parts),
         memo = memo, -- Store full memo data for preview
       })
     end
@@ -263,61 +275,75 @@ local function build_preview(memo)
   local lines = {}
 
   -- Meta info
-  table.insert(lines, '📝 Metadata:')
-  table.insert(lines, '   ID:           ' .. memo.id)
-  table.insert(lines, '   State:        ' .. (memo.state or 'UNKNOWN'))
-  table.insert(lines, '   Visibility:   ' .. (memo.visibility or 'PRIVATE'))
-  table.insert(lines, '   Created:      ' .. format_timestamp(memo.createTime))
-  table.insert(lines, '   Updated:      ' .. format_timestamp(memo.updateTime))
+  table.insert(lines, lc.ui.line { ('📝 '):fg 'cyan', ('Metadata'):fg 'cyan' })
+  table.insert(lines, lc.ui.line { ('   ID:           '):fg 'cyan', (memo.id or ''):fg 'yellow' })
+  table.insert(lines, lc.ui.line { ('   State:        '):fg 'cyan', (memo.state or 'UNKNOWN'):fg 'blue' })
+  table.insert(lines, lc.ui.line { ('   Visibility:   '):fg 'cyan', (memo.visibility or 'PRIVATE'):fg 'magenta' })
+  table.insert(lines, lc.ui.line { ('   Created:      '):fg 'cyan', format_timestamp(memo.createTime):fg 'green' })
+  table.insert(lines, lc.ui.line { ('   Updated:      '):fg 'cyan', format_timestamp(memo.updateTime):fg 'green' })
 
   -- Pinned status
-  if memo.pinned then table.insert(lines, '   📌 Pinned') end
+  if memo.pinned then table.insert(lines, lc.ui.line { ('   '):fg 'cyan', ('📌 Pinned'):fg 'yellow' }) end
 
   -- Tags
   if memo.tags and #memo.tags > 0 then
-    local tag_list = {}
-    for _, tag in ipairs(memo.tags) do
-      table.insert(tag_list, '#' .. tag)
+    local tag_parts = {}
+    table.insert(tag_parts, ('   Tags:         '):fg 'cyan')
+    for i, tag in ipairs(memo.tags) do
+      if i > 1 then table.insert(tag_parts, ' ') end
+      table.insert(tag_parts, ('#' .. tag):fg 'cyan')
     end
-    table.insert(lines, '   Tags:         ' .. table.concat(tag_list, ' '))
+    table.insert(lines, lc.ui.line(tag_parts))
   else
-    table.insert(lines, '   Tags:         (none)')
+    table.insert(lines, lc.ui.line { ('   Tags:         '):fg 'cyan', ('(none)'):fg 'dark_gray' })
   end
 
   -- Attachments
   if memo.attachments and #memo.attachments > 0 then
-    table.insert(lines, '   📎 Attachments: ' .. #memo.attachments)
+    table.insert(lines, lc.ui.line { ('   '):fg 'cyan', ('📎 '):fg 'yellow', ('Attachments: '):fg 'cyan', tostring(#memo.attachments):fg 'yellow' })
   end
 
   -- Relations
-  if memo.relations and #memo.relations > 0 then table.insert(lines, '   🔗 Relations:   ' .. #memo.relations) end
+  if memo.relations and #memo.relations > 0 then
+    table.insert(lines, lc.ui.line { ('   '):fg 'cyan', ('🔗 '):fg 'blue', ('Relations:   '):fg 'cyan', tostring(#memo.relations):fg 'blue' })
+  end
 
   -- Reactions
-  if memo.reactions and #memo.reactions > 0 then table.insert(lines, '   ❤️  Reactions:  ' .. #memo.reactions) end
+  if memo.reactions and #memo.reactions > 0 then
+    table.insert(lines, lc.ui.line { ('   '):fg 'cyan', ('❤️  '):fg 'red', ('Reactions:  '):fg 'cyan', tostring(#memo.reactions):fg 'red' })
+  end
 
   -- Properties
   table.insert(lines, '')
-  table.insert(lines, '⚙️ Properties:')
+  table.insert(lines, lc.ui.line { ('⚙️ '):fg 'cyan', ('Properties'):fg 'cyan' })
   if memo.property then
     local props = {}
-    if memo.property.hasLink then table.insert(props, 'links') end
-    if memo.property.hasTaskList then table.insert(props, 'tasks') end
-    if memo.property.hasCode then table.insert(props, 'code') end
-    if memo.property.hasIncompleteTasks then table.insert(props, 'incomplete_tasks') end
+    if memo.property.hasLink then table.insert(props, ('links'):fg 'blue') end
+    if memo.property.hasTaskList then table.insert(props, ('tasks'):fg 'green') end
+    if memo.property.hasCode then table.insert(props, ('code'):fg 'magenta') end
+    if memo.property.hasIncompleteTasks then table.insert(props, ('incomplete_tasks'):fg 'yellow') end
     if #props > 0 then
-      table.insert(lines, '   ' .. table.concat(props, ', '))
+      local prop_parts = {}
+      table.insert(prop_parts, '   ')
+      for i, prop in ipairs(props) do
+        if i > 1 then table.insert(prop_parts, ', ') end
+        table.insert(prop_parts, prop)
+      end
+      table.insert(lines, lc.ui.line(prop_parts))
     else
-      table.insert(lines, '   (none)')
+      table.insert(lines, lc.ui.line { ('   (none)'):fg 'dark_gray' })
     end
+  else
+    table.insert(lines, lc.ui.line { ('   (none)'):fg 'dark_gray' })
   end
 
   -- Content
   table.insert(lines, '')
-  table.insert(lines, '📄 Content:')
+  table.insert(lines, lc.ui.line { ('📄 '):fg 'cyan', ('Content'):fg 'cyan' })
   table.insert(lines, '')
   table.insert(lines, memo.content or '(no content)')
 
-  return table.concat(lines, '\n')
+  return lc.ui.text(lines)
 end
 
 function M.preview(entry, cb) cb(build_preview(entry.memo)) end
