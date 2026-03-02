@@ -39,7 +39,11 @@ async fn main() -> anyhow::Result<()> {
 
             let mut app = App::new(events.sender(), term, plugin_name);
 
-            app.run(events).await.unwrap();
+            if let Err(e) = app.run(events).await {
+                term::restore();
+                eprintln!("Error: {}", e);
+                return Err(e);
+            }
 
             term::restore();
             Ok::<_, anyhow::Error>(())

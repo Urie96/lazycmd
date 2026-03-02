@@ -65,6 +65,11 @@ impl Page {
             Ok(LuaValue::UserData(ud)) => {
                 if let Ok(span) = ud.borrow::<Span>() {
                     span.0.to_string()
+                } else if let Ok(line) = ud.borrow::<Line>() {
+                    line.0.to_string()
+                } else if let Ok(text) = ud.borrow::<Text>() {
+                    // Text implements Display, to_string() returns lines joined by '\n'
+                    text.0.to_string()
                 } else {
                     entry.key.clone()
                 }

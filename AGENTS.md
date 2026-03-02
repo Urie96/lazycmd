@@ -671,6 +671,47 @@ lc.config {
 }
 ```
 
+### lc.system 模块
+
+执行外部命令：
+
+| 函数                            | 参数                         | 返回值  | 用途                  |
+| ------------------------------- | ---------------------------- | ------- | --------------------- |
+| `lc.system(cmd, cb)`            | `string[]`, `function`       | `nil`   | 异步执行外部命令     |
+| `lc.system.executable(cmd)`     | `string`                     | `boolean`| 检查命令是否可执行  |
+
+**异步执行命令 (`lc.system`)**：
+
+执行外部命令并通过回调获取结果：
+
+```lua
+lc.system({'ls', '-la'}, function(output)
+  -- output.code: number - 退出码
+  -- output.stdout: string - 标准输出
+  -- output.stderr: string - 标准错误
+  if output.code == 0 then
+    print('Success:', output.stdout)
+  else
+    print('Error:', output.stderr)
+  end
+end)
+```
+
+**检查命令可执行 (`lc.system.executable`)**：
+
+检查某个命令是否存在于系统 PATH 中且可执行（同步函数）：
+
+```lua
+-- 检查命令是否安装
+if not lc.system.executable('himalaya') then
+  lc.notify 'Error: himalaya command not found. Please install himalaya first.'
+  return
+end
+
+-- 命令已安装，继续执行
+lc.log('info', 'himalaya command is installed')
+```
+
 ### 内部命令
 
 通过 `lc.cmd()` 可以发送内部命令到 Rust 端处理：

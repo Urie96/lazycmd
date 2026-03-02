@@ -4,7 +4,7 @@ use crossterm::event::{Event as CrosstermEvent, KeyCode, KeyEventKind};
 use mlua::prelude::*;
 use ratatui::{
     prelude::*,
-    widgets::{Block, BorderType, Paragraph},
+    widgets::{Block, BorderType, Clear, Paragraph},
 };
 use tokio::sync::mpsc;
 
@@ -33,7 +33,8 @@ impl App {
         }
         let lua = Lua::new();
 
-        plugin::scope(&lua, &mut state, &event_sender, || plugin::init_lua(&lua)).unwrap();
+        plugin::scope(&lua, &mut state, &event_sender, || plugin::init_lua(&lua))
+            .expect("Failed to initialize Lua");
 
         Self {
             lua,
@@ -434,25 +435,11 @@ impl StatefulWidget for AppWidget {
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut State) {
         use Constraint::*;
 
-        // Layout depends on mode
-        let (header_area, input_area, main_area) = if state.current_mode == crate::Mode::Input {
-            let [header_area, input_area, main_area, _footer] =
-                Layout::vertical([Length(1), Length(3), Min(3), Length(1)]).areas(area);
-            (header_area, Some(input_area), main_area)
-        } else {
-            let [header_area, main_area, _footer] =
-                Layout::vertical([Length(1), Min(3), Length(1)]).areas(area);
-            (header_area, None, main_area)
-        };
+        // Layout: header (1), main (remaining), footer (1)
+        let [header_area, main_area, _footer] =
+            Layout::vertical([Length(1), Min(3), Length(1)]).areas(area);
 
         HeaderWidget.render(header_area, buf, state);
-
-        // Render input widget if in filter mode
-        if let Some(input_area) = input_area {
-            let mut input_state = crate::InputState::from_str(&state.filter_input);
-            input_state.cursor_position = state.input_cursor_position;
-            InputWidget.render(input_area, buf, &mut input_state);
-        }
 
         let block_color = Color::DarkGray;
 
@@ -494,18 +481,60 @@ impl StatefulWidget for AppWidget {
             p.render(preview_area, buf);
         }
 
+        // Render floating input widget if in filter mode (render last to appear on top)
+        if state.current_mode == crate::Mode::Input {
+            // Fixed width of 50, height of 3 (top border + content + bottom border)
+            let input_width = 50u16;
+            let input_height = 3u16;
+
+            // Horizontally centered: x = (area_width - input_width) / 2
+            let x = (area.width.saturating_sub(input_width)) / 2;
+
+            // Vertically at row 5 (0-indexed)
+            let y = 5u16;
+
+            // Ensure input box is within bounds
+            let x = x.min(area.width.saturating_sub(input_width));
+            let y = y.min(area.height.saturating_sub(input_height));
+
+            let input_area = Rect {
+                x,
+                y,
+                width: input_width,
+                height: input_height,
+            };
+
+            // Clear the area first to prevent underlying content from showing through
+            Clear.render(input_area, buf);
+
+            let mut input_state = crate::InputState::from_str(&state.filter_input);
+            input_state.cursor_position = state.input_cursor_position;
+            InputWidget.render(input_area, buf, &mut input_state);
+        }
+
         // Draw notification in bottom-right corner
         if let Some((message, _)) = &state.notification {
-            // Fixed size notification box
-            let notification_width = 40u16; // Fixed width
-            let notification_height = 3u16; // Fixed height (1 line + borders)
+            // Dynamic size notification box
+            let min_width = 20u16;
+            let min_height = 1u16;
 
-            // Calculate bottom-right position (fixed offset from bottom-right corner)
-            let x = area.width.saturating_sub(notification_width + 2);
+            // Calculate required dimensions based on message content
+            let lines: Vec<&str> = message.lines().collect();
+            let line_count = lines.len().max(min_height as usize);
+            let max_line_width = lines.iter().map(|l| l.len()).max().unwrap_or(0) as u16;
+
+            // Width: max of min_width and (max_line_width + 2 for padding)
+            let notification_width = (max_line_width + 2).max(min_width);
+
+            // Height: min_height + 2 for top/bottom borders
+            let notification_height = (line_count as u16).max(min_height) + 2;
+
+            // Calculate bottom-right position
+            let x = area.width.saturating_sub(notification_width + 1);
             let y = area.height.saturating_sub(notification_height + 1);
 
             let notification_area = Rect {
-                x,
+                x: x.saturating_sub(1), // Extra padding from right edge
                 y,
                 width: notification_width.min(area.width),
                 height: notification_height.min(area.height),

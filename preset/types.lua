@@ -263,10 +263,21 @@ lc.time = time
 ---@field stdout string Standard output
 ---@field stderr string Standard error
 
+---@class lc.system
+local system = {}
+
 ---Execute an external command asynchronously
+---Usage: lc.system({"cmd", "arg1", "arg2"}, callback)
 ---@param cmd string[] The command and its arguments
 ---@param callback fun(output: CommandOutput) Callback function called on completion
-function lc.system(cmd, callback) end
+function system(cmd, callback) end
+
+---Check if a command is executable (synchronous)
+---@param cmd string The command name to check
+---@return boolean executable Whether the command exists and is executable
+function system.executable(cmd) end
+
+lc.system = system
 
 -- ============================================
 -- lc.interactive - Execute interactive commands

@@ -8,12 +8,12 @@ mod time;
 mod ui;
 
 use crate::{plugin, Event};
+use base64::Engine;
 use mlua::prelude::*;
 use std::io::{self, Write};
 use std::path::PathBuf;
 use std::time::Duration;
 use tokio::{process::Command, time::sleep};
-use base64::Engine;
 
 /// Load a preset Lua file (handles both debug and release builds)
 macro_rules! load_preset {
@@ -27,16 +27,20 @@ macro_rules! load_preset {
                 ".lua"
             ))
             .expect(concat!("Failed to read preset ", $name, ".lua"));
-            $lua.load(&content).set_name(concat!("preset/", $name, ".lua")).eval::<LuaTable>()
+            $lua.load(&content)
+                .set_name(concat!("preset/", $name, ".lua"))
+                .eval::<LuaTable>()
         }
         #[cfg(not(debug_assertions))]
         {
-            $lua.load(&include_bytes!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/preset/",
-                $name,
-                ".lua"
-            ))[..])
+            $lua.load(
+                &include_bytes!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/preset/",
+                    $name,
+                    ".lua"
+                ))[..],
+            )
             .set_name(concat!("preset/", $name, ".lua"))
             .eval::<LuaTable>()
         }
@@ -104,39 +108,82 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
         .create_function(|lua, cmd: String| plugin::send_event(lua, Event::Command(cmd)))?
         .into_lua(lua)?;
 
-    let command_fn = lua
-        .create_function(|lua, (cmd, on_exit): (Vec<String>, LuaFunction)| {
-            let sender = plugin::clone_sender(lua)?;
+    // lc.system.executable: check if a command is executable (synchronous)
+    let executable_fn = lua.create_function(|_, cmd: String| {
+        // Check if command exists and is executable
+        Ok(which::which(&cmd).is_ok())
+    })?;
 
-            tokio::task::spawn_local(async move {
-                let mut it = cmd.into_iter();
-                let output = Command::new(it.next().unwrap()).args(it).output().await;
-                sender
-                    .send(Event::LuaCallback(Box::new(move |lua| {
-                        let out = output.into_lua_err().and_then(|out| {
-                            lua.create_table_from([
-                                ("code", out.status.code().into_lua(lua)?),
-                                ("stdout", lua.create_string(out.stdout)?.into_lua(lua)?),
-                                ("stderr", lua.create_string(out.stderr)?.into_lua(lua)?),
-                            ])
-                        })?;
-                        // let b = a;
-                        on_exit.call(out)
-                    })))
-                    .unwrap();
-            });
+    // Create system table
+    let system_tbl = lua.create_table()?;
 
-            Ok(())
-        })?
-        .into_lua(lua)?;
+    // Add executable function
+    system_tbl.set("executable", executable_fn)?;
+
+    // Add __call metamethod to support lc.system(cmd, callback) syntax
+    system_tbl.set_metatable(Some({
+        let mt = lua.create_table()?;
+        mt.set(
+            "__call",
+            lua.create_function(
+                |lua, (_, cmd, on_exit): (LuaValue, Vec<String>, LuaFunction)| {
+                    if cmd.is_empty() {
+                        return Err(LuaError::RuntimeError(
+                            "Command cannot be empty".to_string(),
+                        ));
+                    }
+                    let sender = plugin::clone_sender(lua)?;
+
+                    tokio::task::spawn_local(async move {
+                        let mut it = cmd.into_iter();
+
+                        let command = it.next().unwrap();
+
+                        let output = Command::new(&command).args(it).output().await;
+
+                        let _ = sender.send(Event::LuaCallback(Box::new(move |lua| {
+                            let out = match output {
+                                Ok(output) => lua.create_table_from([
+                                    ("code", output.status.code().into_lua(lua)?),
+                                    ("stdout", lua.create_string(output.stdout)?.into_lua(lua)?),
+                                    ("stderr", lua.create_string(output.stderr)?.into_lua(lua)?),
+                                ]),
+                                Err(e) => {
+                                    let (code, err) = if e.kind() == std::io::ErrorKind::NotFound {
+                                        (127, format!("command not found: {}", command))
+                                    } else {
+                                        (1, e.to_string())
+                                    };
+                                    lua.create_table_from([
+                                        ("code", code.into_lua(lua)?),
+                                        ("stdout", "".into_lua(lua)?),
+                                        ("stderr", err.into_lua(lua)?),
+                                    ])
+                                }
+                            };
+                            let out = out?;
+                            on_exit.call(out)
+                        })));
+                    });
+
+                    Ok(())
+                },
+            )?,
+        )?;
+        mt
+    }));
 
     let interactive_fn = lua
-        .create_function(|lua, (cmd, on_complete): (Vec<String>, Option<LuaFunction>)| {
-            if cmd.is_empty() {
-                return Err(LuaError::RuntimeError("Command cannot be empty".to_string()));
-            }
-            plugin::send_event(lua, Event::InteractiveCommand(cmd, on_complete))
-        })?
+        .create_function(
+            |lua, (cmd, on_complete): (Vec<String>, Option<LuaFunction>)| {
+                if cmd.is_empty() {
+                    return Err(LuaError::RuntimeError(
+                        "Command cannot be empty".to_string(),
+                    ));
+                }
+                plugin::send_event(lua, Event::InteractiveCommand(cmd, on_complete))
+            },
+        )?
         .into_lua(lua)?;
 
     let split = lua
@@ -144,38 +191,40 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
         .into_lua(lua)?;
 
     let log_fn = lua
-        .create_function(|lua, (level, format, args): (String, LuaString, LuaMultiValue)| {
-            // Convert all args to strings
-            let mut arg_strings = Vec::new();
-            for arg in args {
-                match String::from_lua(arg, lua) {
-                    Ok(s) => arg_strings.push(s),
-                    Err(_) => arg_strings.push("[unconvertible]".to_string()),
-                }
-            }
-
-            // Format the message using the format string and args
-            let message = if arg_strings.is_empty() {
-                format.to_string_lossy().to_string()
-            } else {
-                // Simple format: replace {} with args sequentially
-                let fmt_str = format.to_string_lossy().to_string();
-                let mut result = fmt_str.clone();
-                let mut arg_idx = 0;
-                while let Some(pos) = result.find("{}") {
-                    if arg_idx < arg_strings.len() {
-                        result.replace_range(pos..pos + 2, &arg_strings[arg_idx]);
-                        arg_idx += 1;
-                    } else {
-                        break;
+        .create_function(
+            |lua, (level, format, args): (String, LuaString, LuaMultiValue)| {
+                // Convert all args to strings
+                let mut arg_strings = Vec::new();
+                for arg in args {
+                    match String::from_lua(arg, lua) {
+                        Ok(s) => arg_strings.push(s),
+                        Err(_) => arg_strings.push("[unconvertible]".to_string()),
                     }
                 }
-                result
-            };
 
-            write_log(&level, &message);
-            Ok(())
-        })?
+                // Format the message using the format string and args
+                let message = if arg_strings.is_empty() {
+                    format.to_string_lossy().to_string()
+                } else {
+                    // Simple format: replace {} with args sequentially
+                    let fmt_str = format.to_string_lossy().to_string();
+                    let mut result = fmt_str.clone();
+                    let mut arg_idx = 0;
+                    while let Some(pos) = result.find("{}") {
+                        if arg_idx < arg_strings.len() {
+                            result.replace_range(pos..pos + 2, &arg_strings[arg_idx]);
+                            arg_idx += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                    result
+                };
+
+                write_log(&level, &message);
+                Ok(())
+            },
+        )?
         .into_lua(lua)?;
 
     let osc52_copy = lua
@@ -188,12 +237,18 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
 
             // Write to terminal stdout
             if let Err(e) = io::stdout().write_all(osc_sequence.as_bytes()) {
-                return Err(LuaError::RuntimeError(format!("Failed to write OSC 52 sequence: {}", e)));
+                return Err(LuaError::RuntimeError(format!(
+                    "Failed to write OSC 52 sequence: {}",
+                    e
+                )));
             }
 
             // Flush to ensure the sequence is sent
             if let Err(e) = io::stdout().flush() {
-                return Err(LuaError::RuntimeError(format!("Failed to flush stdout: {}", e)));
+                return Err(LuaError::RuntimeError(format!(
+                    "Failed to flush stdout: {}",
+                    e
+                )));
             }
 
             Ok(())
@@ -201,17 +256,12 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
         .into_lua(lua)?;
 
     let notify_fn = lua
-        .create_function(|lua, message: String| {
-            plugin::send_event(lua, Event::Notify(message))
-        })?
+        .create_function(|lua, message: String| plugin::send_event(lua, Event::Notify(message)))?
         .into_lua(lua)?;
 
     ui::inject_string_meta_method(lua)?;
 
-    let ui_tbl = lua.create_table_from([
-        ("line", ui::line(lua)?),
-        ("text", ui::text(lua)?),
-    ])?;
+    let ui_tbl = lua.create_table_from([("line", ui::line(lua)?), ("text", ui::text(lua)?)])?;
 
     let lc = lua.create_table_from([
         ("defer_fn", defer_fn),
@@ -222,7 +272,7 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
         ("http", http),
         ("cmd", cmd),
         ("split", split),
-        ("system", command_fn),
+        ("system", mlua::Value::Table(system_tbl)),
         ("interactive", interactive_fn),
         ("path", path),
         ("time", time),

@@ -1,6 +1,19 @@
 local M = {}
 
 function M.setup()
+  -- 测试 lc.system.executable
+  local has_ps = lc.system.executable('ps')
+  local has_pstree = lc.system.executable('pstree')
+
+  if not has_ps then
+    lc.notify 'Error: ps command not found'
+    lc.log('error', 'ps command not found')
+  elseif not has_pstree then
+    lc.log('warn', 'pstree command not found, preview may not work')
+  else
+    lc.log('info', 'ps and pstree commands are available')
+  end
+
   lc.keymap.set('main', 'ctrl-d', function()
     local entry = lc.api.page_get_hovered()
     if entry and entry.pid then lc.system({ 'kill', tostring(entry.pid) }, function() lc.cmd 'reload' end) end

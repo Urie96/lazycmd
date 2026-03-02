@@ -290,14 +290,14 @@ function M.list(path, cb)
   if #path == 0 then
     cached_system({ 'himalaya', '--output', 'json', 'account', 'list' }, function(output)
       if output.code ~= 0 then
-        lc.log('error', 'Failed to list accounts: {}', output.stderr or 'Unknown error')
+        lc.notify('Failed to list accounts: ' .. output.stderr)
         cb {}
         return
       end
 
       local entries, err = parse_accounts(output)
       if err then
-        lc.log('error', 'Failed to parse accounts: {}', err)
+        lc.notify('Failed to parse accounts: ' .. err)
         cb {}
         return
       end
@@ -321,14 +321,14 @@ function M.list(path, cb)
     -- 缓存未命中，执行命令
     lc.system({ 'himalaya', '--output', 'json', 'folder', 'list', '--account', account }, function(output)
       if output.code ~= 0 then
-        lc.log('error', 'Failed to list folders: {}', output.stderr or 'Unknown error')
+        lc.notify('Failed to list folders: ' .. output.stderr)
         cb {}
         return
       end
 
       local entries, err = parse_folders(output, account)
       if err then
-        lc.log('error', 'Failed to parse folders: {}', err)
+        lc.notify('Failed to parse folders: ' .. err)
         cb {}
         return
       end
