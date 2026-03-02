@@ -114,11 +114,22 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
         Ok(which::which(&cmd).is_ok())
     })?;
 
+    // lc.system.open: open a file using the system's default application
+    let open_fn = lua.create_function(|_, file_path: String| {
+        // Use the `open` crate to open the file with the system's default application
+        open::that(&file_path).map_err(|e| {
+            LuaError::RuntimeError(format!("Failed to open file '{}': {}", file_path, e))
+        })
+    })?;
+
     // Create system table
     let system_tbl = lua.create_table()?;
 
     // Add executable function
     system_tbl.set("executable", executable_fn)?;
+
+    // Add open function
+    system_tbl.set("open", open_fn)?;
 
     // Add __call metamethod to support lc.system(cmd, callback) syntax
     system_tbl.set_metatable(Some({

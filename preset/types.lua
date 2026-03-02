@@ -54,6 +54,14 @@ lc.api = api
 -- lc.fs - File system operations
 -- ============================================
 
+---@class FileStat
+---@field exists boolean Whether the file/directory exists
+---@field is_file boolean Whether it's a file
+---@field is_dir boolean Whether it's a directory
+---@field is_readable boolean Whether it's readable
+---@field is_writable boolean Whether it's writable
+---@field is_executable boolean Whether it's executable
+
 ---@class lc.fs
 local fs = {}
 
@@ -75,6 +83,17 @@ function fs.read_file_sync(path) end
 ---@return boolean success Whether the write succeeded
 ---@return string|nil error Error message if failed
 function fs.write_file_sync(path, content) end
+
+---Get file/directory statistics synchronously
+---@param path string The file or directory path
+---@return FileStat stat Statistics about the path
+function fs.stat(path) end
+
+---Create directory and all parent directories if they don't exist (like mkdir -p)
+---@param path string The directory path to create
+---@return boolean success Whether the creation succeeded
+---@return string|nil error Error message if failed
+function fs.mkdir(path) end
 
 lc.fs = fs
 
@@ -276,6 +295,11 @@ function system(cmd, callback) end
 ---@param cmd string The command name to check
 ---@return boolean executable Whether the command exists and is executable
 function system.executable(cmd) end
+
+---Open a file using the system's default application
+---Cross-platform support: uses 'open' on macOS, 'xdg-open' on Linux, 'start' on Windows
+---@param file_path string The path to the file to open
+function system.open(file_path) end
 
 lc.system = system
 

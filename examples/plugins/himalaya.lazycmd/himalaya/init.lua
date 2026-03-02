@@ -396,6 +396,7 @@ function M.preview(entry, cb)
     entry.account,
     '--folder',
     entry.folder,
+    '--preview',
   }, function(output)
     if output.code ~= 0 then
       local error_msg = output.stderr or 'Unknown error'
@@ -417,7 +418,7 @@ function M.preview(entry, cb)
     -- 如果有信封数据，合并后构建完整预览
     if entry.envelope then
       local merged = merge_envelope_and_body(entry.envelope, body_message)
-      lc.api.page_set_preview(build_preview(merged))
+      cb(build_preview(merged))
     else
       -- 没有信封数据，直接显示 body
       local preview = build_preview(body_message)
@@ -492,7 +493,7 @@ function M.setup()
     )
   end)
 
-  -- 添加 <enter> 键在编辑器中打开邮件正文
+  -- 添加 <enter> 键打开邮件（使用 himalaya message export 导出为 EML 文件）
   lc.keymap.set('main', '<enter>', function()
     local entry = lc.api.page_get_hovered()
     if not entry or not entry.id or not entry.account or not entry.folder then
@@ -500,30 +501,73 @@ function M.setup()
       return
     end
 
-    -- 如果没有预览过，需要先获取内容
-    if not entry.read_content then
-      lc.notify 'Preview not loaded yet'
+    lc.log('info', 'Exporting message {}', entry.id)
+
+    -- 创建临时 EML 文件路径
+    local temp_file = '/tmp/lazycmd-message-' .. tostring(entry.id) .. '.eml'
+
+    lc.notify 'Exporting message...'
+
+    -- 使用 himalaya message export 导出邮件为 EML 文件
+    lc.system({
+      'himalaya',
+      'message',
+      'export',
+      tostring(entry.id),
+      '--account',
+      entry.account,
+      '--folder',
+      entry.folder,
+      '-F',
+      '-d',
+      temp_file,
+    }, function(output)
+      if output.code ~= 0 then
+        local error_msg = output.stderr or 'Unknown error'
+        lc.notify('Export failed: ' .. error_msg)
+        lc.log('error', 'Failed to export message: {}', error_msg)
+        return
+      end
+
+      lc.log('info', 'Message exported to {}', temp_file)
+
+      -- 使用系统默认程序打开 EML 文件
+      lc.system.open(temp_file)
+
+      lc.notify 'Message opened'
+    end)
+  end)
+
+  -- 添加 a 键下载附件
+  lc.keymap.set('main', 'a', function()
+    local entry = lc.api.page_get_hovered()
+    if not entry or not entry.id or not entry.account or not entry.folder then
+      lc.notify 'No email selected'
       return
     end
 
-    lc.log('info', 'Opening message {} in editor', entry.id)
+    lc.log('info', ' for message {} in {}/{}', entry.id, entry.account, entry.folder)
+    lc.notify 'Attachment downloading...'
 
-    -- 写入临时文件
-    local temp_file = '/tmp/lazycmd-mail-' .. tostring(entry.id) .. '.eml'
-    local success, write_err = lc.fs.write_file_sync(temp_file, entry.read_content)
-    if not success then
-      lc.notify 'Failed to create temporary file'
-      lc.log('error', 'Failed to write temporary file {}: {}', temp_file, write_err)
-      return
-    end
-
-    lc.log('info', 'Created temporary file: {}', temp_file)
-
-    -- 使用 $EDITOR 打开文件
-    local editor = os.getenv 'EDITOR' or 'vim'
-    lc.interactive({ editor, temp_file }, function(exit_code)
-      -- 清理临时文件（可选）
-      -- os.remove(temp_file)
+    lc.system({
+      'himalaya',
+      'attachment',
+      'download',
+      tostring(entry.id),
+      '--account',
+      entry.account,
+      '--folder',
+      entry.folder,
+    }, function(output)
+      if output.code ~= 0 then
+        local error_msg = output.stderr or 'Unknown error'
+        lc.notify('Download failed: ' .. error_msg)
+        lc.log('error', 'Failed to download attachment: {}', error_msg)
+      else
+        local success_msg = output.stdout and lc.trim(output.stdout) or 'Attachment downloaded'
+        lc.notify(success_msg)
+        lc.log('info', 'Attachment download output: {}', output.stdout)
+      end
     end)
   end)
 end
