@@ -4,8 +4,8 @@ mod fs;
 mod http;
 mod keymap;
 mod path;
+mod style;
 mod time;
-mod ui;
 
 use crate::{plugin, Event};
 use base64::Engine;
@@ -270,9 +270,9 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
         .create_function(|lua, message: String| plugin::send_event(lua, Event::Notify(message)))?
         .into_lua(lua)?;
 
-    ui::inject_string_meta_method(lua)?;
+    style::inject_string_meta_method(lua)?;
 
-    let ui_tbl = lua.create_table_from([("line", ui::line(lua)?), ("text", ui::text(lua)?)])?;
+    let style_tbl = lua.create_table_from([("line", style::line(lua)?), ("text", style::text(lua)?)])?;
 
     let lc = lua.create_table_from([
         ("defer_fn", defer_fn),
@@ -292,7 +292,7 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
         ("notify", notify_fn),
         ("json", json_mod),
         ("inspect", inspect_mod),
-        ("ui", mlua::Value::Table(ui_tbl)),
+        ("style", mlua::Value::Table(style_tbl)),
     ])?;
     lua.globals().raw_set("lc", lc)
 }

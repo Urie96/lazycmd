@@ -6,7 +6,7 @@
 -- ============================================
 
 ---@class lc
----@field ui lc.ui UI utilities for creating widgets
+---@field style lc.style Style utilities for creating widgets
 lc = {}
 
 -- ============================================
@@ -410,21 +410,21 @@ function lc.tbl_map(func, t) end
 function lc.tbl_extend(target, ...) end
 
 -- ============================================
--- lc.ui - UI utilities
+-- lc.style - Style utilities
 -- ============================================
 
----@class lc.ui
-local ui = {}
+---@class lc.style
+local style = {}
 
 ---Create a Line from a table of Spans or Strings
 ---@param args (Span|string)[] The Spans or Strings to combine into a Line
 ---@return Line A Line widget containing the combined Spans
-function lc.ui.line(args) end
+function lc.style.line(args) end
 
 ---Create a Text from a table of Lines, Spans, or Strings
 ---@param args (Line|Span|string)[] The Lines, Spans, or Strings to combine into a Text
 ---@return Text A Text widget containing the combined content
-function lc.ui.text(args) end
+function lc.style.text(args) end
 
 -- ============================================
 -- lc.config - Configure plugins

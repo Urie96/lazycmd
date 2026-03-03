@@ -107,7 +107,7 @@ local function parse_envelopes(output, account, folder)
 
     table.insert(entries, {
       key = tostring(envelope.id),
-      display = lc.ui.line(display_parts),
+      display = lc.style.line(display_parts),
       id = envelope.id,
       account = account,
       folder = folder,
@@ -195,38 +195,38 @@ local function build_header_lines(message)
 
   -- 主题
   if message.subject then
-    table.insert(lines, lc.ui.line { ('Subject: '):fg 'cyan', message.subject:fg 'green' })
+    table.insert(lines, lc.style.line { ('Subject: '):fg 'cyan', message.subject:fg 'green' })
     table.insert(lines, '')
   end
 
   -- 发件人
   if message.from then
     local from_str = format_addr(message.from)
-    table.insert(lines, lc.ui.line { ('From: '):fg 'cyan', (from_str or 'Unknown'):fg 'yellow' })
+    table.insert(lines, lc.style.line { ('From: '):fg 'cyan', (from_str or 'Unknown'):fg 'yellow' })
   end
 
   -- 收件人
   local to_str = format_addrs(message.to)
-  if to_str then table.insert(lines, lc.ui.line { ('To: '):fg 'cyan', to_str:fg 'yellow' }) end
+  if to_str then table.insert(lines, lc.style.line { ('To: '):fg 'cyan', to_str:fg 'yellow' }) end
 
   -- 抄送
   local cc_str = message.cc_str or format_addrs(message.cc)
-  if cc_str then table.insert(lines, lc.ui.line { ('Cc: '):fg 'cyan', cc_str:fg 'yellow' }) end
+  if cc_str then table.insert(lines, lc.style.line { ('Cc: '):fg 'cyan', cc_str:fg 'yellow' }) end
 
   -- 日期（格式化为 年/月/日 时:分:秒）
   if message.timestamp then
     table.insert(
       lines,
-      lc.ui.line { ('Date: '):fg 'cyan', lc.time.format(message.timestamp, '%Y/%m/%d %H:%M:%S'):fg 'yellow' }
+      lc.style.line { ('Date: '):fg 'cyan', lc.time.format(message.timestamp, '%Y/%m/%d %H:%M:%S'):fg 'yellow' }
     )
   end
 
   -- 附件
   table.insert(lines, '')
   if message.has_attachment then
-    table.insert(lines, lc.ui.line { ('Attachments: '):fg 'cyan', ('yes'):fg 'yellow' })
+    table.insert(lines, lc.style.line { ('Attachments: '):fg 'cyan', ('yes'):fg 'yellow' })
   else
-    table.insert(lines, lc.ui.line { ('Attachments: '):fg 'cyan', ('none'):fg 'gray' })
+    table.insert(lines, lc.style.line { ('Attachments: '):fg 'cyan', ('none'):fg 'gray' })
   end
 
   return lines
@@ -249,7 +249,7 @@ local function build_preview(message)
   -- 邮件正文
   if message.body then table.insert(lines, message.body) end
 
-  return lc.ui.text(lines)
+  return lc.style.text(lines)
 end
 
 -- 构建初始预览（使用信封数据，显示 loading 状态）
@@ -266,7 +266,7 @@ local function build_loading_preview(envelope)
   -- Loading 提示
   table.insert(lines, '正文 loading 中...')
 
-  return lc.ui.text(lines)
+  return lc.style.text(lines)
 end
 
 -- 合并信封数据和消息正文
