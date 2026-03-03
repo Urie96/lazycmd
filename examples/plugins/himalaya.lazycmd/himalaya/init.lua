@@ -480,17 +480,29 @@ function M.setup()
 
     lc.log('info', 'Deleting message {} in {}/{}', entry.id, entry.account, entry.folder)
 
-    lc.interactive(
-      { 'himalaya', 'message', 'delete', tostring(entry.id), '--account', entry.account, '--folder', entry.folder },
-      function(exit_code)
-        if exit_code ~= 0 then
-          lc.notify 'Failed to delete message'
-        else
-          lc.notify 'Message deleted'
-          lc.cmd 'reload' -- 刷新列表
-        end
-      end
-    )
+    -- 弹出确认对话框
+    lc.confirm {
+      title = 'Delete Message',
+      prompt = 'Are you sure you want to delete this message?',
+      on_confirm = function()
+        -- 用户确认删除
+        lc.interactive(
+          { 'himalaya', 'message', 'delete', tostring(entry.id), '--account', entry.account, '--folder', entry.folder },
+          function(exit_code)
+            if exit_code ~= 0 then
+              lc.notify 'Failed to delete message'
+            else
+              lc.notify 'Message deleted'
+              lc.cmd 'reload' -- 刷新列表
+            end
+          end
+        )
+      end,
+      on_cancel = function()
+        -- 用户取消删除
+        lc.notify 'Delete cancelled'
+      end,
+    }
   end)
 
   -- 添加 <enter> 键打开邮件（使用 himalaya message export 导出为 EML 文件）

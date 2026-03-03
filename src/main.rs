@@ -9,8 +9,10 @@ pub use state::{ConfirmButton, ConfirmDialog};
 use tokio::task;
 
 mod app;
+mod confirm_handler;
 mod errors;
 mod events;
+mod input_handler;
 mod keymap;
 mod log;
 mod mode;

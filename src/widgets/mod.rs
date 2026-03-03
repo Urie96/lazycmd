@@ -1,3 +1,4 @@
+pub mod confirm;
 pub mod header;
 pub mod input;
 pub mod list;

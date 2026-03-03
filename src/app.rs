@@ -1,5 +1,5 @@
 use anyhow::{bail, Context, Result};
-use crossterm::event::{Event as CrosstermEvent, KeyCode, KeyEventKind};
+use crossterm::event::Event as CrosstermEvent;
 
 use mlua::prelude::*;
 use ratatui::{
@@ -9,10 +9,12 @@ use ratatui::{
 use tokio::sync::mpsc;
 
 use crate::{
+    confirm_handler,
     events::{Event, Events},
+    input_handler,
     plugin,
     term::{self, Term},
-    widgets::{header::HeaderWidget, input::InputWidget, list::ListWidget},
+    widgets::{confirm::ConfirmWidget, header::HeaderWidget, input::InputWidget, list::ListWidget},
     State,
 };
 
@@ -102,7 +104,12 @@ impl App {
             Event::Crossterm(CrosstermEvent::Key(key)) => {
                 // If confirm dialog is shown, handle its keyboard input first
                 if self.state.confirm_dialog.is_some() {
-                    if self.handle_confirm_dialog_key(key)? {
+                    if confirm_handler::handle_confirm_dialog_key(
+                        &self.lua,
+                        &mut self.state,
+                        &self.event_sender,
+                        key,
+                    )? {
                         self.dirty = true;
                     }
                     return Ok(());
@@ -110,7 +117,10 @@ impl App {
 
                 // Handle character input in Input mode
                 if self.state.current_mode == crate::Mode::Input {
-                    if self.handle_input_mode_key(key)? {
+                    if input_handler::handle_input_mode_key(&mut self.state, key)? {
+                        input_handler::apply_filter(&mut self.state)?;
+                        self.state.current_preview.take();
+                        self.call_preview()?;
                         self.dirty = true;
                     } else {
                         // Try keymap first
@@ -267,19 +277,29 @@ impl App {
                 self.dirty = true;
             }
             "enter_filter_mode" => {
-                self.enter_filter_mode();
+                input_handler::enter_filter_mode(&mut self.state);
             }
             "exit_filter_mode" => {
-                self.exit_filter_mode(false);
+                input_handler::exit_filter_mode(&mut self.state, false);
+                self.state.current_preview.take();
+                self.call_preview()?;
             }
             "accept_filter" => {
-                self.exit_filter_mode(true);
+                input_handler::exit_filter_mode(&mut self.state, true);
+                self.state.current_preview.take();
+                self.call_preview()?;
             }
             "filter_backspace" => {
-                self.handle_filter_backspace();
+                input_handler::handle_filter_backspace(&mut self.state);
+                input_handler::apply_filter(&mut self.state)?;
+                self.state.current_preview.take();
+                self.call_preview()?;
             }
             "filter_clear" => {
-                self.handle_filter_clear();
+                input_handler::handle_filter_clear(&mut self.state);
+                input_handler::apply_filter(&mut self.state)?;
+                self.state.current_preview.take();
+                self.call_preview()?;
             }
             "enter" => {
                 if let Some(hovered) = self.state.hovered() {
@@ -314,215 +334,7 @@ impl App {
         Ok(())
     }
 
-    /// Handle character input in Input mode
-    /// Returns true if the key was handled, false if it should be passed to keymap
-    fn handle_input_mode_key(&mut self, key: crossterm::event::KeyEvent) -> Result<bool> {
-        use crossterm::event::KeyModifiers;
 
-        // Ignore release events
-        if key.kind == KeyEventKind::Release {
-            return Ok(false);
-        }
-
-        // For keys with modifiers (except SHIFT), let keymap handle them
-        if key.modifiers.contains(KeyModifiers::CONTROL)
-            || key.modifiers.contains(KeyModifiers::ALT)
-        {
-            return Ok(false);
-        }
-
-        match key.code {
-            KeyCode::Char(c) => {
-                // Insert character at cursor position
-                self.state
-                    .filter_input
-                    .insert(self.state.input_cursor_position, c);
-                self.state.input_cursor_position += 1;
-                self.apply_filter()?;
-                Ok(true)
-            }
-            KeyCode::Backspace => {
-                if self.state.input_cursor_position > 0 {
-                    self.state
-                        .filter_input
-                        .remove(self.state.input_cursor_position - 1);
-                    self.state.input_cursor_position -= 1;
-                    self.apply_filter()?;
-                }
-                Ok(true)
-            }
-            KeyCode::Delete => {
-                if self.state.input_cursor_position < self.state.filter_input.len() {
-                    self.state
-                        .filter_input
-                        .remove(self.state.input_cursor_position);
-                    self.apply_filter()?;
-                }
-                Ok(true)
-            }
-            KeyCode::Left => {
-                self.state.input_cursor_position =
-                    self.state.input_cursor_position.saturating_sub(1);
-                self.dirty = true;
-                Ok(true)
-            }
-            KeyCode::Right => {
-                self.state.input_cursor_position = self
-                    .state
-                    .input_cursor_position
-                    .saturating_add(1)
-                    .min(self.state.filter_input.len());
-                self.dirty = true;
-                Ok(true)
-            }
-            KeyCode::Home => {
-                self.state.input_cursor_position = 0;
-                self.dirty = true;
-                Ok(true)
-            }
-            KeyCode::End => {
-                self.state.input_cursor_position = self.state.filter_input.len();
-                self.dirty = true;
-                Ok(true)
-            }
-            _ => Ok(false),
-        }
-    }
-
-    fn enter_filter_mode(&mut self) {
-        self.state.current_mode = crate::Mode::Input;
-        // Preserve current filter if already set, otherwise start fresh
-        if self.state.filter_input.is_empty() {
-            self.state.input_cursor_position = 0;
-        } else {
-            self.state.input_cursor_position = self.state.filter_input.len();
-        }
-        self.state.last_key_event_buffer.clear();
-        self.dirty = true;
-    }
-
-    fn exit_filter_mode(&mut self, keep_filter: bool) {
-        if !keep_filter {
-            self.state.filter_input.clear();
-            self.state.input_cursor_position = 0;
-            let _ = self.apply_filter();
-        }
-        self.state.current_mode = crate::Mode::Main;
-        self.state.last_key_event_buffer.clear();
-        let _ = self.call_preview();
-        self.dirty = true;
-    }
-
-    fn handle_filter_backspace(&mut self) {
-        if self.state.input_cursor_position > 0 {
-            self.state
-                .filter_input
-                .remove(self.state.input_cursor_position - 1);
-            self.state.input_cursor_position -= 1;
-            let _ = self.apply_filter();
-            self.dirty = true;
-        }
-    }
-
-    fn handle_filter_clear(&mut self) {
-        self.state.filter_input.clear();
-        self.state.input_cursor_position = 0;
-        let _ = self.apply_filter();
-        self.dirty = true;
-    }
-
-    /// Handle keyboard input for confirm dialog
-    /// Returns true if the key was handled, false otherwise
-    fn handle_confirm_dialog_key(&mut self, key: crossterm::event::KeyEvent) -> Result<bool> {
-        use crossterm::event::{KeyCode, KeyEventKind};
-
-        // Ignore release events
-        if key.kind == KeyEventKind::Release {
-            return Ok(false);
-        }
-
-        match key.code {
-            // Left arrow: select Yes
-            KeyCode::Left => {
-                self.state.confirm_dialog.as_mut().map(|d| {
-                    d.selected_button = crate::ConfirmButton::Yes;
-                });
-                self.dirty = true;
-                Ok(true)
-            }
-            // Right arrow: select No
-            KeyCode::Right => {
-                self.state.confirm_dialog.as_mut().map(|d| {
-                    d.selected_button = crate::ConfirmButton::No;
-                });
-                self.dirty = true;
-                Ok(true)
-            }
-            // Enter: execute selected button's callback
-            KeyCode::Enter => {
-                if let Some(dialog) = self.state.confirm_dialog.take() {
-                    self.dirty = true;
-                    match dialog.selected_button {
-                        crate::ConfirmButton::Yes => {
-                            plugin::scope(&self.lua, &mut self.state, &self.event_sender, || {
-                                dialog.on_confirm.call::<()>(())
-                            })?;
-                        }
-                        crate::ConfirmButton::No => {
-                            plugin::scope(&self.lua, &mut self.state, &self.event_sender, || {
-                                dialog.on_cancel.call::<()>(())
-                            })?;
-                        }
-                    }
-                }
-                Ok(true)
-            }
-            // Y key: confirm (execute on_confirm)
-            KeyCode::Char('y') | KeyCode::Char('Y') => {
-                if let Some(dialog) = self.state.confirm_dialog.take() {
-                    self.dirty = true;
-                    plugin::scope(&self.lua, &mut self.state, &self.event_sender, || {
-                        dialog.on_confirm.call::<()>(())
-                    })?;
-                }
-                Ok(true)
-            }
-            // N key: cancel (execute on_cancel)
-            KeyCode::Char('n') | KeyCode::Char('N') => {
-                if let Some(dialog) = self.state.confirm_dialog.take() {
-                    self.dirty = true;
-                    plugin::scope(&self.lua, &mut self.state, &self.event_sender, || {
-                        dialog.on_cancel.call::<()>(())
-                    })?;
-                }
-                Ok(true)
-            }
-            // Esc: cancel (execute on_cancel)
-            KeyCode::Esc => {
-                if let Some(dialog) = self.state.confirm_dialog.take() {
-                    self.dirty = true;
-                    plugin::scope(&self.lua, &mut self.state, &self.event_sender, || {
-                        dialog.on_cancel.call::<()>(())
-                    })?;
-                }
-                Ok(true)
-            }
-            _ => Ok(false),
-        }
-    }
-
-    fn apply_filter(&mut self) -> Result<()> {
-        if let Some(page) = &mut self.state.current_page {
-            // Sync filter state from State to Page
-            page.filter_input = self.state.filter_input.clone();
-            page.input_cursor_position = self.state.input_cursor_position;
-            page.apply_filter(&self.state.filter_input);
-            // Update preview for newly selected item
-            self.state.current_preview.take();
-            self.call_preview()?;
-        }
-        Ok(())
-    }
 }
 
 struct AppWidget;
@@ -649,7 +461,7 @@ impl StatefulWidget for AppWidget {
         }
 
         // Render confirm dialog (render last to appear on top of everything)
-        if let Some(dialog) = &state.confirm_dialog {
+        if let Some(dialog) = &mut state.confirm_dialog {
             // Fixed size: width 40, height 10
             let dialog_width = 40u16;
             let dialog_height = 10u16;
@@ -669,117 +481,7 @@ impl StatefulWidget for AppWidget {
                 height: dialog_height,
             };
 
-            // Clear the area first to prevent underlying content from showing through
-            Clear.render(dialog_area, buf);
-
-            // Draw dialog border with cyan color
-            let block = Block::bordered()
-                .border_type(BorderType::Rounded)
-                .border_style(Style::default().fg(Color::Blue));
-
-            // Add title (always present, defaults to "Confirm") - title is centered by default
-            if let Some(title) = &dialog.title {
-                let block = block
-                    .title(title.as_str())
-                    .title_alignment(ratatui::layout::Alignment::Center)
-                    .title_style(Style::default().fg(Color::Blue));
-                let inner = block.inner(dialog_area);
-                block.render(dialog_area, buf);
-
-                // Split into: prompt area, then buttons with divider
-                // Buttons area takes 3 rows (divider + 2 rows for buttons)
-                let buttons_area_height = 3u16;
-                let prompt_area_height = inner.height.saturating_sub(buttons_area_height);
-
-                let [prompt_area, buttons_area] =
-                    Layout::vertical([Length(prompt_area_height), Length(buttons_area_height)])
-                        .areas(inner);
-
-                // Render prompt text with white color, centered and wrapped
-                let prompt_paragraph = Paragraph::new(dialog.prompt.as_str())
-                    .wrap(ratatui::widgets::Wrap { trim: true })
-                    .alignment(ratatui::layout::Alignment::Center)
-                    .style(Style::default().fg(Color::White));
-                prompt_paragraph.render(prompt_area, buf);
-
-                // Draw divider line at the top of buttons area (button row - 1)
-                let divider_y = buttons_area.bottom().saturating_sub(2);
-                for x in buttons_area.left()..buttons_area.right() {
-                    buf[(x, divider_y)]
-                        .set_symbol(symbols::line::HORIZONTAL)
-                        .set_style(Style::default().fg(Color::Blue));
-                }
-
-                // Split buttons area into left half and right half
-                let [left_half, right_half] = Layout::horizontal([Percentage(50), Percentage(50)])
-                    .areas(buttons_area);
-
-                // Render buttons
-                let yes_selected = dialog.selected_button == crate::ConfirmButton::Yes;
-                let no_selected = dialog.selected_button == crate::ConfirmButton::No;
-
-                // Button text
-                let yes_text = "[Y]es";
-                let no_text = "(N)o";
-
-                // Button width is 9
-                let button_width = 9u16;
-
-                // Button style for selected: white background, black text, bold
-                let selected_style = Style::default()
-                    .bg(Color::White)
-                    .fg(Color::Black)
-                    .add_modifier(Modifier::BOLD);
-
-                // Button style for unselected: white text, no background
-                let unselected_style = Style::default().fg(Color::White);
-
-                let yes_style = if yes_selected {
-                    selected_style
-                } else {
-                    unselected_style
-                };
-
-                let no_style = if no_selected {
-                    selected_style
-                } else {
-                    unselected_style
-                };
-
-                // Center buttons in their respective halves
-                let yes_x = left_half
-                    .x
-                    .saturating_add(left_half.width.saturating_sub(button_width) / 2);
-                let no_x = right_half
-                    .x
-                    .saturating_add(right_half.width.saturating_sub(button_width) / 2);
-                let button_y = buttons_area.bottom().saturating_sub(1);
-
-                let yes_area = Rect {
-                    x: yes_x,
-                    y: button_y,
-                    width: button_width,
-                    height: 1,
-                };
-                let no_area = Rect {
-                    x: no_x,
-                    y: button_y,
-                    width: button_width,
-                    height: 1,
-                };
-
-                // Render Yes button
-                Paragraph::new(yes_text)
-                    .style(yes_style)
-                    .alignment(ratatui::layout::Alignment::Center)
-                    .render(yes_area, buf);
-
-                // Render No button
-                Paragraph::new(no_text)
-                    .style(no_style)
-                    .alignment(ratatui::layout::Alignment::Center)
-                    .render(no_area, buf);
-            }
+            ConfirmWidget.render(dialog_area, buf, dialog);
         }
     }
 }
