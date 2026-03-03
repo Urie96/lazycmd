@@ -75,12 +75,32 @@ impl State {
             self.current_page = Some(Default::default())
         }
         let page = self.current_page.as_mut().unwrap();
+
+        // Save current selected index before updating entries
+        let old_selected = page.list_state.selected();
+
         page.list = entries;
         // Sync filter state from State to Page
         page.filter_input = self.filter_input.clone();
         page.input_cursor_position = self.input_cursor_position;
         // Apply current filter to new entries
         page.apply_filter(&self.filter_input);
+
+        // Restore selection if possible
+        if let Some(old_idx) = old_selected {
+            // Only restore if there was a previous selection
+            if page.filtered_list.is_empty() {
+                page.list_state.select(None);
+            } else {
+                // Keep the old selection if it's still valid
+                if old_idx < page.filtered_list.len() {
+                    page.list_state.select(Some(old_idx));
+                } else {
+                    // Old index is out of range, select the last item
+                    page.list_state.select(Some(page.filtered_list.len() - 1));
+                }
+            }
+        }
     }
     pub fn add_keymap(&mut self, keymap: Keymap) {
         self.keymap_config

@@ -9,6 +9,16 @@ local cache = {
   system = {},
 }
 
+-- 分页状态
+local pagination = {
+  current_account = nil,  -- 当前账号
+  current_folder = nil,   -- 当前文件夹
+  current_page = 1,       -- 当前页码（从 1 开始）
+  entries = {},           -- 当前所有 entries
+  loading = false,        -- 是否正在加载下一页
+  reached_end = false,    -- 是否已到末尾
+}
+
 -- 生成缓存键（用于 lc.system）
 local function system_cache_key(cmd_args)
   -- 将命令参数表连接成字符串作为缓存键
@@ -284,6 +294,78 @@ local function merge_envelope_and_body(envelope, body_message)
   return merged
 end
 
+-- 加载下一页邮件
+local function load_next_page()
+  if pagination.loading or pagination.reached_end then
+    return
+  end
+
+  local account = pagination.current_account
+  local folder = pagination.current_folder
+  if not account or not folder then
+    return
+  end
+
+  pagination.loading = true
+  pagination.current_page = pagination.current_page + 1
+
+  lc.notify('Loading page ' .. pagination.current_page .. '...')
+  lc.log('info', 'Loading page {} for {}/{}', pagination.current_page, account, folder)
+
+  cached_system({
+    'himalaya',
+    '--output',
+    'json',
+    'envelope',
+    'list',
+    '--account',
+    account,
+    '--folder',
+    folder,
+    '--page',
+    tostring(pagination.current_page),
+  }, function(output)
+    pagination.loading = false
+
+    if output.code ~= 0 then
+      lc.log('error', 'Failed to load page {}: {}', pagination.current_page, output.stderr or 'Unknown error')
+      pagination.current_page = pagination.current_page - 1  -- 回退页码
+      pagination.reached_end = true
+      lc.notify('End of messages')
+      return
+    end
+
+    local new_entries, err = parse_envelopes(output, account, folder)
+    if err then
+      lc.log('error', 'Failed to parse page {}: {}', pagination.current_page, err)
+      pagination.current_page = pagination.current_page - 1  -- 回退页码
+      pagination.reached_end = true
+      lc.notify('End of messages')
+      return
+    end
+
+    if #new_entries == 0 then
+      -- 没有更多邮件
+      lc.log('info', 'No more emails on page {}', pagination.current_page)
+      pagination.current_page = pagination.current_page - 1  -- 回退页码
+      pagination.reached_end = true
+      lc.notify('End of messages')
+      return
+    end
+
+    -- 追加新 entries
+    for _, entry in ipairs(new_entries) do
+      table.insert(pagination.entries, entry)
+    end
+
+    -- 更新列表
+    lc.api.page_set_entries(pagination.entries)
+
+    lc.log('info', 'Loaded {} emails from page {} (total: {})', #new_entries, pagination.current_page, #pagination.entries)
+    lc.notify('Loaded ' .. #new_entries .. ' more emails')
+  end)
+end
+
 -- 列出内容
 function M.list(path, cb)
   -- 根路径：列出所有账号
@@ -344,6 +426,18 @@ function M.list(path, cb)
   elseif #path == 2 then
     local account = path[1]
     local folder = path[2]
+
+    -- 检测账号/文件夹变化，重置分页状态
+    if pagination.current_account ~= account or pagination.current_folder ~= folder then
+      lc.log('info', 'Folder changed to {}/{}, resetting pagination', account, folder)
+      pagination.current_account = account
+      pagination.current_folder = folder
+      pagination.current_page = 1
+      pagination.entries = {}
+      pagination.loading = false
+      pagination.reached_end = false
+    end
+
     cached_system({
       'himalaya',
       '--output',
@@ -354,6 +448,8 @@ function M.list(path, cb)
       account,
       '--folder',
       folder,
+      '--page',
+      tostring(pagination.current_page),
     }, function(output)
       if output.code ~= 0 then
         lc.log('error', 'Failed to list envelopes: {}', output.stderr or 'Unknown error')
@@ -368,6 +464,9 @@ function M.list(path, cb)
         return
       end
 
+      -- 保存到 pagination.entries
+      pagination.entries = entries
+
       cb(entries)
     end)
   end
@@ -378,6 +477,22 @@ function M.preview(entry, cb)
   if not entry or not entry.id or not entry.account or not entry.folder then
     cb 'Select an email to preview'
     return
+  end
+
+  -- 检查是否在最后一封邮件，如果是则加载下一页
+  local path = lc.api.get_current_path()
+  if #path == 2 and not pagination.loading and not pagination.reached_end then
+    -- 遍历 pagination.entries 找到当前 entry 的索引
+    for i, e in ipairs(pagination.entries) do
+      if e.id == entry.id then
+        -- 检查是否为最后一项
+        if i == #pagination.entries then
+          lc.log('info', 'At last email (index {}), loading next page', i)
+          load_next_page()
+        end
+        break
+      end
+    end
   end
 
   -- 第一阶段：如果有信封数据，先显示 loading 预览
@@ -429,7 +544,16 @@ end
 
 -- 设置插件
 function M.setup()
-  lc.api.append_hook_pre_reload(function() cache.system = {} end)
+  lc.api.append_hook_pre_reload(function()
+    cache.system = {}
+    -- 重置分页状态
+    pagination.current_account = nil
+    pagination.current_folder = nil
+    pagination.current_page = 1
+    pagination.entries = {}
+    pagination.loading = false
+    pagination.reached_end = false
+  end)
 
   -- 添加 w 键写新邮件
   lc.keymap.set('main', 'w', function()
