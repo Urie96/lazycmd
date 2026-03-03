@@ -270,6 +270,25 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
         .create_function(|lua, message: String| plugin::send_event(lua, Event::Notify(message)))?
         .into_lua(lua)?;
 
+    // lc.confirm: show a confirmation dialog
+    let confirm_fn = lua.create_function(
+        |lua, opts: LuaTable| -> mlua::Result<()> {
+            // title is optional, defaults to "Confirm"
+            let title: Option<String> = opts.get("title").ok();
+            let title = title.or_else(|| Some("Confirm".to_string()));
+            let prompt: String = opts.get("prompt")?;
+            let on_confirm: LuaFunction = opts.get("on_confirm")?;
+            let on_cancel: LuaFunction = opts.get("on_cancel")?;
+            plugin::send_event(lua, Event::ShowConfirm {
+                title,
+                prompt,
+                on_confirm,
+                on_cancel,
+            })?;
+            Ok(())
+        },
+    )?;
+
     style::inject_string_meta_method(lua)?;
 
     let style_tbl = lua.create_table_from([("line", style::line(lua)?), ("text", style::text(lua)?)])?;
@@ -290,6 +309,7 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
         ("log", log_fn),
         ("osc52_copy", osc52_copy),
         ("notify", notify_fn),
+        ("confirm", mlua::Value::Function(confirm_fn)),
         ("json", json_mod),
         ("inspect", inspect_mod),
         ("style", mlua::Value::Table(style_tbl)),

@@ -32,6 +32,12 @@ pub enum Event {
     LuaCallback(Box<dyn FnOnce(&Lua) -> mlua::Result<()>>),
     InteractiveCommand(Vec<String>, Option<LuaFunction>),
     Notify(String),
+    ShowConfirm {
+        title: Option<String>,
+        prompt: String,
+        on_confirm: LuaFunction,
+        on_cancel: LuaFunction,
+    },
 }
 
 impl Events {

@@ -5,6 +5,7 @@ pub use mode::*;
 pub use page::*;
 pub use state::*;
 pub use widgets::InputState;
+pub use state::{ConfirmButton, ConfirmDialog};
 use tokio::task;
 
 mod app;

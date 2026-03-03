@@ -367,6 +367,21 @@ function lc.split(s, sep) end
 function lc.notify(message) end
 
 -- ============================================
+-- lc.confirm - Confirmation dialog
+-- ============================================
+
+---Show a confirmation dialog to the user
+---The dialog appears centered on screen with Yes/No buttons
+---Users can use Left/Right arrows to select buttons, Enter to confirm selection
+---Or use Y/N keys to directly confirm or cancel
+---@param opts table Configuration options
+---@field title? string Optional title text (defaults to "Confirm")
+---@field prompt string The confirmation message to display
+---@field on_confirm fun() Callback function when user confirms (Yes)
+---@field on_cancel fun() Callback function when user cancels (No)
+function lc.confirm(opts) end
+
+-- ============================================
 -- Filter Mode - Filtering entries
 -- ============================================
 

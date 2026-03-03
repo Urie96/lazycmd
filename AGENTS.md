@@ -94,6 +94,7 @@ Lua 中的全局表 `lc` 提供以下子系统：
 | `lc.cmd`        | `src/plugin/lc/mod.rs`   | 向 Rust 发送内部命令                            |
 | `lc.osc52_copy` | `src/plugin/lc/mod.rs`   | 通过 OSC 52 复制文本到剪贴板                    |
 | `lc.notify`     | `src/plugin/lc/mod.rs`   | 在右下角显示通知消息（3 秒后自动消失）          |
+| `lc.confirm`    | `src/plugin/lc/mod.rs`   | 显示确认对话框请求用户确认                      |
 | `lc.log`        | `src/plugin/lc/mod.rs`   | 写入日志文件                                    |
 | `lc.split`      | `src/plugin/lc/mod.rs`   | 字符串分割                                      |
 | `lc.tbl_map`    | `preset/util.lua`        | 对表值映射函数                                  |
@@ -519,6 +520,85 @@ lc.notify('Memo updated successfully')
 
 -- 显示错误信息
 lc.notify('Failed to delete memo')
+```
+
+### lc.confirm 函数
+
+显示确认对话框请求用户确认：
+
+| 函数             | 参数                      | 返回值  | 用途                  |
+| ---------------- | ------------------------- | ------- | --------------------- |
+| `lc.confirm(opts)` | `table`                   | `nil`   | 显示确认对话框        |
+
+**参数** (`opts` table):
+- `title`: string? (可选) - 对话框标题，居中显示在顶部边框，默认为 "Confirm"
+- `prompt`: string - 确认提示文本（白色显示）
+- `on_confirm`: function() - 用户确认（选择 Yes）时调用的回调函数
+- `on_cancel`: function() - 用户取消（选择 No）时调用的回调函数
+
+**说明**：
+
+- 确认对话框浮动在所有 UI 之上，居中显示
+- 对话框尺寸：宽 40，高 10
+- 边框颜色：青色 (Cyan)
+- 标题默认为 "Confirm"，居中显示在顶部边框上
+- 提示文本颜色：白色 (White)
+- 按钮样式：
+  - 选中按钮：白色背景 (White)，黑色文本 (Black)，粗体
+  - 未选中按钮：白色字体，无背景色
+  - 按钮宽度 9
+- 有 `[Y]es` 和 `[N]o` 两个按钮：
+  - `[Y]es` 按钮在左边 1/2 区域内居中显示
+  - `[N]o` 按钮在右边 1/2 区域内居中显示
+  - 默认选中 `[Y]es`
+- 分割线显示在按钮上方一行
+- **键盘操作**：
+  - `Left` / `Right`: 切换选中的按钮
+  - `Enter`: 确认当前选中的按钮
+  - `Y` 或 `y`: 直接确认（调用 on_confirm）
+  - `N` 或 `n`: 直接取消（调用 on_cancel）
+  - `Esc`: 取消（调用 on_cancel）
+- 当对话框显示时，所有其他键盘输入被阻止
+
+**示例**：
+
+```lua
+-- 简单的确认对话框（使用默认标题 "Confirm"）
+lc.confirm({
+  prompt = 'Do you want to delete this item?',
+  on_confirm = function()
+    lc.notify 'Item deleted'
+    -- 执行删除操作
+  end,
+  on_cancel = function()
+    lc.notify 'Cancelled'
+    -- 不执行任何操作
+  end
+})
+
+-- 带自定义标题的确认对话框
+lc.confirm({
+  title = 'Confirm Delete',
+  prompt = 'Are you sure you want to delete this item?',
+  on_confirm = function()
+    lc.notify 'Item deleted'
+  end,
+  on_cancel = function()
+    lc.notify 'Cancelled'
+  end
+})
+
+-- 确认退出应用（带自定义标题）
+lc.confirm({
+  title = 'Exit',
+  prompt = 'Are you sure you want to exit?',
+  on_confirm = function()
+    lc.cmd 'quit'
+  end,
+  on_cancel = function()
+    lc.notify 'Exit cancelled'
+  end
+})
 ```
 
 ### lc.log 函数

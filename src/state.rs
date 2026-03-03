@@ -5,6 +5,49 @@ use std::time::Instant;
 
 use crate::{widgets::Renderable, Keymap, Mode, Page, PageEntry};
 
+/// Represents which button is selected in the confirm dialog
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConfirmButton {
+    Yes,
+    No,
+}
+
+impl ConfirmButton {
+    pub fn toggle(&self) -> Self {
+        match self {
+            ConfirmButton::Yes => ConfirmButton::No,
+            ConfirmButton::No => ConfirmButton::Yes,
+        }
+    }
+}
+
+/// State for the confirm dialog
+#[derive(Debug)]
+pub struct ConfirmDialog {
+    pub title: Option<String>,
+    pub prompt: String,
+    pub on_confirm: LuaFunction,
+    pub on_cancel: LuaFunction,
+    pub selected_button: ConfirmButton,
+}
+
+impl ConfirmDialog {
+    pub fn new(
+        title: Option<String>,
+        prompt: String,
+        on_confirm: LuaFunction,
+        on_cancel: LuaFunction,
+    ) -> Self {
+        Self {
+            title,
+            prompt,
+            on_confirm,
+            on_cancel,
+            selected_button: ConfirmButton::Yes, // Default to Yes
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct State {
     pub current_mode: Mode,
@@ -22,6 +65,8 @@ pub struct State {
     pub pre_reload_hooks: Vec<LuaFunction>,
     /// Current plugin name
     pub current_plugin: String,
+    /// Confirm dialog state (shown on top of all UI)
+    pub confirm_dialog: Option<ConfirmDialog>,
 }
 
 impl State {
@@ -169,5 +214,28 @@ impl State {
             }
         }
         false
+    }
+
+    /// Show the confirm dialog
+    pub fn show_confirm_dialog(
+        &mut self,
+        title: Option<String>,
+        prompt: String,
+        on_confirm: LuaFunction,
+        on_cancel: LuaFunction,
+    ) {
+        self.confirm_dialog = Some(ConfirmDialog::new(title, prompt, on_confirm, on_cancel));
+    }
+
+    /// Toggle selected button in confirm dialog
+    pub fn toggle_confirm_button(&mut self) {
+        if let Some(dialog) = &mut self.confirm_dialog {
+            dialog.selected_button = dialog.selected_button.toggle();
+        }
+    }
+
+    /// Get the current selected button
+    pub fn get_selected_button(&self) -> Option<ConfirmButton> {
+        self.confirm_dialog.as_ref().map(|d| d.selected_button)
     }
 }

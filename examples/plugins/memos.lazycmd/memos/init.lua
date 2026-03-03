@@ -130,16 +130,25 @@ local function delete_current_memo()
 
   local memo = entry.memo
 
-  api_call('DELETE', '/memos/' .. memo.id, nil, function(res)
-    if not res.success then
-      lc.notify('Failed to delete memo: ' .. (res.error or 'Unknown error'))
-      lc.log('error', 'Failed to delete memo: {}', res.error or 'Unknown')
-      return
-    end
+  -- Show confirmation dialog before deleting
+  lc.confirm({
+    prompt = 'Delete this memo?',
+    on_confirm = function()
+      api_call('DELETE', '/memos/' .. memo.id, nil, function(res)
+        if not res.success then
+          lc.notify('Failed to delete memo: ' .. (res.error or 'Unknown error'))
+          lc.log('error', 'Failed to delete memo: {}', res.error or 'Unknown')
+          return
+        end
 
-    lc.notify('Memo deleted successfully: ' .. memo.id)
-    lc.cmd 'reload'
-  end)
+        lc.notify('Memo deleted successfully: ' .. memo.id)
+        lc.cmd 'reload'
+      end)
+    end,
+    on_cancel = function()
+      lc.notify 'Deletion cancelled'
+    end
+  })
 end
 
 -- Create a new memo using external editor

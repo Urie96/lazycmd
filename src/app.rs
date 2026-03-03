@@ -100,6 +100,14 @@ impl App {
             }
             // Event::Crossterm(CrosstermEvent::Resize(x, y)) => Some(Action::Resize(x, y)),
             Event::Crossterm(CrosstermEvent::Key(key)) => {
+                // If confirm dialog is shown, handle its keyboard input first
+                if self.state.confirm_dialog.is_some() {
+                    if self.handle_confirm_dialog_key(key)? {
+                        self.dirty = true;
+                    }
+                    return Ok(());
+                }
+
                 // Handle character input in Input mode
                 if self.state.current_mode == crate::Mode::Input {
                     if self.handle_input_mode_key(key)? {
@@ -163,6 +171,16 @@ impl App {
             }
             Event::Notify(message) => {
                 self.state.set_notification(message);
+                self.dirty = true;
+            }
+            Event::ShowConfirm {
+                title,
+                prompt,
+                on_confirm,
+                on_cancel,
+            } => {
+                self.state
+                    .show_confirm_dialog(title, prompt, on_confirm, on_cancel);
                 self.dirty = true;
             }
         }
@@ -413,6 +431,86 @@ impl App {
         self.dirty = true;
     }
 
+    /// Handle keyboard input for confirm dialog
+    /// Returns true if the key was handled, false otherwise
+    fn handle_confirm_dialog_key(&mut self, key: crossterm::event::KeyEvent) -> Result<bool> {
+        use crossterm::event::{KeyCode, KeyEventKind};
+
+        // Ignore release events
+        if key.kind == KeyEventKind::Release {
+            return Ok(false);
+        }
+
+        match key.code {
+            // Left arrow: select Yes
+            KeyCode::Left => {
+                self.state.confirm_dialog.as_mut().map(|d| {
+                    d.selected_button = crate::ConfirmButton::Yes;
+                });
+                self.dirty = true;
+                Ok(true)
+            }
+            // Right arrow: select No
+            KeyCode::Right => {
+                self.state.confirm_dialog.as_mut().map(|d| {
+                    d.selected_button = crate::ConfirmButton::No;
+                });
+                self.dirty = true;
+                Ok(true)
+            }
+            // Enter: execute selected button's callback
+            KeyCode::Enter => {
+                if let Some(dialog) = self.state.confirm_dialog.take() {
+                    self.dirty = true;
+                    match dialog.selected_button {
+                        crate::ConfirmButton::Yes => {
+                            plugin::scope(&self.lua, &mut self.state, &self.event_sender, || {
+                                dialog.on_confirm.call::<()>(())
+                            })?;
+                        }
+                        crate::ConfirmButton::No => {
+                            plugin::scope(&self.lua, &mut self.state, &self.event_sender, || {
+                                dialog.on_cancel.call::<()>(())
+                            })?;
+                        }
+                    }
+                }
+                Ok(true)
+            }
+            // Y key: confirm (execute on_confirm)
+            KeyCode::Char('y') | KeyCode::Char('Y') => {
+                if let Some(dialog) = self.state.confirm_dialog.take() {
+                    self.dirty = true;
+                    plugin::scope(&self.lua, &mut self.state, &self.event_sender, || {
+                        dialog.on_confirm.call::<()>(())
+                    })?;
+                }
+                Ok(true)
+            }
+            // N key: cancel (execute on_cancel)
+            KeyCode::Char('n') | KeyCode::Char('N') => {
+                if let Some(dialog) = self.state.confirm_dialog.take() {
+                    self.dirty = true;
+                    plugin::scope(&self.lua, &mut self.state, &self.event_sender, || {
+                        dialog.on_cancel.call::<()>(())
+                    })?;
+                }
+                Ok(true)
+            }
+            // Esc: cancel (execute on_cancel)
+            KeyCode::Esc => {
+                if let Some(dialog) = self.state.confirm_dialog.take() {
+                    self.dirty = true;
+                    plugin::scope(&self.lua, &mut self.state, &self.event_sender, || {
+                        dialog.on_cancel.call::<()>(())
+                    })?;
+                }
+                Ok(true)
+            }
+            _ => Ok(false),
+        }
+    }
+
     fn apply_filter(&mut self) -> Result<()> {
         if let Some(page) = &mut self.state.current_page {
             // Sync filter state from State to Page
@@ -548,6 +646,140 @@ impl StatefulWidget for AppWidget {
             Paragraph::new(message.as_str())
                 .style(Style::default().fg(Color::Yellow))
                 .render(inner, buf);
+        }
+
+        // Render confirm dialog (render last to appear on top of everything)
+        if let Some(dialog) = &state.confirm_dialog {
+            // Fixed size: width 40, height 10
+            let dialog_width = 40u16;
+            let dialog_height = 10u16;
+
+            // Center the dialog
+            let x = (area.width.saturating_sub(dialog_width)) / 2;
+            let y = (area.height.saturating_sub(dialog_height)) / 2;
+
+            // Ensure dialog is within bounds
+            let x = x.min(area.width.saturating_sub(dialog_width));
+            let y = y.min(area.height.saturating_sub(dialog_height));
+
+            let dialog_area = Rect {
+                x,
+                y,
+                width: dialog_width,
+                height: dialog_height,
+            };
+
+            // Clear the area first to prevent underlying content from showing through
+            Clear.render(dialog_area, buf);
+
+            // Draw dialog border with cyan color
+            let block = Block::bordered()
+                .border_type(BorderType::Rounded)
+                .border_style(Style::default().fg(Color::Blue));
+
+            // Add title (always present, defaults to "Confirm") - title is centered by default
+            if let Some(title) = &dialog.title {
+                let block = block
+                    .title(title.as_str())
+                    .title_alignment(ratatui::layout::Alignment::Center)
+                    .title_style(Style::default().fg(Color::Blue));
+                let inner = block.inner(dialog_area);
+                block.render(dialog_area, buf);
+
+                // Split into: prompt area, then buttons with divider
+                // Buttons area takes 3 rows (divider + 2 rows for buttons)
+                let buttons_area_height = 3u16;
+                let prompt_area_height = inner.height.saturating_sub(buttons_area_height);
+
+                let [prompt_area, buttons_area] =
+                    Layout::vertical([Length(prompt_area_height), Length(buttons_area_height)])
+                        .areas(inner);
+
+                // Render prompt text with white color, centered and wrapped
+                let prompt_paragraph = Paragraph::new(dialog.prompt.as_str())
+                    .wrap(ratatui::widgets::Wrap { trim: true })
+                    .alignment(ratatui::layout::Alignment::Center)
+                    .style(Style::default().fg(Color::White));
+                prompt_paragraph.render(prompt_area, buf);
+
+                // Draw divider line at the top of buttons area (button row - 1)
+                let divider_y = buttons_area.bottom().saturating_sub(2);
+                for x in buttons_area.left()..buttons_area.right() {
+                    buf[(x, divider_y)]
+                        .set_symbol(symbols::line::HORIZONTAL)
+                        .set_style(Style::default().fg(Color::Blue));
+                }
+
+                // Split buttons area into left half and right half
+                let [left_half, right_half] = Layout::horizontal([Percentage(50), Percentage(50)])
+                    .areas(buttons_area);
+
+                // Render buttons
+                let yes_selected = dialog.selected_button == crate::ConfirmButton::Yes;
+                let no_selected = dialog.selected_button == crate::ConfirmButton::No;
+
+                // Button text
+                let yes_text = "[Y]es";
+                let no_text = "(N)o";
+
+                // Button width is 9
+                let button_width = 9u16;
+
+                // Button style for selected: white background, black text, bold
+                let selected_style = Style::default()
+                    .bg(Color::White)
+                    .fg(Color::Black)
+                    .add_modifier(Modifier::BOLD);
+
+                // Button style for unselected: white text, no background
+                let unselected_style = Style::default().fg(Color::White);
+
+                let yes_style = if yes_selected {
+                    selected_style
+                } else {
+                    unselected_style
+                };
+
+                let no_style = if no_selected {
+                    selected_style
+                } else {
+                    unselected_style
+                };
+
+                // Center buttons in their respective halves
+                let yes_x = left_half
+                    .x
+                    .saturating_add(left_half.width.saturating_sub(button_width) / 2);
+                let no_x = right_half
+                    .x
+                    .saturating_add(right_half.width.saturating_sub(button_width) / 2);
+                let button_y = buttons_area.bottom().saturating_sub(1);
+
+                let yes_area = Rect {
+                    x: yes_x,
+                    y: button_y,
+                    width: button_width,
+                    height: 1,
+                };
+                let no_area = Rect {
+                    x: no_x,
+                    y: button_y,
+                    width: button_width,
+                    height: 1,
+                };
+
+                // Render Yes button
+                Paragraph::new(yes_text)
+                    .style(yes_style)
+                    .alignment(ratatui::layout::Alignment::Center)
+                    .render(yes_area, buf);
+
+                // Render No button
+                Paragraph::new(no_text)
+                    .style(no_style)
+                    .alignment(ratatui::layout::Alignment::Center)
+                    .render(no_area, buf);
+            }
         }
     }
 }

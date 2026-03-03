@@ -17,5 +17,9 @@ lc.config {
       'himalaya',
       config = function() require('himalaya').setup() end,
     },
+    {
+      'test-confirm',
+      config = function() require('test-confirm').setup() end,
+    },
   },
 }
