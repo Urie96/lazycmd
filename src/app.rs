@@ -29,7 +29,7 @@ pub struct App {
 
 impl App {
     pub fn new(event_sender: mpsc::UnboundedSender<Event>, term: Term, plugin_name: Option<String>) -> Self {
-        let mut state = State::default();
+        let mut state = State::new();
         if let Some(name) = plugin_name {
             state.current_plugin = name;
         }
@@ -364,8 +364,16 @@ impl StatefulWidget for AppWidget {
         let [list_area, _divider_area, preview_area] =
             Layout::horizontal([Percentage(50), Length(1), Fill(1)]).areas(main_inner);
 
+        // Update list height for scroll offset calculation before rendering
+        if state.current_page.is_some() {
+            state.set_list_height(list_area.height);
+        }
+
+        let scrolloff = state.scrolloff();
+
         if let Some(page) = &mut state.current_page {
-            ListWidget.render(list_area, buf, page);
+            let list_widget = ListWidget { scrolloff };
+            list_widget.render(list_area, buf, page);
         } else {
             Paragraph::new("loading...").render(list_area, buf);
         }

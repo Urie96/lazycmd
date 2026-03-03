@@ -67,6 +67,20 @@ pub struct State {
     pub current_plugin: String,
     /// Confirm dialog state (shown on top of all UI)
     pub confirm_dialog: Option<ConfirmDialog>,
+    /// Height of the list widget area (number of visible rows)
+    list_height: Option<u16>,
+    /// Minimum lines to keep between cursor and edge (like vim's scrolloff)
+    scrolloff: usize,
+}
+
+impl State {
+    /// Create a new State with default values
+    pub fn new() -> Self {
+        Self {
+            scrolloff: 5, // Keep 5 lines between cursor and edge
+            ..Default::default()
+        }
+    }
 }
 
 impl State {
@@ -181,19 +195,16 @@ impl State {
     }
 
     pub fn scroll_by(&mut self, amount: i16) {
-        let page = self.current_page.as_mut().unwrap();
-        if !page.list.is_empty() && page.list_state.selected().is_none() {
-            page.list_state.select(Some(0));
-        }
         if let Some(page) = &mut self.current_page {
-            let len = page.list.len();
-            if len == 0 {
+            if page.filtered_list.is_empty() {
                 return;
             }
 
+            let len = page.filtered_list.len();
             let current = page.list_state.selected().unwrap_or(0);
+
+            // Calculate new selected index
             let new = if amount > 0 {
-                // Calculate the target position
                 let target = current.saturating_add(amount as usize);
                 // Only wrap if single-step scroll and at the last entry
                 if amount == 1 && current == len - 1 {
@@ -202,7 +213,6 @@ impl State {
                     target.min(len - 1)
                 }
             } else {
-                // Calculate the target position
                 let target = current.saturating_sub(amount.unsigned_abs() as usize);
                 // Only wrap if single-step scroll and at the first entry
                 if amount == -1 && current == 0 {
@@ -212,6 +222,8 @@ impl State {
                 }
             };
 
+            // Set the new selection
+            // Offset will be adjusted by ListWidget::render based on scrolloff
             page.list_state.select(Some(new));
         }
     }
@@ -257,5 +269,15 @@ impl State {
     /// Get the current selected button
     pub fn get_selected_button(&self) -> Option<ConfirmButton> {
         self.confirm_dialog.as_ref().map(|d| d.selected_button)
+    }
+
+    /// Set the list widget height for scroll offset calculation
+    pub fn set_list_height(&mut self, height: u16) {
+        self.list_height = Some(height);
+    }
+
+    /// Get the current scrolloff value
+    pub fn scrolloff(&self) -> usize {
+        self.scrolloff
     }
 }
