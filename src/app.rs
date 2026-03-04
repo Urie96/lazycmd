@@ -356,6 +356,7 @@ impl App {
             }
             "exit_filter_mode" => {
                 input_handler::exit_filter_mode(&mut self.state, false);
+                input_handler::apply_filter(&mut self.state)?;
                 self.state.current_preview.take();
                 self.call_preview()?;
                 self.dirty = true; // Redraw to clear filter input

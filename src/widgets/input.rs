@@ -81,14 +81,20 @@ impl StatefulWidget for InputWidget {
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         let prompt = " ";
-        let display = format!("{}{}", prompt, state.text);
+
+        // Create text with different colors for prompt and user input
+        let text = Text::from(Line::from(vec![
+            Span::styled(prompt, Style::default().fg(Color::Yellow)),
+            Span::styled(state.text.as_str(), Style::default().fg(Color::White)),
+        ]));
 
         // Create paragraph for the input
-        let paragraph = Paragraph::new(display.as_str())
-            .style(Style::default().fg(Color::Yellow))
+        let paragraph = Paragraph::new(text)
             .block(
                 Block::bordered()
                     .border_type(BorderType::Rounded)
+                    .border_style(Style::default().fg(Color::Yellow))
+                    .title_alignment(Alignment::Center)
                     .title("Filter"),
             );
 

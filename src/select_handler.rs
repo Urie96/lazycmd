@@ -23,16 +23,57 @@ pub fn handle_select_dialog_key(
     };
 
     match key.code {
-        // Special navigation keys (must come before generic Char)
-        KeyCode::Up | KeyCode::Char('k') => {
+        // Special navigation keys
+        KeyCode::Up => {
             dialog.move_selection(-1);
             Ok(true)
         }
-        KeyCode::Down | KeyCode::Char('j') => {
+        KeyCode::Down => {
             dialog.move_selection(1);
             Ok(true)
         }
-        // Character input: update filter
+        // Home: move cursor to start
+        KeyCode::Home => {
+            dialog.cursor_to_start();
+            Ok(true)
+        }
+        // End: move cursor to end
+        KeyCode::End => {
+            dialog.cursor_to_end();
+            Ok(true)
+        }
+        // Left: move cursor left
+        KeyCode::Left => {
+            dialog.cursor_left();
+            Ok(true)
+        }
+        // Right: move cursor right
+        KeyCode::Right => {
+            dialog.cursor_right();
+            Ok(true)
+        }
+        // Delete: delete character at cursor
+        KeyCode::Delete => {
+            dialog.delete_at_cursor();
+            dialog.update_filtered_options();
+            Ok(true)
+        }
+        // Ctrl-A: move cursor to start
+        KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            dialog.cursor_to_start();
+            Ok(true)
+        }
+        // Ctrl-E: move cursor to end
+        KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            dialog.cursor_to_end();
+            Ok(true)
+        }
+        // Ctrl-U: delete all characters before cursor
+        KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            dialog.delete_before_cursor_all();
+            Ok(true)
+        }
+        // Character input: insert at cursor position
         KeyCode::Char(c) => {
             // For keys with modifiers (except SHIFT), let keymap handle them
             if key.modifiers.contains(KeyModifiers::CONTROL)
@@ -40,15 +81,13 @@ pub fn handle_select_dialog_key(
             {
                 return Ok(false);
             }
-            dialog.filter_input.push(c);
-            dialog.cursor_position = dialog.filter_input.len();
+            dialog.insert_char(c);
             dialog.update_filtered_options();
             Ok(true)
         }
-        // Backspace: remove last character from filter
+        // Backspace: delete character before cursor
         KeyCode::Backspace => {
-            dialog.filter_input.pop();
-            dialog.cursor_position = dialog.filter_input.len();
+            dialog.delete_before_cursor();
             dialog.update_filtered_options();
             Ok(true)
         }
@@ -60,16 +99,6 @@ pub fn handle_select_dialog_key(
         // Page Down: move selection down by page
         KeyCode::PageDown => {
             dialog.move_selection(5);
-            Ok(true)
-        }
-        // Home: select first option
-        KeyCode::Home => {
-            dialog.select_first();
-            Ok(true)
-        }
-        // End: select last option
-        KeyCode::End => {
-            dialog.select_last();
             Ok(true)
         }
         // Enter: select current option and call callback

@@ -12,14 +12,30 @@ pub fn handle_input_mode_key(state: &mut State, key: KeyEvent) -> Result<bool> {
         return Ok(false);
     }
 
-    // For keys with modifiers (except SHIFT), let keymap handle them
-    if key.modifiers.contains(KeyModifiers::CONTROL)
-        || key.modifiers.contains(KeyModifiers::ALT)
-    {
-        return Ok(false);
-    }
-
     match key.code {
+        // Ctrl-A: move cursor to start
+        KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            state.input_cursor_position = 0;
+            Ok(true)
+        }
+        // Ctrl-E: move cursor to end
+        KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            state.input_cursor_position = state.filter_input.len();
+            Ok(true)
+        }
+        // Ctrl-U: delete all characters before cursor
+        KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            if state.input_cursor_position > 0 {
+                state.filter_input = state.filter_input[state.input_cursor_position..].to_string();
+                state.input_cursor_position = 0;
+            }
+            Ok(true)
+        }
+        // For keys with modifiers (except SHIFT), let keymap handle them
+        _ if key.modifiers.contains(KeyModifiers::CONTROL)
+            || key.modifiers.contains(KeyModifiers::ALT) => {
+            Ok(false)
+        }
         KeyCode::Char(c) => {
             // Insert character at cursor position
             state

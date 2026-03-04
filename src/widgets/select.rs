@@ -50,10 +50,11 @@ impl StatefulWidget for SelectWidget {
 
         // Render filter input
         let prompt = " ";
-        let filter_text = format!("{}{}", prompt, state.filter_input);
-        Paragraph::new(filter_text)
-            .style(Style::default().fg(Color::Yellow))
-            .render(input_area, buf);
+        let filter_text = Text::from(Line::from(vec![
+            Span::styled(prompt, Style::default().fg(Color::Cyan)),
+            Span::styled(state.filter_input.as_str(), Style::default().fg(Color::White)),
+        ]));
+        Paragraph::new(filter_text).render(input_area, buf);
 
         // Calculate and store cursor position
         // Use unicode width for proper cursor positioning with Unicode characters

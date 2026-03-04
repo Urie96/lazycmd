@@ -165,6 +165,56 @@ impl SelectDialog {
             self.list_state.select(Some(count - 1));
         }
     }
+
+    /// Move cursor to start of input
+    pub fn cursor_to_start(&mut self) {
+        self.cursor_position = 0;
+    }
+
+    /// Move cursor to end of input
+    pub fn cursor_to_end(&mut self) {
+        self.cursor_position = self.filter_input.len();
+    }
+
+    /// Move cursor left
+    pub fn cursor_left(&mut self) {
+        self.cursor_position = self.cursor_position.saturating_sub(1);
+    }
+
+    /// Move cursor right
+    pub fn cursor_right(&mut self) {
+        self.cursor_position = self.cursor_position.saturating_add(1).min(self.filter_input.len());
+    }
+
+    /// Insert character at cursor position
+    pub fn insert_char(&mut self, c: char) {
+        self.filter_input.insert(self.cursor_position, c);
+        self.cursor_position += 1;
+    }
+
+    /// Delete character before cursor (backspace)
+    pub fn delete_before_cursor(&mut self) {
+        if self.cursor_position > 0 {
+            self.filter_input.remove(self.cursor_position - 1);
+            self.cursor_position -= 1;
+        }
+    }
+
+    /// Delete character at cursor (delete)
+    pub fn delete_at_cursor(&mut self) {
+        if self.cursor_position < self.filter_input.len() {
+            self.filter_input.remove(self.cursor_position);
+        }
+    }
+
+    /// Delete all characters before cursor (ctrl-u)
+    pub fn delete_before_cursor_all(&mut self) {
+        if self.cursor_position > 0 {
+            self.filter_input = self.filter_input[self.cursor_position..].to_string();
+            self.cursor_position = 0;
+            self.update_filtered_options();
+        }
+    }
 }
 
 impl ConfirmButton {
