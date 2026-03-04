@@ -176,27 +176,51 @@ impl SelectDialog {
         self.cursor_position = self.filter_input.len();
     }
 
-    /// Move cursor left
+    /// Move cursor left by one character (not byte)
     pub fn cursor_left(&mut self) {
-        self.cursor_position = self.cursor_position.saturating_sub(1);
+        if self.cursor_position > 0 {
+            // Find the previous character boundary
+            let prev_pos = self.filter_input[..self.cursor_position]
+                .char_indices()
+                .rev()
+                .nth(1)
+                .map(|(idx, _)| idx)
+                .unwrap_or(0);
+            self.cursor_position = prev_pos;
+        }
     }
 
-    /// Move cursor right
+    /// Move cursor right by one character (not byte)
     pub fn cursor_right(&mut self) {
-        self.cursor_position = self.cursor_position.saturating_add(1).min(self.filter_input.len());
+        if self.cursor_position < self.filter_input.len() {
+            // Find the next character boundary
+            let next_pos = self.filter_input[self.cursor_position..]
+                .char_indices()
+                .nth(1)
+                .map(|(idx, _)| self.cursor_position + idx)
+                .unwrap_or(self.filter_input.len());
+            self.cursor_position = next_pos;
+        }
     }
 
     /// Insert character at cursor position
     pub fn insert_char(&mut self, c: char) {
         self.filter_input.insert(self.cursor_position, c);
-        self.cursor_position += 1;
+        self.cursor_position += c.len_utf8();
     }
 
     /// Delete character before cursor (backspace)
     pub fn delete_before_cursor(&mut self) {
         if self.cursor_position > 0 {
-            self.filter_input.remove(self.cursor_position - 1);
-            self.cursor_position -= 1;
+            // Find the start of the character before cursor
+            let char_start = self.filter_input[..self.cursor_position]
+                .char_indices()
+                .rev()
+                .nth(0)
+                .map(|(idx, _)| idx)
+                .unwrap_or(0);
+            self.filter_input.remove(char_start);
+            self.cursor_position = char_start;
         }
     }
 
