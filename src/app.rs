@@ -1,5 +1,7 @@
 use anyhow::{bail, Context, Result};
+use crossterm::cursor::{MoveTo, SetCursorStyle, Show, Hide};
 use crossterm::event::Event as CrosstermEvent;
+use crossterm::execute;
 
 use mlua::prelude::*;
 use ratatui::{
@@ -49,9 +51,45 @@ impl App {
         }
     }
 
+    /// Get cursor information (position and style) based on current mode
+    fn get_cursor_info(&self) -> Option<(u16, u16, SetCursorStyle)> {
+        // Check if select dialog is open (takes priority over filter mode)
+        if let Some(dialog) = &self.state.select_dialog {
+            return Some((
+                dialog.cursor_x,
+                dialog.cursor_y,
+                SetCursorStyle::SteadyBar,
+            ));
+        }
+
+        match self.state.current_mode {
+            crate::Mode::Input => Some((
+                self.state.filter_cursor_x,
+                self.state.filter_cursor_y,
+                SetCursorStyle::SteadyBar,
+            )),
+            crate::Mode::Main => None,
+        }
+    }
+
+    /// Set cursor after rendering (called by scopeguard)
+    fn routine<B: std::io::Write>(backend: &mut B, cursor_info: Option<(u16, u16, SetCursorStyle)>) {
+        if let Some((x, y, style)) = cursor_info {
+            let _ = execute!(backend, style, MoveTo(x, y), Show);
+        } else {
+            let _ = execute!(backend, Hide);
+        }
+        let _ = backend.flush();
+    }
+
     /// Runs the main loop of the application, handling events and actions
     pub async fn run(&mut self, mut events: Events) -> Result<()> {
         self.event_sender.send(Event::Enter(Vec::new())).unwrap();
+
+        // Initially hide cursor (Main mode)
+        execute!(self.term.backend_mut(), Hide)?;
+        std::io::Write::flush(self.term.backend_mut())?;
+
         loop {
             if let Some(e) = events.next().await {
                 self.handle_event(e)?;
@@ -59,10 +97,23 @@ impl App {
             if self.quitting {
                 break;
             }
+
             if self.dirty {
+                // Hide cursor during rendering
+                execute!(self.term.backend_mut(), Hide)?;
+
+                // Render
                 self.term.draw(|frame| {
                     frame.render_stateful_widget(AppWidget, frame.area(), &mut self.state);
                 })?;
+
+                // Get cursor info after rendering (uses updated filter_cursor_x/y)
+                let cursor_info = self.get_cursor_info();
+
+                // Restore cursor state after draw (like yazi)
+                Self::routine(self.term.backend_mut(), cursor_info);
+
+                self.dirty = false;
             }
         }
         Ok(())
@@ -301,16 +352,19 @@ impl App {
             }
             "enter_filter_mode" => {
                 input_handler::enter_filter_mode(&mut self.state);
+                self.dirty = true;
             }
             "exit_filter_mode" => {
                 input_handler::exit_filter_mode(&mut self.state, false);
                 self.state.current_preview.take();
                 self.call_preview()?;
+                self.dirty = true; // Redraw to clear filter input
             }
             "accept_filter" => {
                 input_handler::exit_filter_mode(&mut self.state, true);
                 self.state.current_preview.take();
                 self.call_preview()?;
+                self.dirty = true; // Redraw to clear filter input
             }
             "filter_backspace" => {
                 input_handler::handle_filter_backspace(&mut self.state);
@@ -451,6 +505,10 @@ impl StatefulWidget for AppWidget {
             let mut input_state = crate::InputState::from_str(&state.filter_input);
             input_state.cursor_position = state.input_cursor_position;
             InputWidget.render(input_area, buf, &mut input_state);
+
+            // Store cursor position for use in app.rs after draw completes
+            state.filter_cursor_x = input_state.cursor_x;
+            state.filter_cursor_y = input_state.cursor_y;
         }
 
         // Draw notification in bottom-right corner

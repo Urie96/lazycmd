@@ -41,12 +41,14 @@ pub fn handle_select_dialog_key(
                 return Ok(false);
             }
             dialog.filter_input.push(c);
+            dialog.cursor_position = dialog.filter_input.len();
             dialog.update_filtered_options();
             Ok(true)
         }
         // Backspace: remove last character from filter
         KeyCode::Backspace => {
             dialog.filter_input.pop();
+            dialog.cursor_position = dialog.filter_input.len();
             dialog.update_filtered_options();
             Ok(true)
         }

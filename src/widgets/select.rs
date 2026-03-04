@@ -1,4 +1,5 @@
 use ratatui::{prelude::*, widgets::*};
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::SelectDialog;
 
@@ -21,7 +22,11 @@ impl StatefulWidget for SelectWidget {
         let block = Block::bordered()
             .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(Color::Cyan))
-            .title_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD));
+            .title_style(
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            );
 
         // Add title
         let block = if let Some(title) = &state.prompt {
@@ -40,18 +45,28 @@ impl StatefulWidget for SelectWidget {
         let divider_height = 1u16;
         let _list_height = inner.height.saturating_sub(input_height + divider_height);
 
-        let [input_area, divider_area, list_area] = Layout::vertical([
-            Length(input_height),
-            Length(divider_height),
-            Min(0),
-        ])
-        .areas(inner);
+        let [input_area, divider_area, list_area] =
+            Layout::vertical([Length(input_height), Length(divider_height), Min(0)]).areas(inner);
 
-        // Render filter input (custom simple input)
-        let filter_text = format!("> {}", state.filter_input);
+        // Render filter input
+        let prompt = " ";
+        let filter_text = format!("{}{}", prompt, state.filter_input);
         Paragraph::new(filter_text)
             .style(Style::default().fg(Color::Yellow))
             .render(input_area, buf);
+
+        // Calculate and store cursor position
+        // Use unicode width for proper cursor positioning with Unicode characters
+        let prompt_width = prompt.width() as u16;
+        let cursor_char_width: u16 = state.filter_input
+            .chars()
+            .take(state.cursor_position)
+            .map(|c| c.width().unwrap_or(0) as u16)
+            .sum();
+        let cursor_x = input_area.x + prompt_width + cursor_char_width;
+        let cursor_y = input_area.y;
+        state.cursor_x = cursor_x;
+        state.cursor_y = cursor_y;
 
         // Draw divider line
         for x in divider_area.left()..divider_area.right() {

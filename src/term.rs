@@ -11,7 +11,7 @@ pub fn init() -> Result<Term> {
     execute!(stdout(), EnterAlternateScreen)?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     terminal.clear()?;
-    terminal.hide_cursor()?;
+    // Don't hide cursor globally - let app control it based on mode
     Ok(terminal)
 }
 

@@ -35,6 +35,12 @@ pub struct SelectDialog {
     pub selected_index: Option<usize>,
     /// Current filter input text
     pub filter_input: String,
+    /// Cursor position in the filter input
+    pub cursor_position: usize,
+    /// Cursor x position (for terminal cursor display)
+    pub cursor_x: u16,
+    /// Cursor y position (for terminal cursor display)
+    pub cursor_y: u16,
     /// List state for rendering and scrolling
     pub list_state: ListState,
     /// Callback function when selection is made (or canceled with nil)
@@ -56,6 +62,9 @@ impl SelectDialog {
             filtered_options: Vec::new(),
             selected_index: Some(0),
             filter_input: String::new(),
+            cursor_position: 0,
+            cursor_x: 0,
+            cursor_y: 0,
             list_state,
             on_selection,
         };
@@ -205,6 +214,10 @@ pub struct State {
     pub notification: Option<(String, Instant)>,
     pub filter_input: String,
     pub input_cursor_position: usize,
+    /// Filter cursor position (for terminal cursor display)
+    pub filter_cursor_x: u16,
+    /// Filter cursor position (for terminal cursor display)
+    pub filter_cursor_y: u16,
     /// Cache for pages to preserve cursor position, entries and filter when navigating back
     page_cache: HashMap<Vec<String>, Page>,
     /// Hooks to call before reload command

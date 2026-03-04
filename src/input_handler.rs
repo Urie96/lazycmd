@@ -1,5 +1,6 @@
 use anyhow::Result;
 use crossterm::event::{KeyEvent, KeyEventKind, KeyCode, KeyModifiers};
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::State;
 
@@ -78,6 +79,23 @@ pub fn enter_filter_mode(state: &mut State) {
         state.input_cursor_position = state.filter_input.len();
     }
     state.last_key_event_buffer.clear();
+
+    // Initialize cursor position (will be updated during render)
+    // Default position: after prompt, inside the bordered input box
+    // Input box is 50 wide, horizontally centered, at y=5
+    // Content area starts at x + 1, y + 1
+    // For now, set a reasonable default that will be updated on first render
+    const INPUT_WIDTH: u16 = 50;
+    const PROMPT: &str = "/> ";
+    let x = (80u16.saturating_sub(INPUT_WIDTH)) / 2; // Assuming typical terminal width 80
+    let prompt_width = PROMPT.width() as u16;
+    let cursor_char_width: u16 = state.filter_input
+        .chars()
+        .take(state.input_cursor_position)
+        .map(|c| c.width().unwrap_or(0) as u16)
+        .sum();
+    state.filter_cursor_x = x + 1 + prompt_width + cursor_char_width; // x + border(1) + prompt_width + cursor_char_width
+    state.filter_cursor_y = 5 + 1; // y + border(1)
 }
 
 /// Exit filter mode

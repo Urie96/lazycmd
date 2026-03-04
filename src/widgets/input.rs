@@ -1,9 +1,12 @@
 use ratatui::{prelude::*, widgets::*};
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 /// Current input state
 pub struct InputState {
     pub text: String,
     pub cursor_position: usize,
+    pub cursor_x: u16,
+    pub cursor_y: u16,
 }
 
 impl InputState {
@@ -11,6 +14,8 @@ impl InputState {
         Self {
             text: String::new(),
             cursor_position: 0,
+            cursor_x: 0,
+            cursor_y: 0,
         }
     }
 
@@ -18,6 +23,8 @@ impl InputState {
         Self {
             text: s.to_string(),
             cursor_position: s.len(),
+            cursor_x: 0,
+            cursor_y: 0,
         }
     }
 
@@ -73,27 +80,39 @@ impl StatefulWidget for InputWidget {
     type State = InputState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        let prompt = "/> ";
+        let prompt = " ";
         let display = format!("{}{}", prompt, state.text);
 
         // Create paragraph for the input
         let paragraph = Paragraph::new(display.as_str())
             .style(Style::default().fg(Color::Yellow))
-            .block(Block::bordered().border_type(BorderType::Rounded).title("Filter"));
+            .block(
+                Block::bordered()
+                    .border_type(BorderType::Rounded)
+                    .title("Filter"),
+            );
 
         paragraph.render(area, buf);
 
-        // Calculate cursor position (cursor should appear after the character at cursor_position)
-        let prompt_width = prompt.len() as u16;
-        // Position cursor after the character (so it's on the right side of the character at cursor_position)
-        let cursor_x = area.x + prompt_width + state.cursor_position as u16 + 1;
+        // Calculate cursor position
+        // Block has borders, so content starts at area.x + 1, area.y + 1
+        // Prompt is rendered at area.x + 1
+        // Cursor should appear after the character at cursor_position in the text
+        // Use unicode width for proper cursor positioning with Unicode characters
+        let prompt_width = prompt.width() as u16;
+        let cursor_char_width: u16 = state.text
+            .chars()
+            .take(state.cursor_position)
+            .map(|c| c.width().unwrap_or(0) as u16)
+            .sum();
+        let cursor_x = area.x + 1 + prompt_width + cursor_char_width;
         let cursor_y = area.y + 1; // Inside the bordered area
 
-        // Ensure cursor is within bounds and set cursor style
-        if cursor_x >= area.x && cursor_x < area.right() && cursor_y >= area.y && cursor_y < area.bottom() {
-            if let Some(cell) = buf.cell_mut((cursor_x, cursor_y)) {
-                cell.set_style(Style::default().bg(Color::White));
-            }
-        }
+        // Store cursor position for use by app.rs
+        state.cursor_x = cursor_x;
+        state.cursor_y = cursor_y;
+
+        // Note: Cursor positioning is done in app.rs after draw() completes
+        // to avoid conflicts with ratatui's rendering
     }
 }
