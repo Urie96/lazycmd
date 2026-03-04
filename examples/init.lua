@@ -18,8 +18,8 @@ lc.config {
       config = function() require('himalaya').setup() end,
     },
     {
-      'test-confirm',
-      config = function() require('test-confirm').setup() end,
+      'systemd',
+      config = function() require('systemd').setup() end,
     },
   },
 }

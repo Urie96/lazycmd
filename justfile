@@ -1,2 +1,2 @@
 run:
-    cargo run -- himalaya
+    cargo run -- systemd

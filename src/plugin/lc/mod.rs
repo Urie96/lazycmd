@@ -131,26 +131,105 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
     // Add open function
     system_tbl.set("open", open_fn)?;
 
-    // Add __call metamethod to support lc.system(cmd, callback) syntax
+    // Add __call metamethod to support lc.system(cmd, callback) and lc.system(cmd, opts, callback) syntax
     system_tbl.set_metatable(Some({
         let mt = lua.create_table()?;
         mt.set(
             "__call",
             lua.create_function(
-                |lua, (_, cmd, on_exit): (LuaValue, Vec<String>, LuaFunction)| {
+                |lua, (_, cmd, opts_or_cb, maybe_cb): (LuaValue, Vec<String>, LuaValue, LuaValue)| {
                     if cmd.is_empty() {
                         return Err(LuaError::RuntimeError(
                             "Command cannot be empty".to_string(),
                         ));
                     }
+
+                    // Parse arguments: lc.system(cmd, callback) or lc.system(cmd, opts, callback)
+                    let (options_table, callback) = match (opts_or_cb, maybe_cb) {
+                        (LuaValue::Function(cb), _) => {
+                            // lc.system(cmd, callback)
+                            (None, cb)
+                        }
+                        (LuaValue::Table(opts), LuaValue::Function(cb)) => {
+                            // lc.system(cmd, opts, callback)
+                            (Some(opts), cb)
+                        }
+                        (LuaValue::Table(_), LuaValue::Nil) => {
+                            // lc.system(cmd, opts) - missing callback
+                            return Err(LuaError::RuntimeError(
+                                "Callback function is required when providing options".to_string(),
+                            ));
+                        }
+                        _ => {
+                            return Err(LuaError::RuntimeError(
+                                "Invalid arguments: expected lc.system(cmd, callback) or lc.system(cmd, opts, callback)".to_string(),
+                            ));
+                        }
+                    };
+
+                    // Parse options table
+                    let mut stdin_data: Option<String> = None;
+                    let mut env_vars: Vec<(String, String)> = Vec::new();
+
+                    if let Some(ref opts) = options_table {
+                        // Get stdin
+                        if let Ok(stdin) = opts.get::<Option<String>>("stdin") {
+                            stdin_data = stdin;
+                        }
+
+                        // Get env
+                        if let Ok(env_table) = opts.get::<LuaTable>("env") {
+                            for pair in env_table.pairs::<String, String>() {
+                                let (k, v) = pair?;
+                                env_vars.push((k, v));
+                            }
+                        }
+                    }
+
                     let sender = plugin::clone_sender(lua)?;
 
                     tokio::task::spawn_local(async move {
                         let mut it = cmd.into_iter();
-
                         let command = it.next().unwrap();
+                        let args: Vec<String> = it.collect();
 
-                        let output = Command::new(&command).args(it).output().await;
+                        let mut cmd_builder = Command::new(&command);
+                        cmd_builder.args(&args);
+
+                        // Set environment variables
+                        for (k, v) in env_vars {
+                            cmd_builder.env(&k, &v);
+                        }
+
+                        // Execute with or without stdin
+                        let output = if let Some(stdin) = stdin_data {
+                            // Spawn process with piped stdin
+                            match cmd_builder
+                                .stdin(std::process::Stdio::piped())
+                                .stdout(std::process::Stdio::piped())
+                                .stderr(std::process::Stdio::piped())
+                                .spawn()
+                            {
+                                Ok(mut child) => {
+                                    // Write to stdin if available
+                                    let result = if let Some(mut stdin_handle) = child.stdin.take() {
+                                        match tokio::io::AsyncWriteExt::write_all(&mut stdin_handle, stdin.as_bytes()).await {
+                                            Ok(_) => {
+                                                drop(stdin_handle);
+                                                child.wait_with_output().await
+                                            }
+                                            Err(e) => Err(e),
+                                        }
+                                    } else {
+                                        child.wait_with_output().await
+                                    };
+                                    result
+                                }
+                                Err(e) => Err(e),
+                            }
+                        } else {
+                            cmd_builder.output().await
+                        };
 
                         let _ = sender.send(Event::LuaCallback(Box::new(move |lua| {
                             let out = match output {
@@ -173,7 +252,7 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
                                 }
                             };
                             let out = out?;
-                            on_exit.call(out)
+                            callback.call(out)
                         })));
                     });
 
@@ -271,27 +350,29 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
         .into_lua(lua)?;
 
     // lc.confirm: show a confirmation dialog
-    let confirm_fn = lua.create_function(
-        |lua, opts: LuaTable| -> mlua::Result<()> {
-            // title is optional, defaults to "Confirm"
-            let title: Option<String> = opts.get("title").ok();
-            let title = title.or_else(|| Some("Confirm".to_string()));
-            let prompt: String = opts.get("prompt")?;
-            let on_confirm: LuaFunction = opts.get("on_confirm")?;
-            let on_cancel: LuaFunction = opts.get("on_cancel")?;
-            plugin::send_event(lua, Event::ShowConfirm {
+    let confirm_fn = lua.create_function(|lua, opts: LuaTable| -> mlua::Result<()> {
+        // title is optional, defaults to "Confirm"
+        let title: Option<String> = opts.get("title").ok();
+        let title = title.or_else(|| Some("Confirm".to_string()));
+        let prompt: String = opts.get("prompt")?;
+        let on_confirm: LuaFunction = opts.get("on_confirm")?;
+        let on_cancel: LuaFunction = opts.get("on_cancel")?;
+        plugin::send_event(
+            lua,
+            Event::ShowConfirm {
                 title,
                 prompt,
                 on_confirm,
                 on_cancel,
-            })?;
-            Ok(())
-        },
-    )?;
+            },
+        )?;
+        Ok(())
+    })?;
 
     style::inject_string_meta_method(lua)?;
 
-    let style_tbl = lua.create_table_from([("line", style::line(lua)?), ("text", style::text(lua)?)])?;
+    let style_tbl =
+        lua.create_table_from([("line", style::line(lua)?), ("text", style::text(lua)?)])?;
 
     let lc = lua.create_table_from([
         ("defer_fn", defer_fn),

@@ -282,14 +282,20 @@ lc.time = time
 ---@field stdout string Standard output
 ---@field stderr string Standard error
 
+---@class SystemOptions
+---@field stdin string? Optional standard input to provide to the command
+---@field env table<string, string>? Optional environment variables to set for the command
+
 ---@class lc.system
 local system = {}
 
 ---Execute an external command asynchronously
----Usage: lc.system({"cmd", "arg1", "arg2"}, callback)
+---Usage 1: lc.system({"cmd", "arg1", "arg2"}, callback)
+---Usage 2: lc.system({"cmd", "arg1", "arg2"}, {stdin = "input", env = {VAR = "value"}}, callback)
 ---@param cmd string[] The command and its arguments
----@param callback fun(output: CommandOutput) Callback function called on completion
-function system(cmd, callback) end
+---@param opts_or_callback SystemOptions|fun(output: CommandOutput) Either options table or callback function
+---@param callback fun(output: CommandOutput)? Callback function called on completion (required if opts provided)
+function system(cmd, opts_or_callback, callback) end
 
 ---Check if a command is executable (synchronous)
 ---@param cmd string The command name to check
