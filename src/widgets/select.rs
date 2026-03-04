@@ -40,14 +40,13 @@ impl StatefulWidget for SelectWidget {
         let inner = block.inner(dialog_area);
         block.render(dialog_area, buf);
 
-        // Split inner area into: filter input (1 row) + divider (1 row) + options list (remaining - 1 for help) + help (1 row)
+        // Split inner area into: filter input (1 row) + divider (1 row) + options list (remaining)
         let input_height = 1u16;
         let divider_height = 1u16;
-        let help_height = 1u16;
-        let _list_height = inner.height.saturating_sub(input_height + divider_height + help_height);
+        let _list_height = inner.height.saturating_sub(input_height + divider_height);
 
-        let [input_area, divider_area, list_area, help_area] =
-            Layout::vertical([Length(input_height), Length(divider_height), Min(0), Length(help_height)]).areas(inner);
+        let [input_area, divider_area, list_area] =
+            Layout::vertical([Length(input_height), Length(divider_height), Min(0)]).areas(inner);
 
         // Render filter input
         let prompt = " ";
@@ -175,12 +174,5 @@ impl StatefulWidget for SelectWidget {
                 }
             }
         }
-
-        // Render help text at bottom (inside dialog)
-        let help_text = "↑↓: Move | Enter: Select | Esc: Cancel";
-        Paragraph::new(help_text)
-            .style(Style::default().fg(Color::DarkGray))
-            .alignment(Alignment::Center)
-            .render(help_area, buf);
     }
 }
