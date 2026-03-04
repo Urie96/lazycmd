@@ -41,15 +41,22 @@ pub fn handle_input_mode_key(state: &mut State, key: KeyEvent) -> Result<bool> {
             state
                 .filter_input
                 .insert(state.input_cursor_position, c);
-            state.input_cursor_position += 1;
+            state.input_cursor_position += c.len_utf8();
             Ok(true)
         }
         KeyCode::Backspace => {
             if state.input_cursor_position > 0 {
+                // Find the start of the character before cursor
+                let char_start = state.filter_input[..state.input_cursor_position]
+                    .char_indices()
+                    .rev()
+                    .nth(0)
+                    .map(|(idx, _)| idx)
+                    .unwrap_or(0);
                 state
                     .filter_input
-                    .remove(state.input_cursor_position - 1);
-                state.input_cursor_position -= 1;
+                    .remove(char_start);
+                state.input_cursor_position = char_start;
             }
             Ok(true)
         }
@@ -62,15 +69,28 @@ pub fn handle_input_mode_key(state: &mut State, key: KeyEvent) -> Result<bool> {
             Ok(true)
         }
         KeyCode::Left => {
-            state.input_cursor_position =
-                state.input_cursor_position.saturating_sub(1);
+            if state.input_cursor_position > 0 {
+                // Find previous character boundary
+                let prev_pos = state.filter_input[..state.input_cursor_position]
+                    .char_indices()
+                    .rev()
+                    .nth(1)
+                    .map(|(idx, _)| idx)
+                    .unwrap_or(0);
+                state.input_cursor_position = prev_pos;
+            }
             Ok(true)
         }
         KeyCode::Right => {
-            state.input_cursor_position = state
-                .input_cursor_position
-                .saturating_add(1)
-                .min(state.filter_input.len());
+            if state.input_cursor_position < state.filter_input.len() {
+                // Find next character boundary
+                let next_pos = state.filter_input[state.input_cursor_position..]
+                    .char_indices()
+                    .nth(1)
+                    .map(|(idx, _)| state.input_cursor_position + idx)
+                    .unwrap_or(state.filter_input.len());
+                state.input_cursor_position = next_pos;
+            }
             Ok(true)
         }
         KeyCode::Home => {
@@ -127,10 +147,17 @@ pub fn exit_filter_mode(state: &mut State, keep_filter: bool) {
 /// Handle backspace in filter mode
 pub fn handle_filter_backspace(state: &mut State) {
     if state.input_cursor_position > 0 {
+        // Find the start of the character before cursor
+        let char_start = state.filter_input[..state.input_cursor_position]
+            .char_indices()
+            .rev()
+            .nth(0)
+            .map(|(idx, _)| idx)
+            .unwrap_or(0);
         state
             .filter_input
-            .remove(state.input_cursor_position - 1);
-        state.input_cursor_position -= 1;
+            .remove(char_start);
+        state.input_cursor_position = char_start;
     }
 }
 
