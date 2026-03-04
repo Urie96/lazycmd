@@ -183,7 +183,7 @@ impl SelectDialog {
             let prev_pos = self.filter_input[..self.cursor_position]
                 .char_indices()
                 .rev()
-                .nth(1)
+                .nth(0)
                 .map(|(idx, _)| idx)
                 .unwrap_or(0);
             self.cursor_position = prev_pos;
@@ -193,7 +193,7 @@ impl SelectDialog {
     /// Move cursor right by one character (not byte)
     pub fn cursor_right(&mut self) {
         if self.cursor_position < self.filter_input.len() {
-            // Find the next character boundary
+            // Find the next character boundary (skip the character at current position)
             let next_pos = self.filter_input[self.cursor_position..]
                 .char_indices()
                 .nth(1)

@@ -74,7 +74,7 @@ pub fn handle_input_mode_key(state: &mut State, key: KeyEvent) -> Result<bool> {
                 let prev_pos = state.filter_input[..state.input_cursor_position]
                     .char_indices()
                     .rev()
-                    .nth(1)
+                    .nth(0)
                     .map(|(idx, _)| idx)
                     .unwrap_or(0);
                 state.input_cursor_position = prev_pos;
@@ -83,7 +83,7 @@ pub fn handle_input_mode_key(state: &mut State, key: KeyEvent) -> Result<bool> {
         }
         KeyCode::Right => {
             if state.input_cursor_position < state.filter_input.len() {
-                // Find next character boundary
+                // Find next character boundary (skip the character at current position)
                 let next_pos = state.filter_input[state.input_cursor_position..]
                     .char_indices()
                     .nth(1)
