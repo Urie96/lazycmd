@@ -1,16 +1,17 @@
 use mlua::prelude::*;
 use ratatui::style::Color;
+use ratatui::text::{Line, Span, Text};
 use std::str::FromStr;
 
 type AnyUserData = LuaAnyUserData;
 
-pub struct Text(pub ratatui::text::Text<'static>);
+pub struct LuaText(pub Text<'static>);
 
-pub struct Line(pub ratatui::text::Line<'static>);
+pub struct LuaLine(pub Line<'static>);
 
-pub struct Span(pub ratatui::text::Span<'static>);
+pub struct LuaSpan(pub Span<'static>);
 
-impl LuaUserData for Span {
+impl LuaUserData for LuaSpan {
     fn add_methods<M: LuaUserDataMethods<Self>>(methods: &mut M) {
         methods.add_function_mut("fg", |lua, (ud, color): (AnyUserData, String)| {
             let color = Color::from_str(&color).into_lua_err()?;
@@ -27,24 +28,20 @@ impl LuaUserData for Span {
         methods.add_meta_function_mut(
             mlua::MetaMethod::Concat,
             |lua, (this, rhs): (AnyUserData, LuaValue)| {
-                let span_lhs = this.take::<Span>()?.0;
+                let span_lhs = this.take::<LuaSpan>()?.0;
 
                 match rhs {
-                    LuaValue::String(s) => {
-                        lua.create_userdata(Line(ratatui::text::Line::from(vec![
-                            span_lhs,
-                            ratatui::text::Span::raw(s.to_str()?.to_string()),
-                        ])))
-                    }
+                    LuaValue::String(s) => lua.create_userdata(LuaLine(Line::from(vec![
+                        span_lhs,
+                        Span::raw(s.to_str()?.to_string()),
+                    ]))),
                     LuaValue::UserData(ud) => {
-                        if let Ok(span_rhs) = ud.take::<Span>() {
-                            lua.create_userdata(Line(ratatui::text::Line::from(vec![
-                                span_lhs, span_rhs.0,
-                            ])))
-                        } else if let Ok(line_rhs) = ud.take::<Line>() {
+                        if let Ok(span_rhs) = ud.take::<LuaSpan>() {
+                            lua.create_userdata(LuaLine(Line::from(vec![span_lhs, span_rhs.0])))
+                        } else if let Ok(line_rhs) = ud.take::<LuaLine>() {
                             let mut spans = vec![span_lhs];
                             spans.extend(line_rhs.0.spans);
-                            lua.create_userdata(Line(ratatui::text::Line::from(spans)))
+                            lua.create_userdata(LuaLine(Line::from(spans)))
                         } else {
                             Err(mlua::Error::runtime("cannot concat Span with this type"))
                         }
@@ -58,7 +55,7 @@ impl LuaUserData for Span {
     }
 }
 
-impl LuaUserData for Line {
+impl LuaUserData for LuaLine {
     fn add_methods<M: LuaUserDataMethods<Self>>(methods: &mut M) {
         methods.add_function_mut("fg", |lua, (ud, color): (AnyUserData, String)| {
             let color = Color::from_str(&color).into_lua_err()?;
@@ -79,14 +76,12 @@ impl LuaUserData for Line {
 
                 match rhs {
                     LuaValue::String(s) => {
-                        line_lhs
-                            .0
-                            .push_span(ratatui::text::Span::raw(s.to_str()?.to_string()));
+                        line_lhs.0.push_span(Span::raw(s.to_str()?.to_string()));
                         this.into_lua(lua)
                     }
                     LuaValue::UserData(ud) => {
                         // 尝试转换为 Span
-                        if let Ok(span_rhs) = ud.take::<Span>() {
+                        if let Ok(span_rhs) = ud.take::<LuaSpan>() {
                             line_lhs.0.push_span(span_rhs.0);
                             this.into_lua(lua)
                         } else {
@@ -102,4 +97,4 @@ impl LuaUserData for Line {
     }
 }
 
-impl LuaUserData for Text {}
+impl LuaUserData for LuaText {}

@@ -1,10 +1,7 @@
-use crate::widgets::{Line, Span, Text};
+use crate::widgets::{LuaLine, LuaSpan, LuaText};
 use anyhow::bail;
 use mlua::prelude::*;
-use ratatui::{
-    text::Line as RatatuiLine,
-    widgets::{self, ListItem},
-};
+use ratatui::{text::Line as RatatuiLine, widgets};
 
 #[derive(Clone)]
 pub struct PageEntry {
@@ -21,29 +18,23 @@ impl FromLua for PageEntry {
 }
 
 impl PageEntry {
-    pub fn display(&self) -> ListItem<'_> {
+    /// Extract the Text content from the display field
+    pub fn display(&self) -> RatatuiLine<'_> {
         let f = || match self.tbl.get::<LuaValue>("display")? {
-            LuaValue::Nil => Ok(ListItem::new(RatatuiLine::from(self.key.as_str()))),
-            LuaValue::String(s) => Ok(ListItem::new(RatatuiLine::from(s.to_string_lossy()))),
+            LuaValue::Nil => Ok(RatatuiLine::from(self.key.as_str())),
+            LuaValue::String(s) => Ok(RatatuiLine::from(s.to_string_lossy())),
             LuaValue::UserData(ud) => {
-                if let Ok(span) = ud.borrow::<Span>() {
-                    Ok(ListItem::new(span.0.clone()))
-                } else if let Ok(line) = ud.borrow::<Line>() {
-                    Ok(ListItem::new(line.0.clone()))
-                } else if let Ok(text) = ud.borrow::<Text>() {
-                    // Text -> 使用第一行
-                    if text.0.lines.is_empty() {
-                        Ok(ListItem::new(""))
-                    } else {
-                        Ok(ListItem::new(text.0.lines[0].clone()))
-                    }
+                if let Ok(span) = ud.borrow::<LuaSpan>() {
+                    Ok(RatatuiLine::from(span.0.clone()))
+                } else if let Ok(line) = ud.borrow::<LuaLine>() {
+                    Ok(RatatuiLine::from(line.0.clone()))
                 } else {
                     bail!("Expected Span, Line, Text, or nil")
                 }
             }
-            _ => bail!("Expected Span, Line, Text, string, table, or nil"),
+            _ => bail!("Expected Span, Line, string, or nil"),
         };
-        f().unwrap_or_else(|e| ListItem::new(e.to_string()))
+        f().unwrap_or_else(|e| RatatuiLine::from(e.to_string()))
     }
 }
 
@@ -63,11 +54,11 @@ impl Page {
             Ok(LuaValue::Nil) => entry.key.clone(),
             Ok(LuaValue::String(s)) => s.to_string_lossy().to_string(),
             Ok(LuaValue::UserData(ud)) => {
-                if let Ok(span) = ud.borrow::<Span>() {
+                if let Ok(span) = ud.borrow::<LuaSpan>() {
                     span.0.to_string()
-                } else if let Ok(line) = ud.borrow::<Line>() {
+                } else if let Ok(line) = ud.borrow::<LuaLine>() {
                     line.0.to_string()
-                } else if let Ok(text) = ud.borrow::<Text>() {
+                } else if let Ok(text) = ud.borrow::<LuaText>() {
                     // Text implements Display, to_string() returns lines joined by '\n'
                     text.0.to_string()
                 } else {

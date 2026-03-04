@@ -1,11 +1,7 @@
 use mlua::{prelude::*, FromLua};
-use ratatui::{
-    layout::Rect,
-    prelude::*,
-    widgets::Widget,
-};
+use ratatui::{layout::Rect, prelude::*, widgets::Widget};
 
-use super::Text;
+use super::LuaText;
 
 pub trait Renderable {
     fn render(&mut self, area: Rect, buf: &mut ratatui::buffer::Buffer);
@@ -18,7 +14,7 @@ impl FromLua for Box<dyn Renderable> {
         Ok(match value {
             LuaValue::String(s) => Box::new(StatefulParagraph::from(s.to_string_lossy())),
             LuaValue::UserData(ud) => {
-                if let Ok(text) = ud.take::<Text>() {
+                if let Ok(text) = ud.take::<LuaText>() {
                     Box::new(StatefulParagraph::from(text.0))
                 } else {
                     Err("expect string or userdata ListItem".into_lua_err())?
@@ -46,10 +42,10 @@ pub struct StatefulParagraph {
 
 impl<T> From<T> for StatefulParagraph
 where
-    T: Into<ratatui::text::Text<'static>>,
+    T: Into<Text<'static>>,
 {
     fn from(value: T) -> Self {
-        let text: ratatui::text::Text = value.into();
+        let text: Text = value.into();
         let total_height = text.height().clamp(0, u16::MAX as usize) as u16;
         Self {
             total_height,

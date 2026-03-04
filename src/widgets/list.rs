@@ -1,4 +1,4 @@
-use ratatui::{prelude::*, widgets};
+use ratatui::prelude::*;
 
 use crate::Page;
 
@@ -17,11 +17,6 @@ impl StatefulWidget for ListWidget {
     type State = Page;
 
     fn render(self, area: Rect, buf: &mut Buffer, page: &mut Self::State) {
-        let list = widgets::List::new(page.filtered_list.iter().map(|entry| entry.display()))
-            .block(widgets::Block::default())
-            .highlight_style(Style::default().bg(Color::Blue).fg(Color::Black))
-            .highlight_spacing(widgets::HighlightSpacing::Always);
-
         // Adjust offset based on scrolloff before rendering
         if let Some(selected) = page.list_state.selected() {
             let height = area.height as usize;
@@ -48,6 +43,74 @@ impl StatefulWidget for ListWidget {
             }
         }
 
-        StatefulWidget::render(list, area, buf, &mut page.list_state);
+        // Custom rendering with padding and selection markers
+        let offset = page.list_state.offset();
+        let selected = page.list_state.selected();
+        let height = area.height as usize;
+
+        for (i, entry) in page
+            .filtered_list
+            .iter()
+            .enumerate()
+            .skip(offset)
+            .take(height)
+        {
+            let y = area.top() + (i - offset) as u16;
+            let is_selected = Some(i) == selected;
+
+            // Get display text
+            let line = entry.display();
+
+            if is_selected {
+                // Selected: render with blue background and markers
+                let selected_style = Style::default().bg(Color::Blue).fg(Color::Black);
+
+                // Left marker  with blue foreground only (no background)
+                buf[(area.left(), y)]
+                    .set_char('')
+                    .set_style(Style::default().fg(Color::Blue));
+
+                // Right marker  with blue foreground only (no background)
+                buf[(area.right() - 1, y)]
+                    .set_char('')
+                    .set_style(Style::default().fg(Color::Blue));
+
+                // Content area (with one space padding on each side)
+                let content_area = Rect {
+                    x: area.left() + 1,
+                    y,
+                    width: area.width.saturating_sub(2),
+                    height: 1,
+                };
+
+                // Clear and fill content area with blue background
+                for x in content_area.left()..content_area.right() {
+                    buf[(x, y)].set_char(' ').set_style(selected_style);
+                }
+
+                // Create a new line with black foreground and blue background
+                line.into_iter()
+                    .map(|span| span.style(selected_style))
+                    .collect::<Line>()
+                    .render(content_area, buf);
+            } else {
+                // Normal: render with padding on both sides
+                // Clear the entire line
+                for x in area.left()..area.right() {
+                    buf[(x, y)].set_char(' ').set_style(Style::default());
+                }
+
+                // Content area (with one space padding on each side)
+                let content_area = Rect {
+                    x: area.left() + 1,
+                    y,
+                    width: area.width.saturating_sub(2),
+                    height: 1,
+                };
+
+                // Render content using Line widget
+                line.render(content_area, buf);
+            }
+        }
     }
 }
