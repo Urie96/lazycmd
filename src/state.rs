@@ -1,5 +1,6 @@
 use crossterm::event::KeyEvent;
 use mlua::prelude::*;
+use ratatui::widgets::ListState;
 use std::collections::HashMap;
 use std::time::Instant;
 
@@ -10,6 +11,151 @@ use crate::{widgets::Renderable, Keymap, Mode, Page, PageEntry};
 pub enum ConfirmButton {
     Yes,
     No,
+}
+
+/// Option for select dialog
+#[derive(Debug, Clone)]
+pub struct SelectOption {
+    /// The value to return when this option is selected
+    pub value: LuaValue,
+    /// The text to display for this option
+    pub display: String,
+}
+
+/// State for the select dialog
+#[derive(Debug)]
+pub struct SelectDialog {
+    /// Optional prompt/title text
+    pub prompt: Option<String>,
+    /// All available options (unfiltered)
+    pub options: Vec<SelectOption>,
+    /// Filtered options (subset of options that match the filter)
+    pub filtered_options: Vec<usize>,
+    /// Index of currently selected option in filtered_options
+    pub selected_index: Option<usize>,
+    /// Current filter input text
+    pub filter_input: String,
+    /// List state for rendering and scrolling
+    pub list_state: ListState,
+    /// Callback function when selection is made (or canceled with nil)
+    pub on_selection: LuaFunction,
+}
+
+impl SelectDialog {
+    pub fn new(
+        prompt: Option<String>,
+        options: Vec<SelectOption>,
+        on_selection: LuaFunction,
+    ) -> Self {
+        let mut list_state = ListState::default();
+        list_state.select(Some(0));
+
+        let mut dialog = Self {
+            prompt,
+            options,
+            filtered_options: Vec::new(),
+            selected_index: Some(0),
+            filter_input: String::new(),
+            list_state,
+            on_selection,
+        };
+
+        // Initialize filtered options
+        dialog.update_filtered_options();
+
+        dialog
+    }
+
+    /// Get the current filtered options
+    pub fn get_filtered_options(&self) -> Vec<SelectOption> {
+        self.filtered_options
+            .iter()
+            .filter_map(|&idx| self.options.get(idx).cloned())
+            .collect()
+    }
+
+    /// Update filtered options based on current filter input
+    pub fn update_filtered_options(&mut self) {
+        if self.filter_input.is_empty() {
+            // No filter: show all options
+            self.filtered_options = (0..self.options.len()).collect();
+        } else {
+            // Filter options by display text (case-insensitive)
+            let filter_lower = self.filter_input.to_lowercase();
+            self.filtered_options = self
+                .options
+                .iter()
+                .enumerate()
+                .filter(|(_, opt)| opt.display.to_lowercase().contains(&filter_lower))
+                .map(|(idx, _)| idx)
+                .collect();
+        }
+
+        // Adjust selected index
+        if self.filtered_options.is_empty() {
+            self.selected_index = None;
+            self.list_state.select(None);
+        } else {
+            // Keep current selection if valid, otherwise select first
+            let new_idx = self.selected_index.and_then(|idx| {
+                if idx < self.filtered_options.len() {
+                    Some(idx)
+                } else {
+                    None
+                }
+            });
+
+            self.selected_index = new_idx.or(Some(0));
+            self.list_state.select(self.selected_index);
+        }
+    }
+
+    /// Move selection by delta
+    pub fn move_selection(&mut self, delta: i32) {
+        let filtered_count = self.filtered_options.len();
+        if filtered_count == 0 {
+            return;
+        }
+
+        let current = self.selected_index.unwrap_or(0);
+        let new = if delta > 0 {
+            // Moving down: wrap around if at end
+            let target = current + delta as usize;
+            if target >= filtered_count && current == filtered_count - 1 {
+                0 // Wrap to top
+            } else {
+                target.min(filtered_count - 1)
+            }
+        } else {
+            // Moving up: wrap around if at top
+            let abs_delta = delta.unsigned_abs() as usize;
+            if abs_delta > current && current == 0 {
+                filtered_count - 1 // Wrap to bottom
+            } else {
+                current.saturating_sub(abs_delta)
+            }
+        };
+
+        self.selected_index = Some(new);
+        self.list_state.select(Some(new));
+    }
+
+    /// Select first option
+    pub fn select_first(&mut self) {
+        if !self.filtered_options.is_empty() {
+            self.selected_index = Some(0);
+            self.list_state.select(Some(0));
+        }
+    }
+
+    /// Select last option
+    pub fn select_last(&mut self) {
+        let count = self.filtered_options.len();
+        if count > 0 {
+            self.selected_index = Some(count - 1);
+            self.list_state.select(Some(count - 1));
+        }
+    }
 }
 
 impl ConfirmButton {
@@ -67,6 +213,8 @@ pub struct State {
     pub current_plugin: String,
     /// Confirm dialog state (shown on top of all UI)
     pub confirm_dialog: Option<ConfirmDialog>,
+    /// Select dialog state (shown on top of all UI)
+    pub select_dialog: Option<SelectDialog>,
     /// Height of the list widget area (number of visible rows)
     list_height: Option<u16>,
     /// Minimum lines to keep between cursor and edge (like vim's scrolloff)

@@ -38,6 +38,11 @@ pub enum Event {
         on_confirm: LuaFunction,
         on_cancel: LuaFunction,
     },
+    ShowSelect {
+        prompt: Option<String>,
+        options: Vec<crate::SelectOption>,
+        on_selection: LuaFunction,
+    },
 }
 
 impl Events {

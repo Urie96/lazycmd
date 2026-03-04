@@ -369,6 +369,81 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
         Ok(())
     })?;
 
+    // lc.select: show a selection dialog
+    let select_fn = lua.create_function(|lua, (opts, on_selection): (LuaTable, LuaFunction)| -> mlua::Result<()> {
+        // Parse options: can be an array of strings or an array of tables
+        let options_lua: LuaValue = opts.get("options")?;
+
+        let mut select_options = Vec::new();
+
+        match options_lua {
+            LuaValue::Table(table) => {
+                // Iterate over the table
+                for pair in table.pairs::<LuaValue, LuaValue>() {
+                    let (_, value) = pair?;
+                    match value {
+                        LuaValue::String(s) => {
+                            // Simple string: value = display = string
+                            let display = s.to_string_lossy().to_string();
+                            // Create a new Lua string from the display text
+                            let lua_string = lua.create_string(&display)?;
+                            select_options.push(crate::SelectOption {
+                                value: LuaValue::String(lua_string),
+                                display,
+                            });
+                        }
+                        LuaValue::Table(t) => {
+                            // Table with value and display fields
+                            let display = t
+                                .get::<Option<String>>("display")
+                                .unwrap_or(None)
+                                .unwrap_or_else(|| {
+                                    t.get::<String>("value")
+                                        .unwrap_or_else(|_| "?".to_string())
+                                });
+                            // Get the value field, or create a Lua string from display if not present
+                            let value: LuaValue = match t.get::<LuaValue>("value") {
+                                Ok(v) => v,
+                                Err(_) => {
+                                    let lua_string = lua.create_string(&display)?;
+                                    LuaValue::String(lua_string)
+                                }
+                            };
+                            select_options.push(crate::SelectOption { value, display });
+                        }
+                        _ => {
+                            return Err(LuaError::RuntimeError(
+                                "Options must be strings or tables".to_string(),
+                            ));
+                        }
+                    }
+                }
+            }
+            _ => {
+                return Err(LuaError::RuntimeError(
+                    "Options must be a table/array".to_string(),
+                ));
+            }
+        }
+
+        if select_options.is_empty() {
+            return Err(LuaError::RuntimeError("Options cannot be empty".to_string()));
+        }
+
+        // prompt is optional
+        let prompt: Option<String> = opts.get("prompt").ok();
+
+        plugin::send_event(
+            lua,
+            Event::ShowSelect {
+                prompt,
+                options: select_options,
+                on_selection,
+            },
+        )?;
+        Ok(())
+    })?;
+
     style::inject_string_meta_method(lua)?;
 
     let style_tbl =
@@ -391,6 +466,7 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
         ("osc52_copy", osc52_copy),
         ("notify", notify_fn),
         ("confirm", mlua::Value::Function(confirm_fn)),
+        ("select", mlua::Value::Function(select_fn)),
         ("json", json_mod),
         ("inspect", inspect_mod),
         ("style", mlua::Value::Table(style_tbl)),

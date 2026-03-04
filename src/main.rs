@@ -5,7 +5,7 @@ pub use mode::*;
 pub use page::*;
 pub use state::*;
 pub use widgets::InputState;
-pub use state::{ConfirmButton, ConfirmDialog};
+pub use state::{ConfirmButton, ConfirmDialog, SelectOption, SelectDialog};
 use tokio::task;
 
 mod app;
@@ -18,6 +18,7 @@ mod log;
 mod mode;
 mod page;
 mod plugin;
+mod select_handler;
 mod state;
 mod term;
 mod widgets;

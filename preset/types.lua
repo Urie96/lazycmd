@@ -388,6 +388,27 @@ function lc.notify(message) end
 function lc.confirm(opts) end
 
 -- ============================================
+-- lc.select - Selection dialog
+-- ============================================
+
+---@class SelectOption
+---@field value any The value to return when this option is selected
+---@field display string The text to display for this option
+
+---Show a selection dialog to the user
+---The dialog appears centered on screen with a list of options
+---Users can navigate with arrow keys (or j/k), type to filter, Enter to select, Esc to cancel
+---@param opts table Configuration options
+---@field prompt? string Optional prompt/title text (defaults to "Select")
+---@field options (string|SelectOption)[] The list of options to display
+---  Can be simple strings: {"Option 1", "Option 2", "Option 3"}
+---  Or tables with value/display: {{value = "py", display = "🐍 Python"}, {value = "js", display = "📜 JavaScript"}}
+---@param on_selection fun(choice: any) Callback function when user makes a selection
+---  - Called with the selected value (the value field from options, or the string itself)
+---  - Called with nil if user cancels (Esc)
+function lc.select(opts, on_selection) end
+
+-- ============================================
 -- Filter Mode - Filtering entries
 -- ============================================
 

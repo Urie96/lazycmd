@@ -13,8 +13,9 @@ use crate::{
     events::{Event, Events},
     input_handler,
     plugin,
+    select_handler,
     term::{self, Term},
-    widgets::{confirm::ConfirmWidget, header::HeaderWidget, input::InputWidget, list::ListWidget},
+    widgets::{confirm::ConfirmWidget, header::HeaderWidget, input::InputWidget, list::ListWidget, select::SelectWidget},
     State,
 };
 
@@ -115,6 +116,19 @@ impl App {
                     return Ok(());
                 }
 
+                // If select dialog is shown, handle its keyboard input first
+                if self.state.select_dialog.is_some() {
+                    if select_handler::handle_select_dialog_key(
+                        &self.lua,
+                        &mut self.state,
+                        &self.event_sender,
+                        key,
+                    )? {
+                        self.dirty = true;
+                    }
+                    return Ok(());
+                }
+
                 // Handle character input in Input mode
                 if self.state.current_mode == crate::Mode::Input {
                     if input_handler::handle_input_mode_key(&mut self.state, key)? {
@@ -191,6 +205,15 @@ impl App {
             } => {
                 self.state
                     .show_confirm_dialog(title, prompt, on_confirm, on_cancel);
+                self.dirty = true;
+            }
+            Event::ShowSelect {
+                prompt,
+                options,
+                on_selection,
+            } => {
+                self.state.select_dialog =
+                    Some(crate::SelectDialog::new(prompt, options, on_selection));
                 self.dirty = true;
             }
         }
@@ -490,6 +513,26 @@ impl StatefulWidget for AppWidget {
             };
 
             ConfirmWidget.render(dialog_area, buf, dialog);
+        }
+
+        // Render select dialog (render last to appear on top of everything)
+        if let Some(dialog) = &mut state.select_dialog {
+            // Calculate dialog dimensions: fixed size or clamped to fit
+            let dialog_width = 80.min(area.width).max(40);
+            let dialog_height = 20.min(area.height).max(10);
+
+            // Center the dialog
+            let x = (area.width.saturating_sub(dialog_width)) / 2;
+            let y = (area.height.saturating_sub(dialog_height)) / 2;
+
+            let dialog_area = Rect {
+                x,
+                y,
+                width: dialog_width,
+                height: dialog_height,
+            };
+
+            SelectWidget.render(dialog_area, buf, dialog);
         }
     }
 }

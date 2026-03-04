@@ -45,15 +45,17 @@ local plugin = require(cfg.default_plugin)
 
 function lc._list()
   local path = lc.api.get_current_path()
-  plugin.list(path, function(entries)
-    if lc.equals(path, lc.api.get_current_path()) then lc.api.page_set_entries(entries) end
-  end)
+  if plugin.list then
+    plugin.list(path, function(entries)
+      if lc.equals(path, lc.api.get_current_path()) then lc.api.page_set_entries(entries) end
+    end)
+  end
 end
 
 function lc._preview()
   local entry = lc.api.page_get_hovered()
   local path = lc.api.get_hovered_path()
-  if entry then
+  if entry and plugin.preview then
     plugin.preview(entry, function(entries)
       if lc.equals(path, lc.api.get_hovered_path()) then lc.api.page_set_preview(entries) end
     end)

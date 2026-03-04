@@ -1,6 +1,10 @@
 lc.config {
   plugins = {
     {
+      'select-test',
+      config = function() require('select-test').setup() end,
+    },
+    {
       'memos',
       config = function()
         require('memos').setup {
