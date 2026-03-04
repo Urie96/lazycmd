@@ -40,13 +40,14 @@ impl StatefulWidget for SelectWidget {
         let inner = block.inner(dialog_area);
         block.render(dialog_area, buf);
 
-        // Split inner area into: filter input (1 row) + divider (1 row) + options list (remaining)
+        // Split inner area into: filter input (1 row) + divider (1 row) + options list (remaining - 1 for help) + help (1 row)
         let input_height = 1u16;
         let divider_height = 1u16;
-        let _list_height = inner.height.saturating_sub(input_height + divider_height);
+        let help_height = 1u16;
+        let _list_height = inner.height.saturating_sub(input_height + divider_height + help_height);
 
-        let [input_area, divider_area, list_area] =
-            Layout::vertical([Length(input_height), Length(divider_height), Min(0)]).areas(inner);
+        let [input_area, divider_area, list_area, help_area] =
+            Layout::vertical([Length(input_height), Length(divider_height), Min(0), Length(help_height)]).areas(inner);
 
         // Render filter input
         let prompt = " ";
@@ -176,24 +177,10 @@ impl StatefulWidget for SelectWidget {
         }
 
         // Render help text at bottom (inside dialog)
-        if inner.height >= 1 {
-            let help_y = inner.bottom() - 1;
-            let help_text = "↑↓: Move | Enter: Select | Esc: Cancel";
-            let help_x = inner.x + (inner.width.saturating_sub(help_text.len() as u16)) / 2;
-
-            if help_x >= inner.x && help_y >= inner.y {
-                Paragraph::new(help_text)
-                    .style(Style::default().fg(Color::DarkGray))
-                    .render(
-                        Rect {
-                            x: help_x,
-                            y: help_y,
-                            width: help_text.len() as u16,
-                            height: 1,
-                        },
-                        buf,
-                    );
-            }
-        }
+        let help_text = "↑↓: Move | Enter: Select | Esc: Cancel";
+        Paragraph::new(help_text)
+            .style(Style::default().fg(Color::DarkGray))
+            .alignment(Alignment::Center)
+            .render(help_area, buf);
     }
 }
