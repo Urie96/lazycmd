@@ -79,20 +79,27 @@ impl StatefulWidget for SelectWidget {
         // Render options list with custom styling
         let options = state.get_filtered_options();
 
-        // Adjust offset based on selection to keep selected item visible
+        // Adjust offset based on scrolloff (keep selected item away from edges)
         if let Some(selected) = state.selected_index {
             let height = list_area.height as usize;
+            let scrolloff = 3.min(height / 2);  // Keep 3 lines margin
             let offset = state.list_state.offset();
             let cursor_pos = selected.saturating_sub(offset);
+            let len = options.len();
 
-            // Simple scrolling: when cursor goes below visible area, scroll down
-            if cursor_pos >= height {
-                let new_offset = selected.saturating_sub(height - 1);
+            // When cursor is in the top scrolloff zone, scroll up to keep cursor at scrolloff
+            if cursor_pos < scrolloff && offset > 0 {
+                let new_offset = selected.saturating_sub(scrolloff);
                 *state.list_state.offset_mut() = new_offset;
             }
-            // When cursor is above visible area, scroll up
-            else if selected < offset {
-                *state.list_state.offset_mut() = selected;
+            // When cursor is in the bottom scrolloff zone, scroll down
+            else if cursor_pos >= height.saturating_sub(scrolloff) {
+                let desired_pos = height.saturating_sub(scrolloff).saturating_sub(1);
+                if selected >= desired_pos {
+                    let new_offset = selected.saturating_sub(desired_pos);
+                    let max_offset = if len > height { len - height } else { 0 };
+                    *state.list_state.offset_mut() = new_offset.min(max_offset);
+                }
             }
         }
 
