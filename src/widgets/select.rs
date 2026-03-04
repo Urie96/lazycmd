@@ -76,8 +76,25 @@ impl StatefulWidget for SelectWidget {
                 .set_style(Style::default().fg(Color::Cyan));
         }
 
-        // Render options list
+        // Render options list with custom styling
         let options = state.get_filtered_options();
+
+        // Adjust offset based on selection to keep selected item visible
+        if let Some(selected) = state.selected_index {
+            let height = list_area.height as usize;
+            let offset = state.list_state.offset();
+            let cursor_pos = selected.saturating_sub(offset);
+
+            // Simple scrolling: when cursor goes below visible area, scroll down
+            if cursor_pos >= height {
+                let new_offset = selected.saturating_sub(height - 1);
+                *state.list_state.offset_mut() = new_offset;
+            }
+            // When cursor is above visible area, scroll up
+            else if selected < offset {
+                *state.list_state.offset_mut() = selected;
+            }
+        }
 
         if options.is_empty() {
             // Show "No results" message
@@ -86,28 +103,69 @@ impl StatefulWidget for SelectWidget {
                 .style(Style::default().fg(Color::DarkGray))
                 .render(list_area, buf);
         } else {
-            let list_items: Vec<ListItem> = options
-                .iter()
-                .enumerate()
-                .map(|(idx, opt)| {
-                    let is_selected = Some(idx) == state.selected_index;
-                    let display_text = opt.display.as_str();
-                    let style = if is_selected {
-                        Style::default()
-                            .bg(Color::Cyan)
-                            .fg(Color::Black)
-                            .add_modifier(Modifier::BOLD)
-                    } else {
-                        Style::default().fg(Color::White)
+            // Custom rendering with padding and selection markers
+            let offset = state.list_state.offset();
+            let selected = state.selected_index;
+            let height = list_area.height as usize;
+
+            for (i, opt) in options.iter().enumerate().skip(offset).take(height) {
+                let y = list_area.top() + (i - offset) as u16;
+                let is_selected = Some(i) == selected;
+
+                if is_selected {
+                    // Selected: render with blue background and markers
+                    let selected_style = Style::default().bg(Color::Blue).fg(Color::Black);
+
+                    // Left marker  with blue foreground only (no background)
+                    buf[(list_area.left(), y)]
+                        .set_char('')
+                        .set_style(Style::default().fg(Color::Blue));
+
+                    // Right marker  with blue foreground only (no background)
+                    buf[(list_area.right() - 1, y)]
+                        .set_char('')
+                        .set_style(Style::default().fg(Color::Blue));
+
+                    // Content area (with one space padding on each side)
+                    let content_area = Rect {
+                        x: list_area.left() + 1,
+                        y,
+                        width: list_area.width.saturating_sub(2),
+                        height: 1,
                     };
-                    ListItem::new(display_text).style(style)
-                })
-                .collect();
 
-            let list = List::new(list_items).highlight_spacing(HighlightSpacing::Always);
+                    // Clear and fill content area with blue background
+                    for x in content_area.left()..content_area.right() {
+                        buf[(x, y)].set_char(' ').set_style(selected_style);
+                    }
 
-            // Use tui_input state for scrolling
-            StatefulWidget::render(list, list_area, buf, &mut state.list_state);
+                    // Render content with selection style
+                    let line = Line::from(opt.display.as_str());
+                    let styled_spans: Vec<Span> = line.spans.iter().map(|span| {
+                        Span::styled(span.content.as_ref(), selected_style)
+                    }).collect();
+                    let styled_line = Line::from(styled_spans);
+                    styled_line.render(content_area, buf);
+                } else {
+                    // Normal: render with padding on both sides
+                    // Clear the entire line
+                    for x in list_area.left()..list_area.right() {
+                        buf[(x, y)].set_char(' ').set_style(Style::default());
+                    }
+
+                    // Content area (with one space padding on each side)
+                    let content_area = Rect {
+                        x: list_area.left() + 1,
+                        y,
+                        width: list_area.width.saturating_sub(2),
+                        height: 1,
+                    };
+
+                    // Render content
+                    let line = Line::from(opt.display.as_str()).style(Style::default().fg(Color::White));
+                    line.render(content_area, buf);
+                }
+            }
         }
 
         // Render help text at bottom (inside dialog)
