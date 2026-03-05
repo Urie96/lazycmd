@@ -555,156 +555,22 @@ function M.setup()
     pagination.reached_end = false
   end)
 
-  -- 添加 w 键写新邮件
-  lc.keymap.set('main', 'w', function()
-    local path = lc.api.get_current_path()
-    if #path < 1 then
-      lc.notify 'Please select an account first'
-      return
-    end
-
-    local account = path[1]
-
-    lc.log('info', 'Writing new message in {}', account)
-
-    lc.interactive({ 'himalaya', 'message', 'write', '--account', account }, function(exit_code)
-      if exit_code ~= 0 then
-        lc.notify 'Failed to send email'
-      else
-        lc.notify 'Email sent successfully'
-      end
-    end)
-  end)
-
-  -- 添加 r 键回复邮件
-  lc.keymap.set('main', 'r', function()
-    local entry = lc.api.page_get_hovered()
-    if not entry or not entry.id or not entry.account or not entry.folder then
-      lc.notify 'No email selected'
-      return
-    end
-
-    lc.log('info', 'Replying to message {} in {}/{}', entry.id, entry.account, entry.folder)
-
-    lc.interactive(
-      { 'himalaya', 'message', 'reply', tostring(entry.id), '--account', entry.account, '--folder', entry.folder },
-      function(exit_code)
-        if exit_code ~= 0 then lc.notify 'Failed to reply to message' end
-      end
-    )
-  end)
-
-  -- 添加 dd 键删除邮件
-  lc.keymap.set('main', 'dd', function()
-    local entry = lc.api.page_get_hovered()
-    if not entry or not entry.id or not entry.account or not entry.folder then
-      lc.notify 'No email selected'
-      return
-    end
-
-    lc.log('info', 'Deleting message {} in {}/{}', entry.id, entry.account, entry.folder)
-
-    -- 弹出确认对话框
-    lc.confirm {
-      title = 'Delete Message',
-      prompt = 'Are you sure you want to delete this message?',
-      on_confirm = function()
-        -- 用户确认删除
-        lc.interactive(
-          { 'himalaya', 'message', 'delete', tostring(entry.id), '--account', entry.account, '--folder', entry.folder },
-          function(exit_code)
-            if exit_code ~= 0 then
-              lc.notify 'Failed to delete message'
-            else
-              lc.notify 'Message deleted'
-              lc.cmd 'reload' -- 刷新列表
-            end
-          end
-        )
-      end,
-      on_cancel = function()
-        -- 用户取消删除
-        lc.notify 'Delete cancelled'
-      end,
-    }
-  end)
-
-  -- 添加 <enter> 键打开邮件（使用 himalaya message export 导出为 EML 文件）
+  -- <enter> 键：根据路径决定进入下一级或显示操作菜单
   lc.keymap.set('main', '<enter>', function()
-    local entry = lc.api.page_get_hovered()
-    if not entry or not entry.id or not entry.account or not entry.folder then
-      lc.notify 'No email selected'
-      return
+    local path = lc.api.get_current_path()
+
+    -- 在邮件列表中（路径长度 >= 2），显示操作菜单
+    if #path >= 2 then
+      require('himalaya.action').select_action()
+    else
+      -- 其他情况进入下一级
+      lc.cmd 'enter'
     end
-
-    lc.log('info', 'Exporting message {}', entry.id)
-
-    -- 创建临时 EML 文件路径
-    local temp_file = '/tmp/lazycmd-message-' .. tostring(entry.id) .. '.eml'
-
-    lc.notify 'Exporting message...'
-
-    -- 使用 himalaya message export 导出邮件为 EML 文件
-    lc.system({
-      'himalaya',
-      'message',
-      'export',
-      tostring(entry.id),
-      '--account',
-      entry.account,
-      '--folder',
-      entry.folder,
-      '-F',
-      '-d',
-      temp_file,
-    }, function(output)
-      if output.code ~= 0 then
-        local error_msg = output.stderr or 'Unknown error'
-        lc.notify('Export failed: ' .. error_msg)
-        lc.log('error', 'Failed to export message: {}', error_msg)
-        return
-      end
-
-      lc.log('info', 'Message exported to {}', temp_file)
-
-      -- 使用系统默认程序打开 EML 文件
-      lc.system.open(temp_file)
-
-      lc.notify 'Message opened'
-    end)
   end)
 
-  -- 添加 a 键下载附件
-  lc.keymap.set('main', 'a', function()
-    local entry = lc.api.page_get_hovered()
-    if not entry or not entry.id or not entry.account or not entry.folder then
-      lc.notify 'No email selected'
-      return
-    end
-
-    lc.log('info', ' for message {} in {}/{}', entry.id, entry.account, entry.folder)
-    lc.notify 'Attachment downloading...'
-
-    lc.system({
-      'himalaya',
-      'attachment',
-      'download',
-      tostring(entry.id),
-      '--account',
-      entry.account,
-      '--folder',
-      entry.folder,
-    }, function(output)
-      if output.code ~= 0 then
-        local error_msg = output.stderr or 'Unknown error'
-        lc.notify('Download failed: ' .. error_msg)
-        lc.log('error', 'Failed to download attachment: {}', error_msg)
-      else
-        local success_msg = output.stdout and lc.trim(output.stdout) or 'Attachment downloaded'
-        lc.notify(success_msg)
-        lc.log('info', 'Attachment download output: {}', output.stdout)
-      end
-    end)
+  -- w 键：写新邮件（任何层级都可以）
+  lc.keymap.set('main', 'w', function()
+    require('himalaya.action').write()
   end)
 end
 
