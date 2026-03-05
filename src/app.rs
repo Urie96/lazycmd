@@ -10,6 +10,9 @@ use ratatui::{
 };
 use tokio::sync::mpsc;
 
+use libc::{sigaction, sigemptyset, SIG_IGN, SIGINT};
+use std::mem;
+
 use crate::{
     confirm_handler,
     events::{Event, Events},
@@ -288,6 +291,22 @@ impl App {
         let program = it.next().unwrap();
         let args: Vec<&String> = it.collect();
 
+        // Temporarily ignore SIGINT during interactive command execution
+        // This prevents Ctrl-C from terminating lazycmd itself
+        let mut old_action: libc::sigaction = unsafe { mem::zeroed() };
+        let mut new_action: libc::sigaction = unsafe { mem::zeroed() };
+
+        unsafe {
+            // Get the current SIGINT handler
+            sigaction(SIGINT, std::ptr::null(), &mut old_action);
+
+            // Set SIGINT to ignore (SIG_IGN)
+            new_action.sa_sigaction = SIG_IGN;
+            sigemptyset(&mut new_action.sa_mask);
+            new_action.sa_flags = 0;
+            sigaction(SIGINT, &new_action, std::ptr::null_mut());
+        }
+
         // Temporarily restore the terminal to let the subprocess take control
         term::restore();
 
@@ -298,6 +317,11 @@ impl App {
             .context(format!("Failed to execute command: {}", program))?;
 
         let exit_code = result.code().unwrap_or(-1);
+
+        // Restore the original SIGINT handler
+        unsafe {
+            sigaction(SIGINT, &old_action, std::ptr::null_mut());
+        }
 
         // If wait_confirm function is provided, call it to decide whether to wait
         let should_wait = if let Some(ref wait_fn) = wait_confirm {
@@ -366,14 +390,29 @@ impl App {
                         hook.call::<()>(())
                     })?;
                 }
-                // Clear current page entries
+                // Save the selected entry key to restore later
+                let selected_key = self.state.hovered().map(|e| e.key.clone());
+                // Clear current page entries (but don't clear list_state selection)
                 if let Some(page) = &mut self.state.current_page {
                     page.list.clear();
                     page.filtered_list.clear();
-                    page.list_state.select(None);
                 }
                 self.state.clear_current_cache();
                 self.call_list()?;
+                // Restore selection by finding the entry with the same key
+                if let Some(key) = selected_key {
+                    if let Some(page) = &mut self.state.current_page {
+                        // Find the index of the entry with the same key
+                        if let Some(idx) = page.filtered_list.iter().position(|e| e.key == key) {
+                            page.list_state.select(Some(idx));
+                        } else if !page.filtered_list.is_empty() {
+                            // Entry not found, keep the current selection or select the first item
+                            if page.list_state.selected().is_none() {
+                                page.list_state.select(Some(0));
+                            }
+                        }
+                    }
+                }
                 self.dirty = true;
             }
             "enter_filter_mode" => {

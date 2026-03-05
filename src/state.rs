@@ -1,6 +1,6 @@
 use crossterm::event::KeyEvent;
 use mlua::prelude::*;
-use ratatui::widgets::ListState;
+use ratatui::{text::Line, widgets::ListState};
 use std::collections::HashMap;
 use std::time::Instant;
 
@@ -19,7 +19,7 @@ pub struct SelectOption {
     /// The value to return when this option is selected
     pub value: LuaValue,
     /// The text to display for this option
-    pub display: String,
+    pub display: Line<'static>,
 }
 
 /// State for the select dialog
@@ -95,7 +95,12 @@ impl SelectDialog {
                 .options
                 .iter()
                 .enumerate()
-                .filter(|(_, opt)| opt.display.to_lowercase().contains(&filter_lower))
+                .filter(|(_, opt)| {
+                    opt.display
+                        .to_string()
+                        .to_lowercase()
+                        .contains(&filter_lower)
+                })
                 .map(|(idx, _)| idx)
                 .collect();
         }
@@ -380,11 +385,9 @@ impl State {
     }
 
     pub fn hovered(&self) -> Option<&PageEntry> {
-        self.current_page.as_ref().and_then(|p| {
-            p.list_state
-                .selected()
-                .and_then(|s| p.filtered_list.get(s))
-        })
+        self.current_page
+            .as_ref()
+            .and_then(|p| p.list_state.selected().and_then(|s| p.filtered_list.get(s)))
     }
 
     fn keymap_candidates_iter(&self) -> impl Iterator<Item = &Keymap> {

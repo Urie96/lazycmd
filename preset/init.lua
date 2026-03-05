@@ -41,45 +41,29 @@ end
 lc.interactive = lc.system.interactive
 
 -- Wrap lc.system._exec to handle multiple argument formats
-lc.system.exec = function(cmd_or_args, opts_or_callback, callback)
+lc.system.exec = function(cmd, opts_or_callback, callback)
   -- Parse arguments:
-  -- lc.system.exec({cmd, callback})
   -- lc.system.exec(cmd, callback)
   -- lc.system.exec(cmd, opts, callback)
 
-  local args_table = {}
+  local args_table = { cmd = cmd }
 
-  if type(cmd_or_args) == 'table' then
-    -- lc.system.exec({cmd, callback}) or lc.system.exec(args)
-    if cmd_or_args.cmd ~= nil then
-      -- lc.system.exec({cmd = {...}, callback = ...})
-      args_table = cmd_or_args
+  if type(opts_or_callback) == 'function' then
+    -- lc.system.exec(cmd, callback)
+    args_table.callback = opts_or_callback
+  elseif type(opts_or_callback) == 'table' then
+    -- lc.system.exec(cmd, opts, callback)
+    if opts_or_callback.stdin ~= nil then args_table.stdin = opts_or_callback.stdin end
+    if opts_or_callback.env ~= nil then args_table.env = opts_or_callback.env end
+    if type(callback) == 'function' then
+      args_table.callback = callback
+    elseif opts_or_callback.callback ~= nil then
+      args_table.callback = opts_or_callback.callback
     else
-      -- lc.system.exec({cmd, callback})
-      args_table.cmd = cmd_or_args
-      args_table.callback = opts_or_callback
+      error 'Callback function is required when providing options'
     end
   else
-    -- lc.system.exec(cmd, callback) or lc.system.exec(cmd, opts, callback)
-    args_table.cmd = cmd_or_args
-
-    if type(opts_or_callback) == 'function' then
-      -- lc.system.exec(cmd, callback)
-      args_table.callback = opts_or_callback
-    elseif type(opts_or_callback) == 'table' then
-      -- lc.system.exec(cmd, opts, callback)
-      if opts_or_callback.stdin ~= nil then args_table.stdin = opts_or_callback.stdin end
-      if opts_or_callback.env ~= nil then args_table.env = opts_or_callback.env end
-      if type(callback) == 'function' then
-        args_table.callback = callback
-      elseif opts_or_callback.callback ~= nil then
-        args_table.callback = opts_or_callback.callback
-      else
-        error 'Callback function is required when providing options'
-      end
-    else
-      error 'Callback function is required'
-    end
+    error 'Callback function is required'
   end
 
   -- Call the Rust implementation
@@ -88,7 +72,7 @@ end
 
 -- Set metatable on lc.system to handle multiple argument formats
 setmetatable(lc.system, {
-  __call = lc.system.exec,
+  __call = function(self, cmd, opts_or_callback, callback) lc.system.exec(cmd, opts_or_callback, callback) end,
 })
 
 function lc.config(opt)
@@ -121,6 +105,7 @@ map('main', '/', 'enter_filter_mode')
 map('main', '<esc>', 'filter_clear')
 map('main', '<left>', 'back')
 map('main', '<right>', 'enter')
+map('main', '<enter>', 'enter')
 
 -- Input mode keymaps
 map('input', '<esc>', 'exit_filter_mode')

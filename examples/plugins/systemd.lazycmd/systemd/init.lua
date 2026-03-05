@@ -18,37 +18,6 @@ local unit_types = {
 }
 
 function M.setup()
-  -- 辅助函数：定义 systemctl 操作快捷键
-  local function define_unit_action(key, action_name, action_cmd)
-    local action_name_lower = action_name:lower()
-
-    lc.keymap.set('main', key, function()
-      local unit_info = get_selected_unit()
-      if not unit_info then
-        lc.notify 'Please select a unit first'
-        return
-      end
-
-      lc.confirm {
-        prompt = action_name .. ' ' .. unit_info.unit .. '?',
-        on_confirm = function()
-          local cmd = { 'systemctl', unit_info.scope, action_cmd, unit_info.unit }
-          lc.notify(action_name_lower .. 'ing ' .. unit_info.unit .. '...')
-          lc.system(cmd, function(out)
-            if out.code == 0 then
-              lc.notify(unit_info.unit .. ' ' .. action_name_lower .. 'ed successfully')
-              lc.cmd 'reload'
-            else
-              lc.notify('Failed to ' .. action_name_lower .. ' ' .. unit_info.unit)
-              lc.log('error', 'Failed to ' .. action_name_lower .. ' ' .. unit_info.unit .. ': ' .. out.stderr)
-            end
-          end)
-        end,
-        on_cancel = function() lc.notify(action_name .. ' cancelled') end,
-      }
-    end)
-  end
-
   -- 辅助函数：定义交互式命令快捷键
   local function define_interactive_action(key, action_name, cmd_builder)
     lc.keymap.set('main', key, function()
@@ -63,14 +32,7 @@ function M.setup()
     end)
   end
 
-  -- 定义快捷键：r - 重启服务
-  define_unit_action('r', 'Restart', 'restart')
-
-  -- 定义快捷键：s - 启动服务
-  define_unit_action('s', 'Start', 'start')
-
-  -- 定义快捷键：x - 停止服务
-  define_unit_action('x', 'Stop', 'stop')
+  lc.keymap.set('main', '<enter>', function() require('systemd.action').select_action() end)
 
   -- 定义快捷键：l - 查看服务日志
   define_interactive_action(
@@ -85,12 +47,12 @@ local function list_level_1(cb)
   local entries = {
     {
       key = 'system',
-      display = ('🖥️ ' .. 'system'):fg 'cyan',
+      display = ('🖥️ system'):fg 'cyan',
       scope = 'system',
     },
     {
       key = 'user',
-      display = ('👤 ' .. 'user'):fg 'cyan',
+      display = ('👤 user'):fg 'cyan',
       scope = 'user',
     },
   }

@@ -52,14 +52,18 @@ impl StatefulWidget for SelectWidget {
         let prompt = " ";
         let filter_text = Text::from(Line::from(vec![
             Span::styled(prompt, Style::default().fg(Color::Cyan)),
-            Span::styled(state.filter_input.as_str(), Style::default().fg(Color::White)),
+            Span::styled(
+                state.filter_input.as_str(),
+                Style::default().fg(Color::White),
+            ),
         ]));
         Paragraph::new(filter_text).render(input_area, buf);
 
         // Calculate and store cursor position
         // Use unicode width for proper cursor positioning with Unicode characters
         let prompt_width = prompt.width() as u16;
-        let cursor_char_width: u16 = state.filter_input
+        let cursor_char_width: u16 = state
+            .filter_input
             .chars()
             .take(state.cursor_position)
             .map(|c| c.width().unwrap_or(0) as u16)
@@ -82,7 +86,7 @@ impl StatefulWidget for SelectWidget {
         // Adjust offset based on scrolloff (keep selected item away from edges)
         if let Some(selected) = state.selected_index {
             let height = list_area.height as usize;
-            let scrolloff = 3.min(height / 2);  // Keep 3 lines margin
+            let scrolloff = 3.min(height / 2); // Keep 3 lines margin
             let offset = state.list_state.offset();
             let cursor_pos = selected.saturating_sub(offset);
             let len = options.len();
@@ -147,10 +151,12 @@ impl StatefulWidget for SelectWidget {
                     }
 
                     // Render content with selection style
-                    let line = Line::from(opt.display.as_str());
-                    let styled_spans: Vec<Span> = line.spans.iter().map(|span| {
-                        Span::styled(span.content.as_ref(), selected_style)
-                    }).collect();
+                    let line = opt.display.clone();
+                    let styled_spans: Vec<Span> = line
+                        .spans
+                        .iter()
+                        .map(|span| Span::styled(span.content.as_ref(), selected_style))
+                        .collect();
                     let styled_line = Line::from(styled_spans);
                     styled_line.render(content_area, buf);
                 } else {
@@ -169,8 +175,7 @@ impl StatefulWidget for SelectWidget {
                     };
 
                     // Render content
-                    let line = Line::from(opt.display.as_str()).style(Style::default().fg(Color::White));
-                    line.render(content_area, buf);
+                    opt.display.clone().render(content_area, buf);
                 }
             }
         }

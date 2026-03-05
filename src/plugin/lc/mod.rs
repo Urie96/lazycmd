@@ -11,6 +11,7 @@ mod time;
 use crate::{plugin, Event};
 use base64::Engine;
 use mlua::prelude::*;
+use ratatui::text::Line;
 use std::io::{self, Write};
 use std::path::PathBuf;
 use std::time::Duration;
@@ -225,7 +226,7 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
                                 let lua_string = lua.create_string(&display)?;
                                 select_options.push(crate::SelectOption {
                                     value: LuaValue::String(lua_string),
-                                    display,
+                                    display: Line::from(display),
                                 });
                             }
                             LuaValue::Table(t) => {
@@ -244,7 +245,10 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
                                         LuaValue::String(lua_string)
                                     }
                                 };
-                                select_options.push(crate::SelectOption { value, display });
+                                select_options.push(crate::SelectOption {
+                                    value,
+                                    display: Line::from(display),
+                                });
                             }
                             _ => {
                                 return Err(LuaError::RuntimeError(

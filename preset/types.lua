@@ -292,16 +292,15 @@ local system = {}
 
 ---Execute an external command asynchronously (Lua wrapper)
 ---This wrapper provides multiple convenient call formats:
----Usage 1: lc.system.exec({cmd = {...}, callback = ...})
----Usage 2: lc.system.exec({cmd, callback})
----Usage 3: lc.system.exec(cmd, callback)
----Usage 4: lc.system.exec(cmd, opts, callback)
+---Usage 1: lc.system.exec({cmd, callback})
+---Usage 2: lc.system.exec(cmd, callback)
+---Usage 3: lc.system.exec(cmd, opts, callback)
 ---
 ---The wrapper calls lc.system._exec internally after parameter processing
----@param cmd_or_args SystemArgs|table The arguments table or command array
+---@param cmd table The arguments table or command array
 ---@param opts_or_callback SystemOptions|fun(output: CommandOutput)? Options table or callback function
 ---@param callback fun(output: CommandOutput)? Callback function
-function system.exec(cmd_or_args, opts_or_callback, callback) end
+function system.exec(cmd, opts_or_callback, callback) end
 
 ---Execute an external command asynchronously
 ---This Lua wrapper provides multiple convenient call formats:
@@ -424,15 +423,17 @@ function lc.notify(message) end
 -- lc.confirm - Confirmation dialog
 -- ============================================
 
----Show a confirmation dialog to the user
----The dialog appears centered on screen with Yes/No buttons
----Users can use Left/Right arrows to select buttons, Enter to confirm selection
----Or use Y/N keys to directly confirm or cancel
----@param opts table Configuration options
+---@class ConfirmOptions
 ---@field title? string Optional title text (defaults to "Confirm")
 ---@field prompt string The confirmation message to display
 ---@field on_confirm fun() Callback function when user confirms (Yes)
 ---@field on_cancel fun() Callback function when user cancels (No)
+
+---Show a confirmation dialog to the user
+---The dialog appears centered on screen with Yes/No buttons
+---Users can use Left/Right arrows to select buttons, Enter to confirm selection
+---Or use Y/N keys to directly confirm or cancel
+---@param opts ConfirmOptions Configuration options
 function lc.confirm(opts) end
 
 -- ============================================
@@ -441,14 +442,16 @@ function lc.confirm(opts) end
 
 ---@class SelectOption
 ---@field value any The value to return when this option is selected
----@field display string The text to display for this option
+---@field display string|Span|Line|Text The text to display for this option (supports styled widgets)
 
 ---Show a selection dialog to the user
 ---The dialog appears centered on screen with a list of options
 ---Users can navigate with arrow keys (or j/k), type to filter, Enter to select, Esc to cancel
----@param opts table Configuration options
+---@class SelectOptions
 ---@field prompt? string Optional prompt/title text (defaults to "Select")
 ---@field options (string|SelectOption)[] The list of options to display
+
+---@param opts SelectOptions Configuration options
 ---  Can be simple strings: {"Option 1", "Option 2", "Option 3"}
 ---  Or tables with value/display: {{value = "py", display = "🐍 Python"}, {value = "js", display = "📜 JavaScript"}}
 ---@param on_selection fun(choice: any) Callback function when user makes a selection

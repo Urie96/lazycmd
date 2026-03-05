@@ -46,7 +46,8 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
         .create_function(|lua, preview: Box<dyn Renderable>| {
             plugin::mut_scope_state(lua, |state| {
                 state.current_preview = Some(preview);
-                plugin::send_render_event(lua)
+                plugin::send_render_event(lua)?;
+                plugin::send_event(lua, Event::Command("scroll_preview_by 0".to_string()))
             })
         })?
         .into_lua(lua)?;

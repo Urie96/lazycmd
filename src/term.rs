@@ -1,12 +1,17 @@
 use std::io::{stdout, Stdout};
 
-use anyhow::Result;
-use crossterm::{execute, terminal::*};
+use anyhow::{bail, Result};
+use crossterm::{execute, terminal::*, tty::IsTty};
 use ratatui::prelude::*;
 
 pub type Term = Terminal<CrosstermBackend<Stdout>>;
 
 pub fn init() -> Result<Term> {
+    // Check if stdout is a TTY
+    if !stdout().is_tty() {
+        bail!("lazycmd requires a terminal (TTY) to run. Make sure you're not piping output or running in a non-interactive environment.");
+    }
+
     enable_raw_mode()?;
     execute!(stdout(), EnterAlternateScreen)?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
