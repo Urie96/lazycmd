@@ -5,6 +5,7 @@ mod http;
 mod keymap;
 mod path;
 mod style;
+mod system;
 mod time;
 
 use crate::{plugin, Event};
@@ -13,7 +14,7 @@ use mlua::prelude::*;
 use std::io::{self, Write};
 use std::path::PathBuf;
 use std::time::Duration;
-use tokio::{process::Command, time::sleep};
+use tokio::time::sleep;
 
 /// Load a preset Lua file (handles both debug and release builds)
 macro_rules! load_preset {
@@ -108,173 +109,7 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
         .create_function(|lua, cmd: String| plugin::send_event(lua, Event::Command(cmd)))?
         .into_lua(lua)?;
 
-    // lc.system.executable: check if a command is executable (synchronous)
-    let executable_fn = lua.create_function(|_, cmd: String| {
-        // Check if command exists and is executable
-        Ok(which::which(&cmd).is_ok())
-    })?;
-
-    // lc.system.open: open a file using the system's default application
-    let open_fn = lua.create_function(|_, file_path: String| {
-        // Use the `open` crate to open the file with the system's default application
-        open::that(&file_path).map_err(|e| {
-            LuaError::RuntimeError(format!("Failed to open file '{}': {}", file_path, e))
-        })
-    })?;
-
-    // Create system table
-    let system_tbl = lua.create_table()?;
-
-    // Add executable function
-    system_tbl.set("executable", executable_fn)?;
-
-    // Add open function
-    system_tbl.set("open", open_fn)?;
-
-    // Add __call metamethod to support lc.system(cmd, callback) and lc.system(cmd, opts, callback) syntax
-    system_tbl.set_metatable(Some({
-        let mt = lua.create_table()?;
-        mt.set(
-            "__call",
-            lua.create_function(
-                |lua, (_, cmd, opts_or_cb, maybe_cb): (LuaValue, Vec<String>, LuaValue, LuaValue)| {
-                    if cmd.is_empty() {
-                        return Err(LuaError::RuntimeError(
-                            "Command cannot be empty".to_string(),
-                        ));
-                    }
-
-                    // Parse arguments: lc.system(cmd, callback) or lc.system(cmd, opts, callback)
-                    let (options_table, callback) = match (opts_or_cb, maybe_cb) {
-                        (LuaValue::Function(cb), _) => {
-                            // lc.system(cmd, callback)
-                            (None, cb)
-                        }
-                        (LuaValue::Table(opts), LuaValue::Function(cb)) => {
-                            // lc.system(cmd, opts, callback)
-                            (Some(opts), cb)
-                        }
-                        (LuaValue::Table(_), LuaValue::Nil) => {
-                            // lc.system(cmd, opts) - missing callback
-                            return Err(LuaError::RuntimeError(
-                                "Callback function is required when providing options".to_string(),
-                            ));
-                        }
-                        _ => {
-                            return Err(LuaError::RuntimeError(
-                                "Invalid arguments: expected lc.system(cmd, callback) or lc.system(cmd, opts, callback)".to_string(),
-                            ));
-                        }
-                    };
-
-                    // Parse options table
-                    let mut stdin_data: Option<String> = None;
-                    let mut env_vars: Vec<(String, String)> = Vec::new();
-
-                    if let Some(ref opts) = options_table {
-                        // Get stdin
-                        if let Ok(stdin) = opts.get::<Option<String>>("stdin") {
-                            stdin_data = stdin;
-                        }
-
-                        // Get env
-                        if let Ok(env_table) = opts.get::<LuaTable>("env") {
-                            for pair in env_table.pairs::<String, String>() {
-                                let (k, v) = pair?;
-                                env_vars.push((k, v));
-                            }
-                        }
-                    }
-
-                    let sender = plugin::clone_sender(lua)?;
-
-                    tokio::task::spawn_local(async move {
-                        let mut it = cmd.into_iter();
-                        let command = it.next().unwrap();
-                        let args: Vec<String> = it.collect();
-
-                        let mut cmd_builder = Command::new(&command);
-                        cmd_builder.args(&args);
-
-                        // Set environment variables
-                        for (k, v) in env_vars {
-                            cmd_builder.env(&k, &v);
-                        }
-
-                        // Execute with or without stdin
-                        let output = if let Some(stdin) = stdin_data {
-                            // Spawn process with piped stdin
-                            match cmd_builder
-                                .stdin(std::process::Stdio::piped())
-                                .stdout(std::process::Stdio::piped())
-                                .stderr(std::process::Stdio::piped())
-                                .spawn()
-                            {
-                                Ok(mut child) => {
-                                    // Write to stdin if available
-                                    let result = if let Some(mut stdin_handle) = child.stdin.take() {
-                                        match tokio::io::AsyncWriteExt::write_all(&mut stdin_handle, stdin.as_bytes()).await {
-                                            Ok(_) => {
-                                                drop(stdin_handle);
-                                                child.wait_with_output().await
-                                            }
-                                            Err(e) => Err(e),
-                                        }
-                                    } else {
-                                        child.wait_with_output().await
-                                    };
-                                    result
-                                }
-                                Err(e) => Err(e),
-                            }
-                        } else {
-                            cmd_builder.output().await
-                        };
-
-                        let _ = sender.send(Event::LuaCallback(Box::new(move |lua| {
-                            let out = match output {
-                                Ok(output) => lua.create_table_from([
-                                    ("code", output.status.code().into_lua(lua)?),
-                                    ("stdout", lua.create_string(output.stdout)?.into_lua(lua)?),
-                                    ("stderr", lua.create_string(output.stderr)?.into_lua(lua)?),
-                                ]),
-                                Err(e) => {
-                                    let (code, err) = if e.kind() == std::io::ErrorKind::NotFound {
-                                        (127, format!("command not found: {}", command))
-                                    } else {
-                                        (1, e.to_string())
-                                    };
-                                    lua.create_table_from([
-                                        ("code", code.into_lua(lua)?),
-                                        ("stdout", "".into_lua(lua)?),
-                                        ("stderr", err.into_lua(lua)?),
-                                    ])
-                                }
-                            };
-                            let out = out?;
-                            callback.call(out)
-                        })));
-                    });
-
-                    Ok(())
-                },
-            )?,
-        )?;
-        mt
-    }));
-
-    let interactive_fn = lua
-        .create_function(
-            |lua, (cmd, on_complete): (Vec<String>, Option<LuaFunction>)| {
-                if cmd.is_empty() {
-                    return Err(LuaError::RuntimeError(
-                        "Command cannot be empty".to_string(),
-                    ));
-                }
-                plugin::send_event(lua, Event::InteractiveCommand(cmd, on_complete))
-            },
-        )?
-        .into_lua(lua)?;
+    let system_tbl = system::new_table(lua)?;
 
     let split = lua
         .create_function(|lua, (s, sep): (String, String)| lua.create_sequence_from(s.split(&sep)))?
@@ -370,79 +205,82 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
     })?;
 
     // lc.select: show a selection dialog
-    let select_fn = lua.create_function(|lua, (opts, on_selection): (LuaTable, LuaFunction)| -> mlua::Result<()> {
-        // Parse options: can be an array of strings or an array of tables
-        let options_lua: LuaValue = opts.get("options")?;
+    let select_fn = lua.create_function(
+        |lua, (opts, on_selection): (LuaTable, LuaFunction)| -> mlua::Result<()> {
+            // Parse options: can be an array of strings or an array of tables
+            let options_lua: LuaValue = opts.get("options")?;
 
-        let mut select_options = Vec::new();
+            let mut select_options = Vec::new();
 
-        match options_lua {
-            LuaValue::Table(table) => {
-                // Iterate over the table
-                for pair in table.pairs::<LuaValue, LuaValue>() {
-                    let (_, value) = pair?;
-                    match value {
-                        LuaValue::String(s) => {
-                            // Simple string: value = display = string
-                            let display = s.to_string_lossy().to_string();
-                            // Create a new Lua string from the display text
-                            let lua_string = lua.create_string(&display)?;
-                            select_options.push(crate::SelectOption {
-                                value: LuaValue::String(lua_string),
-                                display,
-                            });
-                        }
-                        LuaValue::Table(t) => {
-                            // Table with value and display fields
-                            let display = t
-                                .get::<Option<String>>("display")
-                                .unwrap_or(None)
-                                .unwrap_or_else(|| {
-                                    t.get::<String>("value")
-                                        .unwrap_or_else(|_| "?".to_string())
+            match options_lua {
+                LuaValue::Table(table) => {
+                    // Iterate over the table
+                    for pair in table.pairs::<LuaValue, LuaValue>() {
+                        let (_, value) = pair?;
+                        match value {
+                            LuaValue::String(s) => {
+                                // Simple string: value = display = string
+                                let display = s.to_string_lossy().to_string();
+                                // Create a new Lua string from the display text
+                                let lua_string = lua.create_string(&display)?;
+                                select_options.push(crate::SelectOption {
+                                    value: LuaValue::String(lua_string),
+                                    display,
                                 });
-                            // Get the value field, or create a Lua string from display if not present
-                            let value: LuaValue = match t.get::<LuaValue>("value") {
-                                Ok(v) => v,
-                                Err(_) => {
-                                    let lua_string = lua.create_string(&display)?;
-                                    LuaValue::String(lua_string)
-                                }
-                            };
-                            select_options.push(crate::SelectOption { value, display });
-                        }
-                        _ => {
-                            return Err(LuaError::RuntimeError(
-                                "Options must be strings or tables".to_string(),
-                            ));
+                            }
+                            LuaValue::Table(t) => {
+                                // Table with value and display fields
+                                let display = t
+                                    .get::<Option<String>>("display")
+                                    .unwrap_or(None)
+                                    .unwrap_or_else(|| {
+                                        t.get::<String>("value").unwrap_or_else(|_| "?".to_string())
+                                    });
+                                // Get the value field, or create a Lua string from display if not present
+                                let value: LuaValue = match t.get::<LuaValue>("value") {
+                                    Ok(v) => v,
+                                    Err(_) => {
+                                        let lua_string = lua.create_string(&display)?;
+                                        LuaValue::String(lua_string)
+                                    }
+                                };
+                                select_options.push(crate::SelectOption { value, display });
+                            }
+                            _ => {
+                                return Err(LuaError::RuntimeError(
+                                    "Options must be strings or tables".to_string(),
+                                ));
+                            }
                         }
                     }
                 }
+                _ => {
+                    return Err(LuaError::RuntimeError(
+                        "Options must be a table/array".to_string(),
+                    ));
+                }
             }
-            _ => {
+
+            if select_options.is_empty() {
                 return Err(LuaError::RuntimeError(
-                    "Options must be a table/array".to_string(),
+                    "Options cannot be empty".to_string(),
                 ));
             }
-        }
 
-        if select_options.is_empty() {
-            return Err(LuaError::RuntimeError("Options cannot be empty".to_string()));
-        }
+            // prompt is optional
+            let prompt: Option<String> = opts.get("prompt").ok();
 
-        // prompt is optional
-        let prompt: Option<String> = opts.get("prompt").ok();
-
-        plugin::send_event(
-            lua,
-            Event::ShowSelect {
-                prompt,
-                options: select_options,
-                on_selection,
-            },
-        )?;
-        Ok(())
-    })?;
+            plugin::send_event(
+                lua,
+                Event::ShowSelect {
+                    prompt,
+                    options: select_options,
+                    on_selection,
+                },
+            )?;
+            Ok(())
+        },
+    )?;
 
     style::inject_string_meta_method(lua)?;
 
@@ -459,7 +297,6 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
         ("cmd", cmd),
         ("split", split),
         ("system", mlua::Value::Table(system_tbl)),
-        ("interactive", interactive_fn),
         ("path", path),
         ("time", time),
         ("log", log_fn),

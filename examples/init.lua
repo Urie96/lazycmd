@@ -1,6 +1,10 @@
 lc.config {
   plugins = {
     {
+      'interactive-test',
+      config = function() require('interactive-test').setup() end,
+    },
+    {
       'select-test',
       config = function() require('select-test').setup() end,
     },

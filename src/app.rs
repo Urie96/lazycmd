@@ -224,9 +224,13 @@ impl App {
                     Ok(())
                 })?;
             }
-            Event::InteractiveCommand(cmd, on_complete) => {
+            Event::InteractiveCommand {
+                cmd,
+                on_complete,
+                wait_confirm,
+            } => {
                 // Execute the interactive command
-                let result = self.execute_interactive_command(cmd);
+                let result = self.execute_interactive_command(cmd, wait_confirm);
 
                 // Call the completion callback if provided
                 if let Some(cb) = on_complete {
@@ -271,7 +275,11 @@ impl App {
         Ok(())
     }
 
-    fn execute_interactive_command(&mut self, cmd: Vec<String>) -> Result<i32> {
+    fn execute_interactive_command(
+        &mut self,
+        cmd: Vec<String>,
+        wait_confirm: Option<LuaFunction>,
+    ) -> Result<i32> {
         if cmd.is_empty() {
             bail!("Interactive command cannot be empty");
         }
@@ -289,6 +297,24 @@ impl App {
             .status()
             .context(format!("Failed to execute command: {}", program))?;
 
+        let exit_code = result.code().unwrap_or(-1);
+
+        // If wait_confirm function is provided, call it to decide whether to wait
+        let should_wait = if let Some(ref wait_fn) = wait_confirm {
+            plugin::scope(&self.lua, &mut self.state, &self.event_sender, || {
+                let result: bool = wait_fn.call::<bool>(exit_code)?;
+                Ok(result)
+            })
+            .unwrap_or(false)
+        } else {
+            false
+        };
+
+        if should_wait {
+            println!("\nPress Enter to return to lazycmd...");
+            let _ = std::io::stdin().read_line(&mut String::new());
+        }
+
         // Re-initialize the terminal for TUI
         self.term = term::init()?;
 
@@ -300,7 +326,7 @@ impl App {
         }
 
         // Return the exit code
-        Ok(result.code().unwrap_or(-1))
+        Ok(exit_code)
     }
 
     fn handle_command(&mut self, command: &str) -> Result<()> {

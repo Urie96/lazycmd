@@ -285,13 +285,32 @@ lc.time = time
 ---@class SystemOptions
 ---@field stdin string? Optional standard input to provide to the command
 ---@field env table<string, string>? Optional environment variables to set for the command
+---@field callback fun(output: CommandOutput)? Callback function called on completion
 
 ---@class lc.system
 local system = {}
 
+---Execute an external command asynchronously (Lua wrapper)
+---This wrapper provides multiple convenient call formats:
+---Usage 1: lc.system.exec({cmd = {...}, callback = ...})
+---Usage 2: lc.system.exec({cmd, callback})
+---Usage 3: lc.system.exec(cmd, callback)
+---Usage 4: lc.system.exec(cmd, opts, callback)
+---
+---The wrapper calls lc.system._exec internally after parameter processing
+---@param cmd_or_args SystemArgs|table The arguments table or command array
+---@param opts_or_callback SystemOptions|fun(output: CommandOutput)? Options table or callback function
+---@param callback fun(output: CommandOutput)? Callback function
+function system.exec(cmd_or_args, opts_or_callback, callback) end
+
 ---Execute an external command asynchronously
+---This Lua wrapper provides multiple convenient call formats:
 ---Usage 1: lc.system({"cmd", "arg1", "arg2"}, callback)
----Usage 2: lc.system({"cmd", "arg1", "arg2"}, {stdin = "input", env = {VAR = "value"}}, callback)
+---Usage 2: lc.system({"cmd", "arg1", "arg2"}, {stdin = "input"}, callback)
+---Usage 3: lc.system({"cmd", "arg1", "arg2"}, {env = {VAR = "value"}}, callback)
+---Usage 4: lc.system({"cmd", "arg1", "arg2"}, {stdin = "input", env = {VAR = "value"}}, callback)
+---
+---The __call metamethod processes arguments and calls lc.system.exec(args)
 ---@param cmd string[] The command and its arguments
 ---@param opts_or_callback SystemOptions|fun(output: CommandOutput) Either options table or callback function
 ---@param callback fun(output: CommandOutput)? Callback function called on completion (required if opts provided)
@@ -313,10 +332,39 @@ lc.system = system
 -- lc.interactive - Execute interactive commands
 -- ============================================
 
+---@class InteractiveOptions
+---@field wait_confirm boolean|fun(exit_code: number):boolean? Whether to wait for user to press Enter before returning to lazycmd.
+---  If true: always wait
+---  If false: never wait (default)
+---  If function: called with exit code, return true to wait, false to skip waiting
+---@field on_complete fun(exit_code: number)? Optional callback function called when command exits
+
+---@class InteractiveArgs
+---@field cmd string[] The command and its arguments
+---@field wait_confirm fun(exit_code: number):boolean? Function to decide whether to wait for confirmation based on exit code
+---@field on_complete fun(exit_code: number)? Optional callback function called when command exits
+
 ---Execute a command in interactive mode (with terminal access)
+---This Lua wrapper provides multiple convenient call formats:
+---Usage 1: lc.interactive({"cmd", "arg1", "arg2"})
+---Usage 2: lc.interactive({"cmd", "arg1", "arg2"}, callback)
+---Usage 3: lc.interactive({"cmd", "arg1", "arg2"}, {wait_confirm = true})
+---Usage 4: lc.interactive({"cmd", "arg1", "arg2"}, {wait_confirm = function(code) return code ~= 0 end})
+---Usage 5: lc.interactive({"cmd", "arg1", "arg2"}, {wait_confirm = true}, callback)
+---
+---The underlying Rust implementation receives a table with all fields:
+---  _interactive_rust({cmd = ..., wait_confirm = ..., on_complete = ...})
+---
+---The wait_confirm option:
+---  - If boolean true: always wait for Enter press after command exits
+---  - If boolean false or nil: never wait (default)
+---  - If function: called with exit_code as argument, should return boolean
+---    - Example: {wait_confirm = function(code) return code ~= 0 end} -- wait only on error
+---    - Example: {wait_confirm = function(code) return code > 1 end} -- wait only on severe errors
 ---@param cmd string[] The command and its arguments
----@param on_complete fun(exit_code: number)? Optional callback function called when command exits
-function lc.interactive(cmd, on_complete) end
+---@param opts_or_callback InteractiveOptions|fun(exit_code: number)? Either options table or callback function
+---@param callback fun(exit_code: number)? Optional callback function called when command exits
+function lc.interactive(cmd, opts_or_callback, callback) end
 
 -- ============================================
 -- lc.osc52_copy - Copy text to clipboard via OSC 52

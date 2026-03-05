@@ -18,19 +18,6 @@ local unit_types = {
 }
 
 function M.setup()
-  -- 辅助函数：获取当前选中的单元信息
-  local function get_selected_unit()
-    local entry = lc.api.page_get_hovered()
-    local path = lc.api.get_current_path()
-
-    if not entry or not entry.unit or #path < 2 then return nil end
-
-    return {
-      scope = path[1],
-      unit = entry.unit,
-    }
-  end
-
   -- 辅助函数：定义 systemctl 操作快捷键
   local function define_unit_action(key, action_name, action_cmd)
     local action_name_lower = action_name:lower()
