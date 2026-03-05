@@ -8,6 +8,7 @@ mod style;
 mod system;
 mod time;
 
+use crate::widgets::{LuaLine, LuaSpan};
 use crate::{plugin, Event};
 use base64::Engine;
 use mlua::prelude::*;
@@ -231,24 +232,35 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
                             }
                             LuaValue::Table(t) => {
                                 // Table with value and display fields
-                                let display = t
-                                    .get::<Option<String>>("display")
-                                    .unwrap_or(None)
-                                    .unwrap_or_else(|| {
-                                        t.get::<String>("value").unwrap_or_else(|_| "?".to_string())
-                                    });
-                                // Get the value field, or create a Lua string from display if not present
-                                let value: LuaValue = match t.get::<LuaValue>("value") {
-                                    Ok(v) => v,
-                                    Err(_) => {
-                                        let lua_string = lua.create_string(&display)?;
-                                        LuaValue::String(lua_string)
+                                let display: Line = match t.get::<LuaValue>("display")? {
+                                    LuaValue::Nil => {
+                                        // Use value as display fallback
+                                        match t.get::<LuaValue>("value")? {
+                                            LuaValue::String(s) => Line::from(s.to_string_lossy()),
+                                            _ => Line::from("?"),
+                                        }
+                                    }
+                                    LuaValue::String(s) => Line::from(s.to_string_lossy()),
+                                    LuaValue::UserData(ud) => {
+                                        if let Ok(span) = ud.borrow::<LuaSpan>() {
+                                            Line::from(span.0.clone())
+                                        } else if let Ok(line) = ud.borrow::<LuaLine>() {
+                                            line.0.clone()
+                                        } else {
+                                            return Err(LuaError::RuntimeError(
+                                                "Display must be string, Span, or Line".to_string(),
+                                            ));
+                                        }
+                                    }
+                                    _ => {
+                                        return Err(LuaError::RuntimeError(
+                                            "Display must be string, Span, or Line".to_string(),
+                                        ));
                                     }
                                 };
-                                select_options.push(crate::SelectOption {
-                                    value,
-                                    display: Line::from(display),
-                                });
+                                // Get the value field
+                                let value: LuaValue = t.get("value")?;
+                                select_options.push(crate::SelectOption { value, display });
                             }
                             _ => {
                                 return Err(LuaError::RuntimeError(

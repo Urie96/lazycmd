@@ -3,14 +3,20 @@ local M = {}
 -- 辅助函数：获取当前选中的单元信息
 local function get_selected_unit()
   local entry = lc.api.page_get_hovered()
-  local path = lc.api.get_current_path()
+  if not entry or not entry.unit then return nil end
+  return entry
+end
 
-  if not entry or not entry.unit or #path < 2 then return nil end
-
-  return {
-    scope = path[1],
-    unit = entry.unit,
-  }
+-- 辅助函数：获取 unit 的活动状态和启用状态
+local function get_unit_status(unit_info, callback)
+  lc.system.exec(
+    { 'systemctl', '--' .. unit_info.scope, 'is-enabled', unit_info.unit },
+    function(enabled_output)
+      callback {
+        is_enabled = enabled_output.code == 0,
+      }
+    end
+  )
 end
 
 local function do_unit_action(action_name)
@@ -46,7 +52,7 @@ function M.start() do_unit_action 'start' end
 function M.stop() do_unit_action 'stop' end
 
 function M.enable() do_unit_action 'enable' end
-
+function M.disable() do_unit_action 'disable' end
 function M.reload() do_unit_action 'reload' end
 
 function M.follow() do_unit_action 'follow' end
@@ -58,17 +64,75 @@ function M.show() do_unit_action 'show' end
 function M.cat() do_unit_action 'cat' end
 
 function M.select_action()
-  local path = lc.api.get_current_path()
-  if #path < 2 then
-    lc.cmd 'enter'
-  else
+  local unit_info = get_selected_unit()
+  if not unit_info then
+    lc.notify 'Please select a unit first'
+    return
+  end
+
+  get_unit_status(unit_info, function(status)
+    local options = {}
+
+    table.insert(options, {
+      value = 'follow',
+      display = lc.style.line { ('📋 Follow'):fg 'cyan' },
+    })
+
+    if unit_info.active == 'active' then
+      table.insert(options, {
+        value = 'restart',
+        display = lc.style.line { ('🔄 Restart'):fg 'red' },
+      })
+      table.insert(options, {
+        value = 'stop',
+        display = lc.style.line { ('⏹️ Stop'):fg 'red' },
+      })
+    else
+      table.insert(options, {
+        value = 'start',
+        display = lc.style.line { ('▶️ Start'):fg 'green' },
+      })
+    end
+
+    if status.is_enabled then
+      table.insert(options, {
+        value = 'disable',
+        display = lc.style.line { ('🔓 Disable'):fg 'red' },
+      })
+    else
+      table.insert(options, {
+        value = 'enable',
+        display = lc.style.line { ('🔒 Enable'):fg 'green' },
+      })
+    end
+
+    -- reload 选项
+    table.insert(options, {
+      value = 'reload',
+      display = lc.style.line { ('🔃 Reload'):fg 'blue' },
+    })
+
+    -- edit/show/cat 选项
+    table.insert(options, {
+      value = 'edit',
+      display = lc.style.line { ('✏️ Edit'):fg 'yellow' },
+    })
+    table.insert(options, {
+      value = 'show',
+      display = lc.style.line { ('📄 Show'):fg 'yellow' },
+    })
+    table.insert(options, {
+      value = 'cat',
+      display = lc.style.line { ('📜 Cat'):fg 'yellow' },
+    })
+
     lc.select({
       prompt = 'Select an action',
-      options = { 'follow', 'restart', 'start', 'stop', 'enable', 'edit', 'show', 'cat', 'reload' },
+      options = options,
     }, function(choice)
       if choice then require('systemd.action')[choice]() end
     end)
-  end
+  end)
 end
 
 return M

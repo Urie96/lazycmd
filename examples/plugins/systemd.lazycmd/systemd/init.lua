@@ -2,44 +2,30 @@
 
 local M = {}
 
--- systemd 单元类型列表
+-- systemd 单元类型列表（带图标）
 local unit_types = {
-  'service',
-  'mount',
-  'swap',
-  'socket',
-  'target',
-  'device',
-  'automount',
-  'timer',
-  'path',
-  'slice',
-  'scope',
+  { name = 'service', icon = '⚙️' },
+  { name = 'mount', icon = '💾' },
+  { name = 'swap', icon = '🔄' },
+  { name = 'socket', icon = '🔌' },
+  { name = 'target', icon = '🎯' },
+  { name = 'device', icon = '💻' },
+  { name = 'automount', icon = '📂' },
+  { name = 'timer', icon = '⏰' },
+  { name = 'path', icon = '📁' },
+  { name = 'slice', icon = '📊' },
+  { name = 'scope', icon = '📦' },
 }
 
 function M.setup()
-  -- 辅助函数：定义交互式命令快捷键
-  local function define_interactive_action(key, action_name, cmd_builder)
-    lc.keymap.set('main', key, function()
-      local unit_info = get_selected_unit()
-      if not unit_info then
-        lc.notify 'Please select a unit first'
-        return
-      end
-
-      lc.notify(action_name .. ' for ' .. unit_info.unit .. '...')
-      lc.interactive(cmd_builder(unit_info.scope, unit_info.unit))
-    end)
-  end
-
-  lc.keymap.set('main', '<enter>', function() require('systemd.action').select_action() end)
-
-  -- 定义快捷键：l - 查看服务日志
-  define_interactive_action(
-    'l',
-    'Opening logs',
-    function(scope, unit) return { 'journalctl', '--' .. scope, '-u', unit, '-n', '100', '--no-pager' } end
-  )
+  lc.keymap.set('main', '<enter>', function()
+    local path = lc.api.get_current_path()
+    if #path < 2 then
+      lc.cmd 'enter'
+    else
+      require('systemd.action').select_action()
+    end
+  end)
 end
 
 -- 第1级：显示 system 和 user 两个选项
@@ -64,9 +50,9 @@ local function list_level_2(path, cb)
   local entries = {}
   for _, unit_type in ipairs(unit_types) do
     table.insert(entries, {
-      key = unit_type,
-      display = unit_type:fg 'yellow',
-      unit_type = unit_type,
+      key = unit_type.name,
+      display = lc.style.line({ (unit_type.icon .. ' ' .. unit_type.name):fg 'yellow' }),
+      unit_type = unit_type.name,
       scope = path[1],
     })
   end
@@ -125,13 +111,13 @@ local function list_level_3(path, cb)
       table.insert(entries, {
         key = unit_name,
         unit = unit_name,
-        load_state = load_state,
-        active_state = active_state,
-        sub_state = sub_state,
+        load = load_state,
+        active = active_state,
+        sub = sub_state,
         description = description,
         display = display,
         scope = scope,
-        unit_type = unit_type,
+        type = unit_type,
       })
     end
 
@@ -172,7 +158,7 @@ function M.preview(entry, cb)
       'Select a unit type to view units:',
     }
     for _, unit_type in ipairs(unit_types) do
-      table.insert(lines, '  • ' .. unit_type)
+      table.insert(lines, '  • ' .. unit_type.icon .. ' ' .. unit_type.name)
     end
     cb(table.concat(lines, '\n'))
     return
