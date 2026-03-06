@@ -1,2 +1,2 @@
 run:
-    cargo run -- systemd
+    cargo run -- docker

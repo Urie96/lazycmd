@@ -27,29 +27,25 @@ impl LuaUserData for LuaSpan {
 
         methods.add_meta_function_mut(
             mlua::MetaMethod::Concat,
-            |lua, (this, rhs): (AnyUserData, LuaValue)| {
-                let span_lhs = this.take::<LuaSpan>()?.0;
-
-                match rhs {
-                    LuaValue::String(s) => lua.create_userdata(LuaLine(Line::from(vec![
-                        span_lhs,
-                        Span::raw(s.to_str()?.to_string()),
-                    ]))),
-                    LuaValue::UserData(ud) => {
-                        if let Ok(span_rhs) = ud.take::<LuaSpan>() {
-                            lua.create_userdata(LuaLine(Line::from(vec![span_lhs, span_rhs.0])))
-                        } else if let Ok(line_rhs) = ud.take::<LuaLine>() {
-                            let mut spans = vec![span_lhs];
-                            spans.extend(line_rhs.0.spans);
-                            lua.create_userdata(LuaLine(Line::from(spans)))
-                        } else {
-                            Err(mlua::Error::runtime("cannot concat Span with this type"))
-                        }
+            |lua, (lhs, rhs): (LuaSpan, LuaValue)| match rhs {
+                LuaValue::String(s) => lua.create_userdata(LuaLine(Line::from(vec![
+                    lhs.0,
+                    Span::raw(s.to_str()?.to_string()),
+                ]))),
+                LuaValue::UserData(ud) => {
+                    if let Ok(span_rhs) = ud.take::<LuaSpan>() {
+                        lua.create_userdata(LuaLine(Line::from(vec![lhs.0, span_rhs.0])))
+                    } else if let Ok(line_rhs) = ud.take::<LuaLine>() {
+                        let mut spans = vec![lhs.0];
+                        spans.extend(line_rhs.0.spans);
+                        lua.create_userdata(LuaLine(Line::from(spans)))
+                    } else {
+                        Err(mlua::Error::runtime("cannot concat Span with this type"))
                     }
-                    _ => Err(mlua::Error::runtime(
-                        "cannot concat Span with non-string/non-UserData value",
-                    )),
                 }
+                _ => Err(mlua::Error::runtime(
+                    "cannot concat Span with non-string/non-UserData value",
+                )),
             },
         );
     }
@@ -71,19 +67,19 @@ impl LuaUserData for LuaLine {
 
         methods.add_meta_function_mut(
             mlua::MetaMethod::Concat,
-            |lua, (this, rhs): (AnyUserData, LuaValue)| {
-                let mut line_lhs = this.borrow_mut::<Self>()?;
+            |lua, (lhs, rhs): (AnyUserData, LuaValue)| {
+                let mut line_lhs = lhs.borrow_mut::<Self>()?;
 
                 match rhs {
                     LuaValue::String(s) => {
                         line_lhs.0.push_span(Span::raw(s.to_str()?.to_string()));
-                        this.into_lua(lua)
+                        lhs.into_lua(lua)
                     }
                     LuaValue::UserData(ud) => {
                         // 尝试转换为 Span
                         if let Ok(span_rhs) = ud.take::<LuaSpan>() {
                             line_lhs.0.push_span(span_rhs.0);
-                            this.into_lua(lua)
+                            lhs.into_lua(lua)
                         } else {
                             Err(mlua::Error::runtime("cannot concat Line with this type"))
                         }
@@ -98,3 +94,27 @@ impl LuaUserData for LuaLine {
 }
 
 impl LuaUserData for LuaText {}
+
+impl FromLua for LuaSpan {
+    fn from_lua(value: LuaValue, _lua: &Lua) -> mlua::Result<Self> {
+        match value {
+            LuaValue::UserData(ud) => {
+                ud.take::<LuaSpan>()
+                    .map_err(|_| mlua::Error::FromLuaConversionError {
+                        from: "UserData",
+                        to: "LuaSpan".to_string(),
+                        message: Some("UserData is not a LuaSpan".to_string()),
+                    })
+            }
+            LuaValue::String(s) => {
+                let s = s.to_str()?.to_string();
+                Ok(LuaSpan(Span::raw(s)))
+            }
+            _ => Err(mlua::Error::FromLuaConversionError {
+                from: value.type_name(),
+                to: "LuaSpan".to_string(),
+                message: Some("expected UserData or String".to_string()),
+            }),
+        }
+    }
+}

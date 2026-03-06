@@ -1,7 +1,7 @@
 use crate::widgets::{LuaLine, LuaSpan, LuaText};
 use anyhow::bail;
 use mlua::prelude::*;
-use ratatui::{text::Line as RatatuiLine, widgets};
+use ratatui::{text::Line, widgets};
 
 #[derive(Clone)]
 pub struct PageEntry {
@@ -19,22 +19,22 @@ impl FromLua for PageEntry {
 
 impl PageEntry {
     /// Extract the Text content from the display field
-    pub fn display(&self) -> RatatuiLine<'_> {
+    pub fn display(&self) -> Line<'_> {
         let f = || match self.tbl.get::<LuaValue>("display")? {
-            LuaValue::Nil => Ok(RatatuiLine::from(self.key.as_str())),
-            LuaValue::String(s) => Ok(RatatuiLine::from(s.to_string_lossy())),
+            LuaValue::Nil => Ok(Line::from(self.key.as_str())),
+            LuaValue::String(s) => Ok(Line::from(s.to_string_lossy())),
             LuaValue::UserData(ud) => {
                 if let Ok(span) = ud.borrow::<LuaSpan>() {
-                    Ok(RatatuiLine::from(span.0.clone()))
+                    Ok(Line::from(span.0.clone()))
                 } else if let Ok(line) = ud.borrow::<LuaLine>() {
-                    Ok(RatatuiLine::from(line.0.clone()))
+                    Ok(Line::from(line.0.clone()))
                 } else {
                     bail!("Expected Span, Line, Text, or nil")
                 }
             }
             _ => bail!("Expected Span, Line, string, or nil"),
         };
-        f().unwrap_or_else(|e| RatatuiLine::from(e.to_string()))
+        f().unwrap_or_else(|e| Line::from(e.to_string()))
     }
 }
 

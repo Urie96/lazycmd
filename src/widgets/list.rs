@@ -62,18 +62,19 @@ impl StatefulWidget for ListWidget {
             let line = entry.display();
 
             if is_selected {
+                let selected_color = Color::DarkGray;
                 // Selected: render with blue background and markers
-                let selected_style = Style::default().bg(Color::Blue).fg(Color::Black);
+                let selected_style = Style::default().bg(selected_color);
 
                 // Left marker  with blue foreground only (no background)
                 buf[(area.left(), y)]
                     .set_char('')
-                    .set_style(Style::default().fg(Color::Blue));
+                    .set_style(Style::default().fg(selected_color));
 
                 // Right marker  with blue foreground only (no background)
                 buf[(area.right() - 1, y)]
                     .set_char('')
-                    .set_style(Style::default().fg(Color::Blue));
+                    .set_style(Style::default().fg(selected_color));
 
                 // Content area (with one space padding on each side)
                 let content_area = Rect {
@@ -89,10 +90,7 @@ impl StatefulWidget for ListWidget {
                 }
 
                 // Create a new line with black foreground and blue background
-                line.into_iter()
-                    .map(|span| span.style(selected_style))
-                    .collect::<Line>()
-                    .render(content_area, buf);
+                line.patch_style(selected_style).render(content_area, buf);
             } else {
                 // Normal: render with padding on both sides
                 // Clear the entire line
