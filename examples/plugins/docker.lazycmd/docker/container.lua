@@ -21,7 +21,7 @@ function M.list(cb)
 
   lc.system(cmd, function(out)
     if out.code ~= 0 then
-      cb('Failed to list containers', out.stderr or 'Unknown error')
+      lc.notify('Failed to list containers: ' .. (out.stderr or 'Unknown error'))
       return
     end
 

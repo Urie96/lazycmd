@@ -113,16 +113,9 @@ Lua 中的全局表 `lc` 提供以下子系统：
 | `lc.tbl_extend` | `preset/util.lua`        | 深度扩展表                    |
 | `lc.equals`     | `preset/util.lua`        | 深度比较值                    |
 | `lc.trim`       | `preset/util.lua`        | 去除字符串空白                |
+| `lc.style`      | `src/plugin/lc/style.rs` | 创建 UI 组件和语法高亮        |
 | `lc.config`     | `preset/init.lua`        | 配置插件和设置                |
 
-#### 事件钩子
-
-插件可以挂钩到应用事件：
-
-```lua
-lc.on_event('EnterPost', function() ... end)   -- 进入目录后
-lc.on_event('HoverPost', function() ... end)  -- 改变选中项后
-```
 
 #### UI 字符串扩展
 
@@ -248,6 +241,64 @@ tail -f ~/.local/state/lazycmd/lua.log
 
 1. 创建 `examples/plugins/myplugin.lazycmd/myplugin/init.lua`（debug）或 `~/.config/lazycmd/plugins/myplugin.lazycmd/myplugin/init.lua`（release）
 2. 在 `examples/init.lua` 或 `~/.config/lazycmd/init.lua` 中添加插件配置
+
+### 语法高亮功能
+
+lazycmd 提供了代码语法高亮功能，使用 `lc.style.highlight()` API。
+
+#### 使用示例
+
+```lua
+-- 高亮 JavaScript 代码
+local code = [[
+function greet(name) {
+  console.log("Hello, " + name);
+  return "Hello, " + name;
+}
+]]
+
+local highlighted = lc.style.highlight(code, "javascript")
+lc.api.page_set_preview(highlighted)
+```
+
+#### 支持的语言
+
+syntect 支持超过 180 种编程语言，常见语言标识符：
+- JavaScript/TypeScript: `javascript`, `typescript`, `js`, `ts`
+- Python: `python`, `py`
+- Rust: `rust`, `rs`
+- Go: `go`
+- Java: `java`
+- C/C++: `c`, `cpp`, `h`, `hpp`
+- Shell: `bash`, `sh`, `zsh`
+- Web: `html`, `css`, `javascript`
+- 配置文件: `json`, `yaml`, `toml`, `ini`, `yml`
+- 其他: `markdown`, `dockerfile`, `sql`, `php`, `ruby`, `lua` 等
+
+#### 高亮测试插件
+
+项目包含一个完整的语法高亮测试插件：
+- 位置: `examples/plugins/highlight-test.lazycmd/highlight-test/init.lua`
+- 运行: `cargo run -- highlight-test`
+- 功能: 包含 13 种语言的示例代码，支持键盘快捷键切换
+
+#### 实现细节
+
+- 使用 [syntect](https://github.com/trishume/syntect) 库进行语法解析和高亮
+- 使用预编译的语法文件和主题（类似 yazi）
+  - 语法文件: `preset/syntaxes/syntaxes` (~970KB，180+ 种语言)
+  - 主题文件: `preset/themes/ansi.tmTheme` (~7.5KB，ANSI 主题)
+- Debug 模式: 从文件系统加载
+- Release 模式: 嵌入二进制文件
+- 依赖: `syntect` with features `dump-load`, `dump-create`, `parsing`, `plist-load`, `regex-onig`
+- 实现: `src/plugin/lc/highlighter.rs`
+
+#### 更新预编译文件
+
+如需更新语法文件或主题：
+1. 使用 yazi-prebuilt 项目生成新的预编译文件
+2. 复制到 `preset/syntaxes/` 和 `preset/themes/` 目录
+3. 重新构建项目
 
 ## 重要实现细节
 

@@ -1,6 +1,7 @@
 mod api;
 mod cache;
 mod fs;
+mod highlighter;
 mod http;
 mod keymap;
 mod path;
@@ -300,8 +301,11 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
 
     style::inject_string_meta_method(lua)?;
 
-    let style_tbl =
-        lua.create_table_from([("line", style::line(lua)?), ("text", style::text(lua)?)])?;
+    let style_tbl = lua.create_table_from([
+        ("line", style::line(lua)?),
+        ("text", style::text(lua)?),
+        ("highlight", style::highlight(lua)?),
+    ])?;
 
     let lc = lua.create_table_from([
         ("defer_fn", defer_fn),

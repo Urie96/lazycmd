@@ -1,6 +1,7 @@
 use ansi_to_tui::IntoText;
 use std::str::FromStr;
 
+use crate::plugin::lc::highlighter;
 use crate::widgets::{LuaLine, LuaSpan, LuaText};
 use mlua::prelude::*;
 use ratatui::style::{Color, Stylize};
@@ -103,5 +104,14 @@ pub fn text(lua: &Lua) -> mlua::Result<LuaFunction> {
             }
         }
         Ok(LuaText(Text::from(lines)))
+    })
+}
+
+/// Highlight code with syntax highlighting
+pub fn highlight(lua: &Lua) -> mlua::Result<LuaFunction> {
+    lua.create_function(|_lua, (code, language): (String, String)| {
+        highlighter::highlight(&code, &language)
+            .map(|text| LuaText(text))
+            .map_err(|e| LuaError::RuntimeError(format!("Highlighting failed: {}", e)))
     })
 }

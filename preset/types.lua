@@ -391,17 +391,6 @@ function lc.defer_fn(callback, delay_ms) end
 function lc.cmd(command) end
 
 -- ============================================
--- lc.on_event - Register event hooks
--- ============================================
-
----@alias EventHook 'EnterPost' | 'HoverPost'
-
----Register a callback for an event
----@param event_name EventHook The event name
----@param callback fun() The callback function
-function lc.on_event(event_name, callback) end
-
--- ============================================
 -- lc.split - String splitting utility
 -- ============================================
 
@@ -518,6 +507,12 @@ function lc.style.line(args) end
 ---@param args (Line|Span|string)[] The Lines, Spans, or Strings to combine into a Text
 ---@return Text A Text widget containing the combined content
 function lc.style.text(args) end
+
+---Highlight code with syntax highlighting
+---@param code string The code to highlight
+---@param language string The programming language name (e.g., "javascript", "python", "rust", "lua")
+---@return Text A Text widget with syntax-highlighted code
+function lc.style.highlight(code, language) end
 
 -- ============================================
 -- lc.config - Configure plugins
