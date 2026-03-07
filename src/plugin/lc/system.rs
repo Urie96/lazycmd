@@ -128,10 +128,10 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
         Ok(())
     })?;
 
-    system_tbl.set("_exec", system_exec)?;
+    system_tbl.set("exec", system_exec)?;
 
     system_tbl.set(
-        "_interactive",
+        "interactive",
         lua.create_function(|lua, args: LuaTable| {
             let cmd: Vec<String> = args.get("cmd")?;
 

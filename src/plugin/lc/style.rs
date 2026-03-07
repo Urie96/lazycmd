@@ -1,37 +1,12 @@
 use ansi_to_tui::IntoText;
-use std::str::FromStr;
 
 use crate::plugin::lc::highlighter;
 use crate::widgets::{LuaLine, LuaSpan, LuaText};
 use mlua::prelude::*;
-use ratatui::style::{Color, Stylize};
 use ratatui::text::{Line, Span, Text};
 
-pub(super) fn inject_string_meta_method(lua: &Lua) -> mlua::Result<()> {
-    // 设置 string 表中的函数
-    let string: LuaTable = lua.globals().get("string")?;
-    string.raw_set(
-        "fg",
-        lua.create_function(|_, (str, color): (String, String)| {
-            Ok(LuaSpan(
-                Span::raw(str).fg(Color::from_str(&color).into_lua_err()?),
-            ))
-        })?,
-    )?;
-    string.raw_set(
-        "ansi",
-        lua.create_function(|_, s: mlua::String| {
-            Ok(LuaText(s.as_bytes().into_text().into_lua_err()?))
-        })?,
-    )?;
-    string.raw_set(
-        "split",
-        lua.create_function(|_, (s, sep): (String, String)| {
-            let parts: Vec<String> = s.split(&sep).map(|x| x.to_string()).collect();
-            Ok(parts)
-        })?,
-    )?;
-    Ok(())
+pub fn span(lua: &Lua) -> mlua::Result<LuaFunction> {
+    lua.create_function(|_lua, s: String| Ok(LuaSpan(Span::raw(s))))
 }
 
 /// Create a Line from a table of Spans or Strings
@@ -114,4 +89,8 @@ pub fn highlight(lua: &Lua) -> mlua::Result<LuaFunction> {
             .map(|text| LuaText(text))
             .map_err(|e| LuaError::RuntimeError(format!("Highlighting failed: {}", e)))
     })
+}
+
+pub fn ansi(lua: &Lua) -> mlua::Result<LuaFunction> {
+    lua.create_function(|_lua, s: String| Ok(LuaText(s.as_bytes().into_text().into_lua_err()?)))
 }

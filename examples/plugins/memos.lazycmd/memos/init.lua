@@ -109,7 +109,7 @@ local function yank_current_memo()
   lc.log('info', 'Yanking memo #{} content', memo.id)
 
   -- Copy content to clipboard using OSC 52
-  local success, err = pcall(lc.osc52_copy, lc.trim(memo.content))
+  local success, err = pcall(lc.osc52_copy, memo.content:trim())
 
   if not success then
     lc.notify('Failed to copy: ' .. tostring(err))
@@ -131,7 +131,7 @@ local function delete_current_memo()
   local memo = entry.memo
 
   -- Show confirmation dialog before deleting
-  lc.confirm({
+  lc.confirm {
     prompt = 'Delete this memo?',
     on_confirm = function()
       api_call('DELETE', '/memos/' .. memo.id, nil, function(res)
@@ -145,10 +145,8 @@ local function delete_current_memo()
         lc.cmd 'reload'
       end)
     end,
-    on_cancel = function()
-      lc.notify 'Deletion cancelled'
-    end
-  })
+    on_cancel = function() lc.notify 'Deletion cancelled' end,
+  }
 end
 
 -- Create a new memo using external editor
@@ -309,17 +307,41 @@ local function build_preview(memo)
 
   -- Attachments
   if memo.attachments and #memo.attachments > 0 then
-    table.insert(lines, lc.style.line { ('   '):fg 'cyan', ('📎 '):fg 'yellow', ('Attachments: '):fg 'cyan', tostring(#memo.attachments):fg 'yellow' })
+    table.insert(
+      lines,
+      lc.style.line {
+        ('   '):fg 'cyan',
+        ('📎 '):fg 'yellow',
+        ('Attachments: '):fg 'cyan',
+        tostring(#memo.attachments):fg 'yellow',
+      }
+    )
   end
 
   -- Relations
   if memo.relations and #memo.relations > 0 then
-    table.insert(lines, lc.style.line { ('   '):fg 'cyan', ('🔗 '):fg 'blue', ('Relations:   '):fg 'cyan', tostring(#memo.relations):fg 'blue' })
+    table.insert(
+      lines,
+      lc.style.line {
+        ('   '):fg 'cyan',
+        ('🔗 '):fg 'blue',
+        ('Relations:   '):fg 'cyan',
+        tostring(#memo.relations):fg 'blue',
+      }
+    )
   end
 
   -- Reactions
   if memo.reactions and #memo.reactions > 0 then
-    table.insert(lines, lc.style.line { ('   '):fg 'cyan', ('❤️  '):fg 'red', ('Reactions:  '):fg 'cyan', tostring(#memo.reactions):fg 'red' })
+    table.insert(
+      lines,
+      lc.style.line {
+        ('   '):fg 'cyan',
+        ('❤️  '):fg 'red',
+        ('Reactions:  '):fg 'cyan',
+        tostring(#memo.reactions):fg 'red',
+      }
+    )
   end
 
   -- Properties

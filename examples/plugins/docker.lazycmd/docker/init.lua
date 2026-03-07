@@ -5,8 +5,10 @@ local M = {}
 function M.setup()
   lc.keymap.set('main', '<enter>', function()
     local path = lc.api.get_current_path()
-    if #path < 2 then
+    if #path < 1 then
       lc.cmd 'enter'
+    elseif path[1] == 'container' then
+      require('docker.container').select_action()
     else
       require('docker.action').select_action()
     end

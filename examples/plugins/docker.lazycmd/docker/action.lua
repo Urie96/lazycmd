@@ -43,115 +43,13 @@ local function do_docker_action(action_name, args, interactive)
   end
 end
 
--- 容器操作
-function M.start()
-  local entry = get_selected_entry()
-  if not entry or entry.resource_type ~= 'container' then
-    lc.notify 'Please select a container first'
-    return
-  end
-  lc.interactive({ 'docker', 'start', entry.id }, { wait_confirm = function() return false end }, function(exit_code)
-    if exit_code == 0 then
-      lc.notify('Container ' .. entry.name .. ' started successfully')
-      lc.cmd 'reload'
-    else
-      lc.notify('Failed to start container ' .. entry.name)
-    end
-  end)
-end
-
-function M.stop()
-  local entry = get_selected_entry()
-  if not entry or entry.resource_type ~= 'container' then
-    lc.notify 'Please select a container first'
-    return
-  end
-  lc.interactive({ 'docker', 'stop', entry.id }, { wait_confirm = function() return false end }, function(exit_code)
-    if exit_code == 0 then
-      lc.notify('Container ' .. entry.name .. ' stopped successfully')
-      lc.cmd 'reload'
-    else
-      lc.notify('Failed to stop container ' .. entry.name)
-    end
-  end)
-end
-
-function M.restart()
-  local entry = get_selected_entry()
-  if not entry or entry.resource_type ~= 'container' then
-    lc.notify 'Please select a container first'
-    return
-  end
-  lc.interactive({ 'docker', 'restart', entry.id }, { wait_confirm = function() return false end }, function(exit_code)
-    if exit_code == 0 then
-      lc.notify('Container ' .. entry.name .. ' restarted successfully')
-      lc.cmd 'reload'
-    else
-      lc.notify('Failed to restart container ' .. entry.name)
-    end
-  end)
-end
-
-function M.pause()
-  local entry = get_selected_entry()
-  if not entry or entry.resource_type ~= 'container' then
-    lc.notify 'Please select a container first'
-    return
-  end
-  lc.interactive({ 'docker', 'pause', entry.id }, { wait_confirm = function() return false end }, function(exit_code)
-    if exit_code == 0 then
-      lc.notify('Container ' .. entry.name .. ' paused successfully')
-      lc.cmd 'reload'
-    else
-      lc.notify('Failed to pause container ' .. entry.name)
-    end
-  end)
-end
-
-function M.unpause()
-  local entry = get_selected_entry()
-  if not entry or entry.resource_type ~= 'container' then
-    lc.notify 'Please select a container first'
-    return
-  end
-  lc.interactive({ 'docker', 'unpause', entry.id }, { wait_confirm = function() return false end }, function(exit_code)
-    if exit_code == 0 then
-      lc.notify('Container ' .. entry.name .. ' unpaused successfully')
-      lc.cmd 'reload'
-    else
-      lc.notify('Failed to unpause container ' .. entry.name)
-    end
-  end)
-end
-
-function M.remove_container()
-  local entry = get_selected_entry()
-  if not entry or entry.resource_type ~= 'container' then
-    lc.notify 'Please select a container first'
-    return
-  end
-
-  lc.confirm('Remove container ' .. entry.name .. '?', function(confirmed)
-    if not confirmed then return end
-
-    lc.interactive({ 'docker', 'rm', entry.id }, { wait_confirm = function() return false end }, function(exit_code)
-      if exit_code == 0 then
-        lc.notify('Container ' .. entry.name .. ' removed successfully')
-        lc.cmd 'reload'
-      else
-        lc.notify('Failed to remove container ' .. entry.name)
-      end
-    end)
-  end)
-end
-
 function M.logs()
   local entry = get_selected_entry()
   if not entry or entry.resource_type ~= 'container' then
     lc.notify 'Please select a container first'
     return
   end
-  lc.interactive({ 'docker', 'logs', '--follow', entry.id })
+  lc.interactive { 'docker', 'logs', '--follow', entry.id }
 end
 
 function M.inspect()
@@ -160,7 +58,7 @@ function M.inspect()
     lc.notify 'Please select a resource first'
     return
   end
-  lc.interactive({ 'docker', 'inspect', entry.resource_type == 'container' and entry.id or entry.name })
+  lc.interactive { 'docker', 'inspect', entry.resource_type == 'container' and entry.id or entry.name }
 end
 
 function M.exec()
@@ -170,7 +68,7 @@ function M.exec()
     return
   end
 
-  lc.interactive({ 'docker', 'exec', '-it', entry.id, '/bin/sh' })
+  lc.interactive { 'docker', 'exec', '-it', entry.id, '/bin/sh' }
 end
 
 function M.stats()
@@ -179,7 +77,7 @@ function M.stats()
     lc.notify 'Please select a container first'
     return
   end
-  lc.interactive({ 'docker', 'stats', '--no-stream', entry.id })
+  lc.interactive { 'docker', 'stats', '--no-stream', entry.id }
 end
 
 -- 镜像操作
@@ -220,9 +118,7 @@ function M.pull()
   end)
 end
 
-function M.build()
-  lc.interactive({ 'docker', 'build', '-t', 'myapp', '.' })
-end
+function M.build() lc.interactive { 'docker', 'build', '-t', 'myapp', '.' } end
 
 -- 卷操作
 function M.remove_volume()
@@ -249,10 +145,10 @@ end
 function M.create_volume()
   lc.interactive({ 'docker', 'volume', 'create' }, { wait_confirm = function() return false end }, function(exit_code)
     if exit_code == 0 then
-      lc.notify('Volume created successfully')
+      lc.notify 'Volume created successfully'
       lc.cmd 'reload'
     else
-      lc.notify('Failed to create volume')
+      lc.notify 'Failed to create volume'
     end
   end)
 end
@@ -282,10 +178,10 @@ end
 function M.create_network()
   lc.interactive({ 'docker', 'network', 'create' }, { wait_confirm = function() return false end }, function(exit_code)
     if exit_code == 0 then
-      lc.notify('Network created successfully')
+      lc.notify 'Network created successfully'
       lc.cmd 'reload'
     else
-      lc.notify('Failed to create network')
+      lc.notify 'Failed to create network'
     end
   end)
 end
@@ -297,7 +193,7 @@ function M.connect()
     return
   end
 
-  lc.interactive({ 'docker', 'network', 'connect', entry.id })
+  lc.interactive { 'docker', 'network', 'connect', entry.id }
 end
 
 function M.disconnect()
@@ -307,7 +203,7 @@ function M.disconnect()
     return
   end
 
-  lc.interactive({ 'docker', 'network', 'disconnect', entry.id })
+  lc.interactive { 'docker', 'network', 'disconnect', entry.id }
 end
 
 -- 选择操作
@@ -373,7 +269,6 @@ function M.select_action()
       value = 'remove_container',
       display = lc.style.line { ('🗑️ Remove'):fg 'red' },
     })
-
   elseif entry.resource_type == 'image' then
     -- 镜像操作
     table.insert(options, {
@@ -384,14 +279,12 @@ function M.select_action()
       value = 'remove_image',
       display = lc.style.line { ('🗑️ Remove'):fg 'red' },
     })
-
   elseif entry.resource_type == 'volume' then
     -- 卷操作
     table.insert(options, {
       value = 'remove_volume',
       display = lc.style.line { ('🗑️ Remove'):fg 'red' },
     })
-
   elseif entry.resource_type == 'network' then
     -- 网络操作
     table.insert(options, {
@@ -412,9 +305,7 @@ function M.select_action()
     prompt = 'Select an action',
     options = options,
   }, function(choice)
-    if choice then
-      M[choice]()
-    end
+    if choice then M[choice]() end
   end)
 end
 

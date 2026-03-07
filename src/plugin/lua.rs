@@ -62,7 +62,7 @@ pub fn init_lua(lua: &Lua) -> mlua::Result<()> {
             {
                 std::fs::read(concat!(
                     env!("CARGO_MANIFEST_DIR"),
-                    "/preset/",
+                    "/preset/lua/",
                     $name,
                     ".lua"
                 ))
@@ -72,7 +72,7 @@ pub fn init_lua(lua: &Lua) -> mlua::Result<()> {
             {
                 &include_bytes!(concat!(
                     env!("CARGO_MANIFEST_DIR"),
-                    "/preset/",
+                    "/preset/lua/",
                     $name,
                     ".lua"
                 ))[..]
@@ -80,11 +80,29 @@ pub fn init_lua(lua: &Lua) -> mlua::Result<()> {
         }};
     }
 
-    lua.load(preset!("util"))
-        .set_name("preset/util.lua")
-        .call::<()>(())?;
+    // Load preset files
+    macro_rules! load_preset {
+        ($name:literal) => {{
+            lua.load(preset!($name))
+                .set_name(concat!("preset/lua/", $name, ".lua"))
+                .call::<()>(())
+        }};
+    }
 
-    lua.load(preset!("init"))
-        .set_name("preset/init.lua")
-        .call::<()>(())
+    load_preset!("system")?;
+    load_preset!("component")?;
+    load_preset!("api")?;
+    load_preset!("style")?;
+    load_preset!("interactive")?;
+    load_preset!("string")?;
+    load_preset!("inspect")?;
+    load_preset!("json")?;
+    load_preset!("time")?;
+    load_preset!("keymap")?;
+    load_preset!("http")?;
+    load_preset!("cache")?;
+    load_preset!("fs")?;
+    load_preset!("util")?;
+    load_preset!("init")?;
+    Ok(())
 }

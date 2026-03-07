@@ -11,12 +11,12 @@ local cache = {
 
 -- 分页状态
 local pagination = {
-  current_account = nil,  -- 当前账号
-  current_folder = nil,   -- 当前文件夹
-  current_page = 1,       -- 当前页码（从 1 开始）
-  entries = {},           -- 当前所有 entries
-  loading = false,        -- 是否正在加载下一页
-  reached_end = false,    -- 是否已到末尾
+  current_account = nil, -- 当前账号
+  current_folder = nil, -- 当前文件夹
+  current_page = 1, -- 当前页码（从 1 开始）
+  entries = {}, -- 当前所有 entries
+  loading = false, -- 是否正在加载下一页
+  reached_end = false, -- 是否已到末尾
 }
 
 -- 生成缓存键（用于 lc.system）
@@ -150,14 +150,14 @@ local function parse_message(output)
   local cc_str = nil
   local cc_match = string.match(header_text, '\nCc:([^\n]*)')
   if cc_match then
-    cc_str = lc.trim(cc_match)
+    cc_str = cc_match:trim()
     if cc_str == '' then cc_str = nil end
   end
 
   -- 提取正文部分（跳过分隔符后的空行）
   local body = string.sub(text, header_end + 2)
   -- 去除开头和结尾的空白
-  body = lc.trim(body)
+  body = body:trim()
 
   local result = { body = body }
   if cc_str then
@@ -296,15 +296,11 @@ end
 
 -- 加载下一页邮件
 local function load_next_page()
-  if pagination.loading or pagination.reached_end then
-    return
-  end
+  if pagination.loading or pagination.reached_end then return end
 
   local account = pagination.current_account
   local folder = pagination.current_folder
-  if not account or not folder then
-    return
-  end
+  if not account or not folder then return end
 
   pagination.loading = true
   pagination.current_page = pagination.current_page + 1
@@ -329,27 +325,27 @@ local function load_next_page()
 
     if output.code ~= 0 then
       lc.log('error', 'Failed to load page {}: {}', pagination.current_page, output.stderr or 'Unknown error')
-      pagination.current_page = pagination.current_page - 1  -- 回退页码
+      pagination.current_page = pagination.current_page - 1 -- 回退页码
       pagination.reached_end = true
-      lc.notify('End of messages')
+      lc.notify 'End of messages'
       return
     end
 
     local new_entries, err = parse_envelopes(output, account, folder)
     if err then
       lc.log('error', 'Failed to parse page {}: {}', pagination.current_page, err)
-      pagination.current_page = pagination.current_page - 1  -- 回退页码
+      pagination.current_page = pagination.current_page - 1 -- 回退页码
       pagination.reached_end = true
-      lc.notify('End of messages')
+      lc.notify 'End of messages'
       return
     end
 
     if #new_entries == 0 then
       -- 没有更多邮件
       lc.log('info', 'No more emails on page {}', pagination.current_page)
-      pagination.current_page = pagination.current_page - 1  -- 回退页码
+      pagination.current_page = pagination.current_page - 1 -- 回退页码
       pagination.reached_end = true
-      lc.notify('End of messages')
+      lc.notify 'End of messages'
       return
     end
 
@@ -361,7 +357,13 @@ local function load_next_page()
     -- 更新列表
     lc.api.page_set_entries(pagination.entries)
 
-    lc.log('info', 'Loaded {} emails from page {} (total: {})', #new_entries, pagination.current_page, #pagination.entries)
+    lc.log(
+      'info',
+      'Loaded {} emails from page {} (total: {})',
+      #new_entries,
+      pagination.current_page,
+      #pagination.entries
+    )
     lc.notify('Loaded ' .. #new_entries .. ' more emails')
   end)
 end
@@ -569,9 +571,7 @@ function M.setup()
   end)
 
   -- w 键：写新邮件（任何层级都可以）
-  lc.keymap.set('main', 'w', function()
-    require('himalaya.action').write()
-  end)
+  lc.keymap.set('main', 'w', function() require('himalaya.action').write() end)
 end
 
 return M

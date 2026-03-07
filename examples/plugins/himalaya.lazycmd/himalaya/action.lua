@@ -66,7 +66,7 @@ local function do_himalaya_action(action_name)
         lc.notify('Download failed: ' .. error_msg)
         lc.log('error', 'Failed to download attachment: {}', error_msg)
       else
-        local success_msg = output.stdout and lc.trim(output.stdout) or 'Attachment downloaded'
+        local success_msg = output.stdout and output.stdout:trim() or 'Attachment downloaded'
         lc.notify(success_msg)
         lc.log('info', 'Attachment download output: {}', output.stdout)
       end

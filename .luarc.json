@@ -2,8 +2,25 @@
   "$schema": "https://raw.githubusercontent.com/LuaLS/vscode-lua/master/setting/schema.json",
   "runtime.version": "Lua 5.4",
   "workspace.library": [
-    "./preset/types.lua",
+    "./preset/lua/system.lua",
+    "./preset/lua/util.lua",
+    "./preset/lua/component.lua",
+    "./preset/lua/api.lua",
+    "./preset/lua/style.lua",
+    "./preset/lua/interactive.lua",
+    "./preset/lua/string.lua",
+    "./preset/lua/inspect.lua",
+    "./preset/lua/json.lua",
+    "./preset/lua/time.lua",
+    "./preset/lua/keymap.lua",
+    "./preset/lua/http.lua",
+    "./preset/lua/cache.lua",
+    "./preset/lua/fs.lua",
+    "./preset/lua/init.lua",
+
     "./examples/plugins/himalaya.lazycmd/",
-    "./examples/plugins/systemd.lazycmd/"
+    "./examples/plugins/systemd.lazycmd/",
+    "./examples/plugins/docker.lazycmd/",
+    "./examples/plugins/promise.lazycmd/"
   ]
 }

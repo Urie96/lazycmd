@@ -1,13 +1,24 @@
-local lc = lc or {}
+unpack = unpack or table.unpack
 
+---Map a function over table values
+---@generic T
+---@generic R
+---@param func fun(value: T): R Function
+---@param t table<any, T> Table
+---@return table<any, R> : Table of transformed values
 function lc.tbl_map(func, t)
-  local rettab = {} --- @type table<any,any>
+  local rettab = {}
   for k, v in pairs(t) do
     rettab[k] = func(v)
   end
   return rettab
 end
 
+---Deep extend target table with values from source tables
+---@generic T: table
+---@param target T The target table to extend
+---@vararg T Source tables to copy values from
+---@return T list The extended target table
 function lc.tbl_extend(target, ...)
   if type(target) ~= 'table' then error 'tbl_extend_deep: target must be a table' end
 
@@ -34,11 +45,18 @@ function lc.tbl_extend(target, ...)
   return target
 end
 
-unpack = unpack or table.unpack
-
----@param self string
----@param sep string
-function string.split(self, sep) return lc.split(self, sep) end
+---@generic T: table
+---@param dst T List which will be modified and appended to
+---@param src table List from which values will be inserted
+---@param start integer? Start index on src. Defaults to 1
+---@param finish integer? Final index on src. Defaults to `#src`
+---@return T dst
+function lc.list_extend(dst, src, start, finish)
+  for i = start or 1, finish or #src do
+    table.insert(dst, src[i])
+  end
+  return dst
+end
 
 ---@param o1 any|table First object to compare
 ---@param o2 any|table Second object to compare
@@ -72,6 +90,13 @@ local function equals(o1, o2, ignore_mt)
   return true
 end
 
-lc.equals = equals
+---Compare two values for deep equality (including tables)
+---@param o1 any First value to compare
+---@param o2 any Second value to compare
+---@param ignore_mt boolean? Whether to ignore metatables (default: false)
+---@return boolean equal Whether the values are equal
+function lc.equals(o1, o2, ignore_mt) return equals(o1, o2, ignore_mt) end
 
-function lc.trim(s) return s and s:match '^%s*(.*%S)' or '' end
+---Copy text to system clipboard using OSC 52 escape sequence
+---@param text string The text to copy
+function lc.osc52_copy(text) return _lc.osc52_copy(text) end

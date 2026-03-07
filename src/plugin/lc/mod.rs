@@ -19,38 +19,6 @@ use std::path::PathBuf;
 use std::time::Duration;
 use tokio::time::sleep;
 
-/// Load a preset Lua file (handles both debug and release builds)
-macro_rules! load_preset {
-    ($lua:expr, $name:literal) => {{
-        #[cfg(debug_assertions)]
-        {
-            let content = std::fs::read(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/preset/",
-                $name,
-                ".lua"
-            ))
-            .expect(concat!("Failed to read preset ", $name, ".lua"));
-            $lua.load(&content)
-                .set_name(concat!("preset/", $name, ".lua"))
-                .eval::<LuaTable>()
-        }
-        #[cfg(not(debug_assertions))]
-        {
-            $lua.load(
-                &include_bytes!(concat!(
-                    env!("CARGO_MANIFEST_DIR"),
-                    "/preset/",
-                    $name,
-                    ".lua"
-                ))[..],
-            )
-            .set_name(concat!("preset/", $name, ".lua"))
-            .eval::<LuaTable>()
-        }
-    }};
-}
-
 /// Get the log file path for Lua plugin logs
 fn get_log_path() -> PathBuf {
     if let Ok(home) = std::env::var("HOME") {
@@ -89,10 +57,6 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
     let http = http::new_table(lua)?.into_lua(lua)?;
     let path = path::new_table(lua)?.into_lua(lua)?;
     let time = time::new_table(lua)?.into_lua(lua)?;
-
-    // Load json and inspect modules from preset files
-    let json_mod = load_preset!(lua, "json")?.into_lua(lua)?;
-    let inspect_mod = load_preset!(lua, "inspect")?.into_lua(lua)?;
 
     let defer_fn = lua
         .create_function(|lua, (f, ms): (LuaFunction, u64)| {
@@ -299,12 +263,12 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
         },
     )?;
 
-    style::inject_string_meta_method(lua)?;
-
     let style_tbl = lua.create_table_from([
+        ("span", style::span(lua)?),
         ("line", style::line(lua)?),
         ("text", style::text(lua)?),
         ("highlight", style::highlight(lua)?),
+        ("ansi", style::ansi(lua)?),
     ])?;
 
     let lc = lua.create_table_from([
@@ -324,9 +288,8 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
         ("notify", notify_fn),
         ("confirm", mlua::Value::Function(confirm_fn)),
         ("select", mlua::Value::Function(select_fn)),
-        ("json", json_mod),
-        ("inspect", inspect_mod),
         ("style", mlua::Value::Table(style_tbl)),
     ])?;
-    lua.globals().raw_set("lc", lc)
+    lua.globals().raw_set("lc", lua.create_table()?)?;
+    lua.globals().raw_set("_lc", lc)
 }
