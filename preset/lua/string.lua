@@ -1,17 +1,21 @@
 ---Set text color for display
+---@param s string content
 ---@param color string Color name (e.g., "blue", "red", "green")
 ---@return Span A colored span widget
-function string:fg(color) return _lc.style.span(self):fg(color) end
+function string.fg(s, color) return _lc.style.span(s):fg(color) end
 
 ---Parse ANSI escape sequences into a TUI Text widget
+---@param s string content
 ---@return Text A Text widget with parsed ANSI codes
-function string:ansi() return _lc.string.ansi(self) end
+function string.ansi(s) return _lc.string.ansi(s) end
 
 ---Split string by separator
+---@param s string content
 ---@param sep string The separator
 ---@return string[] The split parts
-function string:split(sep) return _lc.split(self, sep) end
+function string.split(s, sep) return _lc.split(s, sep) end
 
 ---Trim leading and trailing whitespace from a string
+---@param s string content
 ---@return string trimmed The trimmed string
-function string:trim() return string.match(self, '^%s*(.*%S)' or '') end
+function string.trim(s) return string.match(s, '^%s*(.*%S)' or '') end

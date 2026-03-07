@@ -1,5 +1,5 @@
 use anyhow::{bail, Context, Result};
-use crossterm::cursor::{MoveTo, SetCursorStyle, Show, Hide};
+use crossterm::cursor::{Hide, MoveTo, SetCursorStyle, Show};
 use crossterm::event::Event as CrosstermEvent;
 use crossterm::execute;
 
@@ -10,17 +10,18 @@ use ratatui::{
 };
 use tokio::sync::mpsc;
 
-use libc::{sigaction, sigemptyset, SIG_IGN, SIGINT};
+use libc::{sigaction, sigemptyset, SIGINT, SIG_IGN};
 use std::mem;
 
 use crate::{
     confirm_handler,
     events::{Event, Events},
-    input_handler,
-    plugin,
-    select_handler,
+    input_handler, plugin, select_handler,
     term::{self, Term},
-    widgets::{confirm::ConfirmWidget, header::HeaderWidget, input::InputWidget, list::ListWidget, select::SelectWidget},
+    widgets::{
+        confirm::ConfirmWidget, header::HeaderWidget, input::InputWidget, list::ListWidget,
+        select::SelectWidget,
+    },
     State,
 };
 
@@ -34,7 +35,11 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(event_sender: mpsc::UnboundedSender<Event>, term: Term, plugin_name: Option<String>) -> Self {
+    pub fn new(
+        event_sender: mpsc::UnboundedSender<Event>,
+        term: Term,
+        plugin_name: Option<String>,
+    ) -> Self {
         let mut state = State::new();
         if let Some(name) = plugin_name {
             state.current_plugin = name;
@@ -58,11 +63,7 @@ impl App {
     fn get_cursor_info(&self) -> Option<(u16, u16, SetCursorStyle)> {
         // Check if select dialog is open (takes priority over filter mode)
         if let Some(dialog) = &self.state.select_dialog {
-            return Some((
-                dialog.cursor_x,
-                dialog.cursor_y,
-                SetCursorStyle::SteadyBar,
-            ));
+            return Some((dialog.cursor_x, dialog.cursor_y, SetCursorStyle::SteadyBar));
         }
 
         match self.state.current_mode {
@@ -76,7 +77,10 @@ impl App {
     }
 
     /// Set cursor after rendering (called by scopeguard)
-    fn routine<B: std::io::Write>(backend: &mut B, cursor_info: Option<(u16, u16, SetCursorStyle)>) {
+    fn routine<B: std::io::Write>(
+        backend: &mut B,
+        cursor_info: Option<(u16, u16, SetCursorStyle)>,
+    ) {
         if let Some((x, y, style)) = cursor_info {
             let _ = execute!(backend, style, MoveTo(x, y), Show);
         } else {
@@ -234,6 +238,8 @@ impl App {
             } => {
                 // Execute the interactive command
                 let result = self.execute_interactive_command(cmd, wait_confirm);
+
+                self.dirty = true;
 
                 // Call the completion callback if provided
                 if let Some(cb) = on_complete {
@@ -476,8 +482,6 @@ impl App {
         };
         Ok(())
     }
-
-
 }
 
 struct AppWidget;

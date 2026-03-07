@@ -57,4 +57,8 @@ function style.text(args) return _lc.style.text(args) end
 ---@return Text A Text widget with syntax-highlighted code
 function style.highlight(code, language) return _lc.style.highlight(code, language) end
 
+---Align columns in a 1D array of Lines, modifying them in place
+---@param lines Line[] A 1D array of Lines, where each Line contains multiple Spans representing columns
+function style.align_columns(lines) return _lc.style.align_columns(lines) end
+
 lc.style = style

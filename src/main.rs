@@ -4,9 +4,9 @@ pub use keymap::*;
 pub use mode::*;
 pub use page::*;
 pub use state::*;
-pub use widgets::InputState;
-pub use state::{ConfirmButton, ConfirmDialog, SelectOption, SelectDialog};
+pub use state::{ConfirmButton, ConfirmDialog, SelectDialog, SelectOption};
 use tokio::task;
+pub use widgets::InputState;
 
 mod app;
 mod confirm_handler;
@@ -39,7 +39,11 @@ async fn main() -> anyhow::Result<()> {
 
             // Get plugin name from command line argument
             let args: Vec<String> = std::env::args().collect();
-            let plugin_name = if args.len() >= 2 { Some(args[1].clone()) } else { None };
+            let plugin_name = if args.len() >= 2 {
+                Some(args[1].clone())
+            } else {
+                None
+            };
 
             let mut app = App::new(events.sender(), term, plugin_name);
 

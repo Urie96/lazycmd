@@ -61,5 +61,5 @@ function lc.interactive(cmd, opts_or_callback, callback)
   end
 
   -- Call the Rust implementation with the table
-  lc.system._interactive(args_table)
+  _lc.system.interactive(args_table)
 end

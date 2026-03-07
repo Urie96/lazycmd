@@ -1,6 +1,10 @@
 lc.config {
   plugins = {
     {
+      'align-test',
+      config = function() require('align-test').setup() end,
+    },
+    {
       'highlight-test',
       config = function() require('highlight-test').setup() end,
     },
@@ -32,6 +36,10 @@ lc.config {
     {
       'systemd',
       config = function() require('systemd').setup() end,
+    },
+    {
+      'docker',
+      config = function() require('docker').setup() end,
     },
   },
 }

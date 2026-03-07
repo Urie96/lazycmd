@@ -36,7 +36,6 @@ impl FromLua for Box<dyn Renderable> {
 pub struct StatefulParagraph {
     paragraph: ratatui::widgets::Paragraph<'static>,
     offset: u16,
-    total_height: u16,
     scrollbar_state: ratatui::widgets::ScrollbarState,
 }
 
@@ -48,7 +47,6 @@ where
         let text: Text = value.into();
         let total_height = text.height().clamp(0, u16::MAX as usize) as u16;
         Self {
-            total_height,
             paragraph: ratatui::widgets::Paragraph::new(text)
                 .wrap(ratatui::widgets::Wrap { trim: false }),
             scrollbar_state: ratatui::widgets::ScrollbarState::new(total_height as usize),
@@ -61,17 +59,22 @@ impl LuaUserData for StatefulParagraph {}
 
 impl Renderable for StatefulParagraph {
     fn render(&mut self, area: ratatui::prelude::Rect, buf: &mut ratatui::buffer::Buffer) {
+        let [para_area, scrollbar_area] =
+            Layout::horizontal([Constraint::Fill(1), Constraint::Length(1)]).areas(area);
+
+        let total_height = self.paragraph.line_count(para_area.width);
+        self.scrollbar_state = self
+            .scrollbar_state
+            .content_length(para_area.width as usize);
+
         self.offset = self
             .offset
-            .clamp(0, self.total_height.saturating_sub(area.height));
+            .clamp(0, (total_height as u16).saturating_sub(area.height));
         self.paragraph = std::mem::take(&mut self.paragraph).scroll((self.offset, 0));
         self.scrollbar_state = self
             .scrollbar_state
-            .content_length(self.total_height.saturating_sub(area.height) as usize)
+            .content_length(total_height.saturating_sub(area.height as usize) as usize)
             .position(self.offset as usize);
-
-        let [para_area, scrollbar_area] =
-            Layout::horizontal([Constraint::Fill(1), Constraint::Length(1)]).areas(area);
 
         (&self.paragraph).render(para_area, buf);
 

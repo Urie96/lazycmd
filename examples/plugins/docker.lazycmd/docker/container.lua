@@ -48,15 +48,22 @@ end
 function M.list(cb)
   docker_container_list()
     :next(function(containers)
-      local entries = lc.tbl_map(function(container)
-        local state_color = {
-          running = 'green',
-          exited = 'red',
-          created = 'cyan',
-        }
+      local state_info = {
+        running = { priority = 1, color = 'green' },
+        exited = { priority = 2, color = 'red' },
+        created = { priority = 3, color = 'yellow' },
+      }
 
+      table.sort(containers, function(a, b)
+        local a_priority = state_info[a.state] and state_info[a.state].priority or 4
+        local b_priority = state_info[b.state] and state_info[b.state].priority or 4
+
+        return a_priority < b_priority
+      end)
+
+      local entries = lc.tbl_map(function(container)
         local display_parts = {
-          container.name:fg(state_color[container.state] or 'white'),
+          container.name:fg(state_info[container.state] and state_info[container.state].color or 'white'),
           ' ',
           container.image:fg 'blue',
         }
@@ -67,6 +74,10 @@ function M.list(cb)
           container = container,
         }
       end, containers)
+
+      local lines = lc.tbl_map(function(line) return line.display end, entries)
+
+      lc.style.align_columns(lines)
 
       cb(entries)
     end)
@@ -83,7 +94,7 @@ function M.preview(entry, cb)
         'State: ' .. (container.state or 'unknown'),
         'Status: ' .. (container.status or 'unknown'),
         'Command: ' .. table.concat(config.Cmd or {}, ' '),
-        'Entrypoint' .. table.concat(config.Entrypoint or {}, ''),
+        'Entrypoint: ' .. table.concat(config.Entrypoint or {}, ''),
       }
       if container.ports and container.ports ~= '' then table.insert(lines, 'Ports: ' .. container.ports) end
       if container.created then table.insert(lines, 'Created: ' .. container.created) end
@@ -91,7 +102,7 @@ function M.preview(entry, cb)
     end)
     :catch(function(err) lc.notify('Failed to get container details: ' .. err) end)
 
-  local log_area = exec({ 'docker', 'logs', entry.container.id, '--tail', '50' })
+  local log_area = exec({ 'docker', 'logs', entry.container.id, '--tail', '35' })
     :next(function(logs)
       local lines = {
         'Logs: ',
@@ -103,7 +114,7 @@ function M.preview(entry, cb)
 
   promise.all({ detail_area, log_area }):next(function(results)
     local lines = results[1]
-    table.insert(lines, '')
+    table.insert(lines, ' ')
     lc.list_extend(lines, results[2])
     cb(lc.style.text(lines))
   end)
@@ -126,14 +137,16 @@ function M.select_action()
   local container = entry.container
   local options = {}
 
-  -- 查看日志选项
-  table.insert(options, {
-    value = 'logs',
-    display = lc.style.line { ('📋 Logs'):fg 'blue' },
-  })
-
   -- 根据容器状态显示不同操作
   if container.state == 'running' then
+    table.insert(options, {
+      value = 'follow_logs',
+      display = lc.style.line { ('📋 Logs'):fg 'blue' },
+    })
+    table.insert(options, {
+      value = 'exec',
+      display = lc.style.line { ('💻 Exec'):fg 'yellow' },
+    })
     table.insert(options, {
       value = 'stop',
       display = lc.style.line { ('⏹️ Stop'):fg 'red' },
@@ -155,41 +168,38 @@ function M.select_action()
       value = 'stop',
       display = lc.style.line { ('⏹️ Stop'):fg 'red' },
     })
+    table.insert(options, {
+      value = 'stats',
+      display = lc.style.line { ('📊 Stats'):fg 'magenta' },
+    })
   else
     -- exited, created 等状态
     table.insert(options, {
       value = 'start',
       display = lc.style.line { ('▶️ Start'):fg 'green' },
     })
+
+    table.insert(options, {
+      value = 'remove',
+      display = lc.style.line { ('🗑️ Remove'):fg 'red' },
+    })
   end
 
-  -- 其他操作
-  table.insert(options, {
-    value = 'exec',
-    display = lc.style.line { ('💻 Exec'):fg 'yellow' },
-  })
-  table.insert(options, {
-    value = 'stats',
-    display = lc.style.line { ('📊 Stats'):fg 'magenta' },
-  })
   table.insert(options, {
     value = 'inspect',
     display = lc.style.line { ('🔍 Inspect'):fg 'cyan' },
-  })
-  table.insert(options, {
-    value = 'remove_container',
-    display = lc.style.line { ('🗑️ Remove'):fg 'red' },
   })
 
   lc.select({
     prompt = 'Select an action',
     options = options,
   }, function(choice)
-    if choice then M[choice]() end
+    if choice then M[choice](container) end
   end)
 end
 
 local function operate_container(action_name, container_name)
+  lc.notify(string.format('Operating container %s: %s', container_name, action_name))
   lc.system({ 'docker', action_name, container_name }, function(out)
     if out.code == 0 then
       lc.notify(string.format('Container %s %sed successfully', container_name, action_name))
@@ -211,7 +221,7 @@ function M.pause(container) operate_container('pause', container.name) end
 
 function M.unpause(container) operate_container('unpause', container.name) end
 
-function M.remove(container) operate_container('remove', container.name) end
+function M.remove(container) operate_container('rm', container.name) end
 
 function M.follow_logs(container) lc.interactive { 'docker', 'logs', '--follow', container.id } end
 
@@ -221,11 +231,17 @@ function M.stats(container) lc.interactive { 'docker', 'stats', container.id } e
 
 function M.inspect()
   local entry = get_selected_container()
-  if not entry then
+  if not entry or not entry.container then
     lc.notify 'Please select a container first'
     return
   end
-  lc.interactive { 'docker', 'inspect', entry.container.id }
+  exec({ 'docker', 'inspect', entry.container.id })
+    :next(function(stdout)
+      local highlight_inspect = lc.style.highlight(stdout, 'json')
+      lc.log('info', 'highlight: {:#?}', highlight_inspect)
+      lc.api.page_set_preview(highlight_inspect)
+    end)
+    :catch(function(stderr) end)
 end
 
 function M.remove_container()

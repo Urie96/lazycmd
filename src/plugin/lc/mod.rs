@@ -269,6 +269,7 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
         ("text", style::text(lua)?),
         ("highlight", style::highlight(lua)?),
         ("ansi", style::ansi(lua)?),
+        ("align_columns", style::align_columns(lua)?),
     ])?;
 
     let lc = lua.create_table_from([
