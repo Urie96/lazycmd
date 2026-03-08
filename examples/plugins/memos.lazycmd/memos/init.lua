@@ -245,7 +245,7 @@ function M.list(_, cb)
       end
 
       -- 添加内容预览（绿色）
-      local display_title = content:sub(1, 60)
+      local display_title = content:utf8_sub(1, 60)
       if #content > 60 then display_title = display_title .. '...' end
       table.insert(display_parts, display_title:fg 'green')
 

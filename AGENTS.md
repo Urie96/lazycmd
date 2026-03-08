@@ -1,349 +1,171 @@
-# lazycmd AGENTS.md
+# lazycmd 开发指南
 
-本文档为在此 Rust 终端 UI 应用仓库中工作的 AI 实例提供项目特定信息。
+## 首次消息
+
+如果用户没有在第一条消息中给出具体任务，先阅读以下 README 文件，然后询问用户要处理哪个模块：
+
+- [README.md](README.md) - 项目整体介绍
+- [src/README.md](src/README.md) - Rust 核心代码说明
+- [src/plugin/README.md](src/plugin/README.md) - Lua 插件系统详解
+- [src/widgets/README.md](src/widgets/README.md) - UI 组件说明
+- [preset/lua/README.md](preset/lua/README.md) - Lua 预设脚本说明
+
+根据用户回答，阅读对应的 README.md 文件来了解相关模块。
+
+## 项目结构
+
+```
+lazycmd/
+├── src/                    # Rust 源代码
+│   ├── main.rs            # 入口点
+│   ├── app.rs             # 主应用逻辑和 UI 渲染
+│   ├── state.rs           # 应用状态管理
+│   ├── events.rs          # 事件系统
+│   ├── keymap.rs          # 键盘映射解析
+│   ├── page.rs            # 页面和条目管理
+│   ├── input_handler.rs   # 输入模式键盘处理
+│   ├── confirm_handler.rs # 确认对话框处理
+│   ├── select_handler.rs  # 选择对话框处理
+│   ├── plugin/            # Lua 插件系统
+│   │   ├── lua.rs        # Lua 初始化和预设加载
+│   │   ├── scope.rs      # 作用域管理
+│   │   └── lc/           # Lua API 实现
+│   │       ├── api.rs    # 页面管理 API
+│   │       ├── cache.rs  # 缓存系统
+│   │       ├── fs.rs     # 文件系统操作
+│   │       ├── http.rs   # HTTP 客户端
+│   │       ├── style.rs  # UI 样式和语法高亮
+│   │       ├── system.rs # 系统命令执行
+│   │       └── time.rs   # 时间处理
+│   └── widgets/           # UI 组件
+│       ├── renderable.rs # Renderable trait
+│       ├── text.rs       # 文本类型封装
+│       ├── list.rs       # 列表组件
+│       ├── header.rs     # 头部组件
+│       ├── input.rs      # 输入框组件
+│       ├── confirm.rs    # 确认对话框
+│       └── select.rs     # 选择对话框
+├── preset/                # 预设文件
+│   ├── lua/              # Lua 预设脚本
+│   ├── syntaxes/         # 语法高亮定义
+│   └── themes/           # 颜色主题
+└── examples/             # 示例插件和配置
+    ├── init.lua          # 用户配置
+    └── plugins/          # 示例插件
+```
 
 ## 常用命令
 
-使用 `just` 进行开发：
+使用 `just` 或 `cargo` 进行开发：
 
 ```bash
 cargo run -- <plugin_name>  # 运行指定插件（如 process, memos）
-cargo build       # Debug 构建
-cargo run --release           # Release 构建
-cargo test        # 运行测试
-cargo test <test_name>        # 运行单个测试
+cargo build                 # Debug 构建
+cargo run --release        # Release 构建
+cargo test                 # 运行测试
+cargo test <test_name>     # 运行单个测试
 ```
 
-## 插件开发工作流
+### 运行示例插件
 
-lazycmd 的核心是其 Lua 插件系统。
-
-### 调试预设 Lua 文件
-
-- **Debug 模式**：预设文件从 `preset/` 读取，用户配置从 `examples/` 读取
-- **Release 模式**：预设文件嵌入二进制，用户配置从 `~/.config/lazycmd/` 读取
-
-调试流程：
-1. 修改 `preset/` 或 `examples/` 中的 Lua 文件
-2. 重启应用查看更改
-
-### 插件加载流程
-
-1. `src/plugin/lua.rs::init_lua()` 初始化 Lua 环境
-2. 加载 `preset/util.lua`、`preset/json.lua`、`preset/inspect.lua`、`preset/init.lua`
-3. `preset/init.lua` 调用 `require 'init'` 加载用户配置
-4. 用户配置通过 `lc.config()` 设置插件，通过 `require()` 加载插件
-
-### 插件目录结构
-
-```
-examples/plugins/           (debug) 或 ~/.config/lazycmd/plugins/ (release)
-└── myplugin.lazycmd/
-    └── myplugin/
-        └── init.lua
-```
-
-**注意**：插件目录名使用 `*.lazycmd` 后缀，内部子目录与插件名相同。
-
-插件接口（init.lua 返回的表）：
-- `setup()` - 初始化函数，设置键盘映射等
-- `list(path, cb)` - 返回条目列表，cb 接收 entries 数组
-- `preview(entry, cb)` - 返回预览内容，cb 接收 Renderable widget
-
-## 架构概览
-
-### 核心应用流程
-
-```
-main.rs → App::new() → App::run() → 事件循环
-```
-
-- **运行时**：`tokio::main(flavor = "current_thread")` - 单线程异步运行时
-- **任务集**：主要逻辑在 `LocalSet` 中运行
-
-### 事件驱动架构
-
-多流事件系统（`src/events.rs`）：
-- **渲染流**：周期性渲染事件
-- **Crossterm 流**：终端输入事件（键盘、鼠标、调整大小）
-- **文本流**：通过 MPSC 通道的内部应用事件
-
-事件统一为 `enum Event` 并通过 `StreamMap` 处理。
-
-### Lua 插件系统 - 关键架构
-
-#### 作用域模式（`src/plugin/scope.rs`）
-
-Lua 代码在提供对 Rust 状态的可变引用的**作用域**中执行：
-
-```rust
-plugin::scope(&lua, &mut state, &sender, || {
-    // Lua 代码可通过注册表访问 state 和 sender
-})?
-```
-
-- `state`：通过 `borrow_scope_state()` 和 `mut_scope_state()` 访问
-- `sender`：允许 Lua 向 Rust 发送事件
-
-#### LC API 结构
-
-Lua 中的全局表 `lc` 提供以下子系统：
-
-| Lua 模块        | 来源                     | 用途                          |
-| --------------- | ------------------------ | ----------------------------- |
-| `lc.api`        | `src/plugin/lc/api.rs`   | 页面管理、命令行参数访问      |
-| `lc.fs`         | `src/plugin/lc/fs.rs`    | 同步文件系统操作              |
-| `lc.keymap`     | `src/plugin/lc/keymap.rs`| 注册键盘快捷键                |
-| `lc.path`       | `src/plugin/lc/path.rs`  | 路径操作                      |
-| `lc.http`       | `src/plugin/lc/http.rs`  | HTTP 请求                     |
-| `lc.time`       | `src/plugin/lc/time.rs`  | 时间解析和格式化              |
-| `lc.json`       | `preset/json.lua`        | JSON 编解码                   |
-| `lc.inspect`    | `preset/inspect.lua`     | 调试输出                      |
-| `lc.defer_fn`   | `src/plugin/lc/mod.rs`   | 调度异步 Lua 回调             |
-| `lc.system`     | `src/plugin/lc/mod.rs`   | 异步执行外部命令              |
-| `lc.interactive`| `src/plugin/lc/mod.rs`   | 执行交互式命令                |
-| `lc.on_event`   | `src/plugin/lc/mod.rs`   | 注册事件钩子                  |
-| `lc.cmd`        | `src/plugin/lc/mod.rs`   | 向 Rust 发送内部命令          |
-| `lc.osc52_copy` | `src/plugin/lc/mod.rs`   | 通过 OSC 52 复制文本到剪贴板  |
-| `lc.notify`     | `src/plugin/lc/mod.rs`   | 显示通知消息                  |
-| `lc.confirm`    | `src/plugin/lc/mod.rs`   | 显示确认对话框                |
-| `lc.log`        | `src/plugin/lc/mod.rs`   | 写入日志文件                  |
-| `lc.split`      | `src/plugin/lc/mod.rs`   | 字符串分割                    |
-| `lc.tbl_map`    | `preset/util.lua`        | 对表值映射函数                |
-| `lc.tbl_extend` | `preset/util.lua`        | 深度扩展表                    |
-| `lc.equals`     | `preset/util.lua`        | 深度比较值                    |
-| `lc.trim`       | `preset/util.lua`        | 去除字符串空白                |
-| `lc.style`      | `src/plugin/lc/style.rs` | 创建 UI 组件和语法高亮        |
-| `lc.config`     | `preset/init.lua`        | 配置插件和设置                |
-
-
-#### UI 字符串扩展
-
-插件系统向 Lua 字符串元表注入方法（`src/plugin/lc/ui.rs`）：
-
-```lua
-"filename".fg("blue")   -- 设置文本颜色
-ansi_string:ansi()       -- 解析 ANSI 为 TUI Text
-```
-
-### Widget 系统（`src/widgets/`）
-
-- **Renderable trait**：可渲染到终端的基 trait
-  - `StatefulParagraph`：带滚动和滚动条的文本
-  - `StatefulList`：带滚动的列表
-- **FromLua trait**：从 Lua 值转换为 Rust widgets
-  - 字符串 → `StatefulParagraph`
-  - UserData（Text/Span）→ widgets
-  - `PageEntry`：带有 `{key, display?, ...}` 的 Lua 表
-
-### 键盘映射系统
-
-键盘映射在 Lua 中配置，支持：
-
-```lua
-lc.keymap.set('main', 'd', function() ... end)        -- 单字符
-lc.keymap.set('main', '<C-x>', function() ... end)     -- 功能键（角括号内）
-lc.keymap.set('main', '<up>', 'scroll_by -1')          -- 方向键
-lc.keymap.set('main', 'dd', function() ... end)         -- 多键序列
-lc.keymap.set('main', '<C-x><C-c>', function() ... end) -- 多键序列
-```
-
-**规则**：
-- 多字符键名必须用角括号：`<down>`, `<up>`, `<enter>`, `<tab>`, `<space>`, `<f5>` 等
-- 单字符不需要角括号：`d`, `x`, `j`, `k`, `q` 等
-- 角括号外的内容会被当作单独字符解析（如 `"down"` → d, o, w, n）
-- 支持修饰符：`<C-x>` (Ctrl), `<A-k>` (Alt), `<S-tab>` (Shift)
-
-Rust 通过**前缀匹配缓冲区**（`src/state.rs::tap_key()`）处理键盘事件：
-1. 键盘事件累积在 `last_key_event_buffer` 中
-2. 与注册的键盘映射匹配
-3. 当只有一个键盘映射完全匹配时，执行其回调
-4. 在无匹配或不匹配时清除缓冲区
-
-### 状态管理
-
-`src/state.rs` 中的 `State` 持有：
-- `current_mode`：当前激活的模式（Main/Input）
-- `current_path`：导航路径栈
-- `current_page`：当前显示的 entries 列表
-- `keymap_config`：注册的键盘绑定
-- `last_key_event_buffer`：待处理的按键序列
-- `current_preview`：预览面板内容（Renderable widget）
-
-### 应用布局
-
-UI 布局在 `src/app.rs::AppWidget::render()` 中硬编码：
-
-```
-┌─────────────────────────────────┐
-│ Header (height: 3)              │
-├──────────┬──────────────────────┤
-│          │                      │
-│ List     │ Preview              │
-│ (50%)    │ (remaining)          │
-│          │                      │
-├──────────┴──────────────────────┤
-│ Notification (bottom-right)       │
-└─────────────────────────────────┘
-```
-
-### 日志
-
-- **Rust 日志**：`~/.local/state/lazycmd/lazycmd.log`（使用 tracing）
-- **Lua 日志**：`~/.local/state/lazycmd/lua.log`（通过 `lc.log()`）
-
-查看日志：
 ```bash
+cargo run -- process    # 进程管理器
+cargo run -- memos      # Memos 笔记
+cargo run -- docker    # Docker 管理
+cargo run -- highlight-test  # 语法高亮测试
+```
+
+## 代码质量
+
+- 修改或添加新的 LC API 函数后，必须同步更新 `preset/lua/*.lua` 文件
+- 不要删除看起来是故意添加的代码或功能
+
+## 测试
+
+### Rust 单元测试
+
+各模块内置单元测试：
+- `src/keymap.rs` - 键盘映射解析测试
+- `src/plugin/lc/highlighter.rs` - 语法高亮测试
+- `src/plugin/lc/style.rs` - 样式对齐测试
+- `src/plugin/lc/time.rs` - 时间解析测试
+
+## 日志
+
+```bash
+# 查看 Rust 日志
 tail -f ~/.local/state/lazycmd/lazycmd.log
+
+# 查看 Lua 日志
 tail -f ~/.local/state/lazycmd/lua.log
 ```
 
-## 内部命令
+## 使用 tmux 测试 TUI
 
-通过 `lc.cmd()` 发送内部命令：
+在受控终端环境中测试 lazycmd 的 TUI：
 
-| 命令 | 参数 | 用途 |
-|------|------|------|
-| `quit` | 无 | 退出应用 |
-| `scroll_by <num>` | 可选数字 | 列表滚动指定行数（默认 1） |
-| `scroll_preview_by <num>` | 可选数字 | 预览面板滚动指定行数（默认 1） |
-| `reload` | 无 | 刷新当前列表，执行前调用 pre_reload 钩子 |
-| `enter_filter_mode` | 无 | 进入过滤模式 |
-| `exit_filter_mode` | 无 | 退出过滤模式 |
-| `accept_filter` | 无 | 接受当前过滤 |
-| `filter_clear` | 无 | 清除过滤条件 |
+```bash
+# 创建指定尺寸的 tmux 会话
+tmux new-session -d -s lazycmd-test -x 80 -y 24
+
+# 从源码启动 lazycmd
+tmux send-keys -t lazycmd-test "cargo run -- process" Enter
+
+# 等待启动，然后捕获输出
+sleep 1 && tmux capture-pane -t lazycmd-test -p
+
+# 发送输入
+tmux send-keys -t lazycmd-test "your input" Enter
+
+# 发送特殊键
+tmux send-keys -t lazycmd-test Escape
+tmux send-keys -t lazycmd-test C-c     # ctrl+c
+tmux send-keys -t lazycmd-test C-r     # ctrl+r
+tmux send-keys -t lazycmd-test "/"     # 进入过滤模式
+
+# 发送方向键
+tmux send-keys -t lazycmd-test Up
+tmux send-keys -t lazycmd-test Down
+
+# 清理
+tmux kill-session -t lazycmd-test
+```
 
 ## 添加新功能
 
 ### 添加新的 LC API 函数
 
-**重要**：每次修改或添加新的 LC API 函数后，必须同步更新 `preset/types.lua` 文件。
-
 1. 在适当的 `src/plugin/lc/*.rs` 文件中添加函数
-2. 在 `new_table()` 中注册
+2. 在 `src/plugin/lc/mod.rs` 的 `register()` 中注册
 3. 如需状态访问，使用 `plugin::borrow_scope_state()` 或 `plugin::mut_scope_state()`
 4. 如需触发更新，调用 `plugin::send_render_event()`
-5. 在 `preset/types.lua` 中添加对应的类型定义
+5. 在 `preset/lua/` 中对应的封装文件中添加 Lua 封装和类型注解
 
 ### 添加新的内部命令
 
 1. 在 `src/app.rs::handle_command()` 的 match 分支中添加命令
-2. 实现命令逻辑（修改 state、触发事件钩子等）
+2. 实现命令逻辑
 3. 如改变 UI，设置 `self.dirty = true`
-
-### 添加新的事件钩子
-
-1. 在 `src/events.rs` 中向 `EventHook` 枚举添加变体
-2. 如需要，实现 `FromLua` trait
-3. 在 `src/app.rs` 的适当位置调用 `self.run_event_hooks(...)`
 
 ### 创建新插件
 
-1. 创建 `examples/plugins/myplugin.lazycmd/myplugin/init.lua`（debug）或 `~/.config/lazycmd/plugins/myplugin.lazycmd/myplugin/init.lua`（release）
-2. 在 `examples/init.lua` 或 `~/.config/lazycmd/init.lua` 中添加插件配置
+1. 创建 `examples/plugins/myplugin.lazycmd/myplugin/init.lua`
+2. 在 `examples/init.lua` 中添加插件配置
+3. 运行 `cargo run -- myplugin`
 
-### 语法高亮功能
+## 文档更新
 
-lazycmd 提供了代码语法高亮功能，使用 `lc.style.highlight()` API。
+更新代码后，确保同步更新相关 README：
+- `src/README.md` - 核心架构变更
+- `src/plugin/README.md` - API 变更
+- `src/widgets/README.md` - 组件变更
+- `preset/lua/README.md` - 预设脚本变更
 
-#### 使用示例
+## 关键文件
 
-```lua
--- 高亮 JavaScript 代码
-local code = [[
-function greet(name) {
-  console.log("Hello, " + name);
-  return "Hello, " + name;
-}
-]]
-
-local highlighted = lc.style.highlight(code, "javascript")
-lc.api.page_set_preview(highlighted)
-```
-
-#### 支持的语言
-
-syntect 支持超过 180 种编程语言，常见语言标识符：
-- JavaScript/TypeScript: `javascript`, `typescript`, `js`, `ts`
-- Python: `python`, `py`
-- Rust: `rust`, `rs`
-- Go: `go`
-- Java: `java`
-- C/C++: `c`, `cpp`, `h`, `hpp`
-- Shell: `bash`, `sh`, `zsh`
-- Web: `html`, `css`, `javascript`
-- 配置文件: `json`, `yaml`, `toml`, `ini`, `yml`
-- 其他: `markdown`, `dockerfile`, `sql`, `php`, `ruby`, `lua` 等
-
-#### 高亮测试插件
-
-项目包含一个完整的语法高亮测试插件：
-- 位置: `examples/plugins/highlight-test.lazycmd/highlight-test/init.lua`
-- 运行: `cargo run -- highlight-test`
-- 功能: 包含 13 种语言的示例代码，支持键盘快捷键切换
-
-#### 实现细节
-
-- 使用 [syntect](https://github.com/trishume/syntect) 库进行语法解析和高亮
-- 使用预编译的语法文件和主题（类似 yazi）
-  - 语法文件: `preset/syntaxes/syntaxes` (~970KB，180+ 种语言)
-  - 主题文件: `preset/themes/ansi.tmTheme` (~7.5KB，ANSI 主题)
-- Debug 模式: 从文件系统加载
-- Release 模式: 嵌入二进制文件
-- 依赖: `syntect` with features `dump-load`, `dump-create`, `parsing`, `plist-load`, `regex-onig`
-- 实现: `src/plugin/lc/highlighter.rs`
-
-#### 更新预编译文件
-
-如需更新语法文件或主题：
-1. 使用 yazi-prebuilt 项目生成新的预编译文件
-2. 复制到 `preset/syntaxes/` 和 `preset/themes/` 目录
-3. 重新构建项目
-
-## 重要实现细节
-
-### Lua 生命周期
-
-- `Lua` 实例在 `App` 的生命周期内存活
-- Lua 函数存储在 Rust 结构体中（如 `Keymap`、`EventHook` 回调）
-- 调用 Lua 回调时，始终用 `plugin::scope()` 包装
-
-### 错误处理
-
-- 全程使用 `anyhow::Result<T>`
-- 通过 `errors::install_hooks()` 安装 Panic 钩子
-- Panic 处理器中的终端清理通过 `term::restore()` 进行
-
-### 模式系统
-
-目前只有 `Main` 模式完全实现。`Input` 模式存在但未连接。
-
-### 预设文件加载
-
-`src/plugin/lua.rs` 中的宏 `preset!($name)` 处理 debug（文件读取）和 release（嵌入字节）两种构建。
-
-预设文件：
-- `preset/util.lua` - 工具函数
-- `preset/init.lua` - 默认初始化和键盘映射
-- `preset/json.lua` - JSON 编解码
-- `preset/inspect.lua` - 调试输出
-- `preset/types.lua` - 类型定义
-
-用户配置文件通过 `preset/init.lua` 末尾的 `require 'init'` 加载。
-
-### 键盘映射解析
-
-键盘映射字符串在 `src/keymap.rs` 中解析，支持单字符、角括号内的功能键、多键序列。单元测试位于 `src/keymap.rs` 的测试模块中。
-
-### 附加说明
-
-- **用户配置位置**：
-  - Debug 模式：`examples/init.lua`, `examples/plugins/`
-  - Release 模式：`~/.config/lazycmd/init.lua`, `~/.config/lazycmd/plugins/`
-
-- **外部命令执行**：
-  - `lc.system()` - 异步执行，通过回调获取结果
-  - `lc.interactive()` - 执行交互式命令（有终端访问权限）
-  - `lc.system.executable()` - 检查命令是否可执行（同步）
-
-- **异步回调**：外部命令输出通过 `Event::LuaCallback` 发回，重新进入 Lua 作用域
+- `AGENTS.md` - 本文件
+- `README.md` - 项目整体介绍
+- `src/README.md` - Rust 核心代码
+- `src/plugin/README.md` - Lua 插件系统
+- `src/widgets/README.md` - UI 组件
+- `preset/lua/README.md` - Lua 预设脚本
