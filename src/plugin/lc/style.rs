@@ -229,22 +229,21 @@ pub fn align_columns(lua: &Lua) -> mlua::Result<LuaFunction> {
         }
 
         // First pass: calculate column widths
-        let mut col_widths = Vec::new();
+        let mut col_widths = Vec::with_capacity(lines.raw_len());
 
         for pair in lines.pairs::<LuaValue, LuaValue>() {
             let (_, line_value) = pair?;
 
             let line = match line_value {
-                LuaValue::UserData(ud) => ud.borrow::<LuaLine>()?,
-                _ => {
-                    return Err(LuaError::RuntimeError(
-                        "Each row must be a Line".to_string(),
-                    ))
-                }
+                LuaValue::UserData(ud) => match ud.borrow::<LuaLine>() {
+                    Ok(l) => l,
+                    Err(_) => continue,
+                },
+                _ => continue,
             };
 
             // Collect width info for each span in this line
-            let mut row_widths = Vec::new();
+            let mut row_widths = Vec::with_capacity(line.0.spans.len());
             for span in &line.0.spans {
                 let cell_width = span.width();
                 row_widths.push(cell_width);
@@ -265,10 +264,13 @@ pub fn align_columns(lua: &Lua) -> mlua::Result<LuaFunction> {
 
             match line_value {
                 LuaValue::UserData(ud) => {
-                    let mut line = ud.borrow_mut::<LuaLine>()?;
+                    let mut line = match ud.borrow_mut::<LuaLine>() {
+                        Ok(l) => l,
+                        Err(_) => continue,
+                    };
 
                     for (col_idx, span) in line.0.spans.iter_mut().enumerate() {
-                        if col_idx >= col_widths.len() {
+                        if col_idx >= col_widths.len() - 1 {
                             break;
                         }
 
@@ -283,11 +285,7 @@ pub fn align_columns(lua: &Lua) -> mlua::Result<LuaFunction> {
                         }
                     }
                 }
-                _ => {
-                    return Err(LuaError::RuntimeError(
-                        "Each row must be a Line".to_string(),
-                    ))
-                }
+                _ => continue,
             }
         }
 

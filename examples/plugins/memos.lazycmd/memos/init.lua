@@ -145,7 +145,6 @@ local function delete_current_memo()
         lc.cmd 'reload'
       end)
     end,
-    on_cancel = function() lc.notify 'Deletion cancelled' end,
   }
 end
 

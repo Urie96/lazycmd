@@ -15,7 +15,7 @@ local function exec(cmd)
 end
 
 local function docker_container_list()
-  local cmd = { 'docker', 'ps', '-a', '--format', '{{json .}}' }
+  local cmd = { 'docker', 'container', 'ps', '-a', '--format', '{{json .}}' }
 
   return exec(cmd):next(function(stdout)
     local containers = lc.tbl_map(function(line)
@@ -28,6 +28,8 @@ local function docker_container_list()
         image = data.Image,
         state = data.State,
         status = data.Status,
+        ports = data.Ports,
+        created = data.CreatedAt,
       }
     end, stdout:trim():split '\n')
 
@@ -36,7 +38,7 @@ local function docker_container_list()
 end
 
 local function docker_inspect_container(container_id)
-  local cmd = { 'docker', 'inspect', container_id }
+  local cmd = { 'docker', 'container', 'inspect', container_id }
 
   return exec(cmd):next(function(stdout)
     local success, data = pcall(lc.json.decode, stdout)
@@ -90,22 +92,27 @@ function M.preview(entry, cb)
       local container = entry.container
       local config = detail.Config or {}
       local lines = {
-        'ID: ' .. (container.id or 'unknown'),
-        'State: ' .. (container.state or 'unknown'),
-        'Status: ' .. (container.status or 'unknown'),
-        'Command: ' .. table.concat(config.Cmd or {}, ' '),
-        'Entrypoint: ' .. table.concat(config.Entrypoint or {}, ''),
+        lc.style.line({ '🆔 ID: ', container.id or 'unknown' }):fg 'magenta',
+        lc.style.line({ '📊 State: ', container.state or 'unknown' }):fg 'yellow',
+        lc.style.line({ 'ℹ️ Status: ', container.status or 'unknown' }):fg 'cyan',
+        lc.style.line({ '⌨️ Command: ', table.concat(config.Cmd or {}, ' ') }):fg 'blue',
+        lc.style.line({ '🚪 Entrypoint: ', table.concat(config.Entrypoint or {}, ' ') }):fg 'yellow',
       }
-      if container.ports and container.ports ~= '' then table.insert(lines, 'Ports: ' .. container.ports) end
-      if container.created then table.insert(lines, 'Created: ' .. container.created) end
+      if container.ports and container.ports ~= '' then
+        table.insert(lines, lc.style.line({ '🔌 Ports: ', container.ports }):fg 'magenta')
+      end
+      if container.created then
+        table.insert(lines, lc.style.line({ '📅 Created: ', container.created }):fg 'green')
+      end
+      lc.style.align_columns(lines)
       return lines
     end)
     :catch(function(err) lc.notify('Failed to get container details: ' .. err) end)
 
-  local log_area = exec({ 'docker', 'logs', entry.container.id, '--tail', '35' })
+  local log_area = exec({ 'docker', 'container', 'logs', entry.container.id, '--tail', '35' })
     :next(function(logs)
       local lines = {
-        'Logs: ',
+        ('Logs: '):fg 'blue',
         logs,
       }
       return lines
@@ -141,7 +148,7 @@ function M.select_action()
   if container.state == 'running' then
     table.insert(options, {
       value = 'follow_logs',
-      display = lc.style.line { ('📋 Logs'):fg 'blue' },
+      display = lc.style.line { ('📋 Follow Logs'):fg 'blue' },
     })
     table.insert(options, {
       value = 'exec',
@@ -190,6 +197,11 @@ function M.select_action()
     display = lc.style.line { ('🔍 Inspect'):fg 'cyan' },
   })
 
+  table.insert(options, {
+    value = 'all_logs',
+    display = lc.style.line { ('📋 All Logs'):fg 'blue' },
+  })
+
   lc.select({
     prompt = 'Select an action',
     options = options,
@@ -200,7 +212,7 @@ end
 
 local function operate_container(action_name, container_name)
   lc.notify(string.format('Operating container %s: %s', container_name, action_name))
-  lc.system({ 'docker', action_name, container_name }, function(out)
+  lc.system({ 'docker', 'container', action_name, container_name }, function(out)
     if out.code == 0 then
       lc.notify(string.format('Container %s %sed successfully', container_name, action_name))
       lc.cmd 'reload'
@@ -223,51 +235,22 @@ function M.unpause(container) operate_container('unpause', container.name) end
 
 function M.remove(container) operate_container('rm', container.name) end
 
-function M.follow_logs(container) lc.interactive { 'docker', 'logs', '--follow', container.id } end
+function M.follow_logs(container) lc.interactive { 'docker', 'container', 'logs', '--follow', container.id } end
 
 function M.exec(container) lc.interactive { 'docker', 'exec', '-it', container.id, '/bin/sh' } end
 
-function M.stats(container) lc.interactive { 'docker', 'stats', container.id } end
+function M.stats(container) lc.interactive { 'docker', 'container', 'stats', container.id } end
 
-function M.inspect()
-  local entry = get_selected_container()
-  if not entry or not entry.container then
-    lc.notify 'Please select a container first'
-    return
-  end
-  exec({ 'docker', 'inspect', entry.container.id })
-    :next(function(stdout)
-      local highlight_inspect = lc.style.highlight(stdout, 'json')
-      lc.log('info', 'highlight: {:#?}', highlight_inspect)
-      lc.api.page_set_preview(highlight_inspect)
-    end)
-    :catch(function(stderr) end)
+function M.inspect(container)
+  exec({ 'docker', 'inspect', container.id })
+    :next(function(stdout) lc.api.page_set_preview(lc.style.highlight(stdout, 'json')) end)
+    :catch(function(stderr) lc.notify('Failed to get container details: ' .. stderr) end)
 end
 
-function M.remove_container()
-  local entry = get_selected_container()
-  if not entry then
-    lc.notify 'Please select a container first'
-    return
-  end
-
-  lc.confirm {
-    prompt = 'Remove container ' .. entry.container.name .. '?',
-    on_confirm = function()
-      lc.interactive(
-        { 'docker', 'rm', entry.container.id },
-        { wait_confirm = function() return false end },
-        function(exit_code)
-          if exit_code == 0 then
-            lc.notify('Container ' .. entry.container.name .. ' removed successfully')
-            lc.cmd 'reload'
-          else
-            lc.notify('Failed to remove container ' .. entry.container.name)
-          end
-        end
-      )
-    end,
-  }
+function M.all_logs(container)
+  exec({ 'docker', 'logs', container.id })
+    :next(function(stdout) lc.api.page_set_preview(stdout) end)
+    :catch(function(stderr) lc.notify('Failed to get container logs: ' .. stderr) end)
 end
 
 return M

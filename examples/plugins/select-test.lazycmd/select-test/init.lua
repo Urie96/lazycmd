@@ -10,7 +10,7 @@ function M.setup()
       if choice then
         lc.notify('选择了: ' .. choice)
       else
-        lc.notify('取消了选择')
+        lc.notify '取消了选择'
       end
     end)
   end)
@@ -20,16 +20,16 @@ function M.setup()
     lc.select({
       prompt = '选择一种编程语言:',
       options = {
-        { value = "py", display = "🐍 Python" },
-        { value = "js", display = "📜 JavaScript" },
-        { value = "lua", display = "🌙 Lua" },
-        { value = "rs", display = "🦀 Rust" },
+        { value = 'py', display = '🐍 Python' },
+        { value = 'js', display = '📜 JavaScript' },
+        { value = 'lua', display = '🌙 Lua' },
+        { value = 'rs', display = '🦀 Rust' },
       },
     }, function(choice)
       if choice then
         lc.notify('选择了: ' .. choice)
       else
-        lc.notify('取消了选择')
+        lc.notify '取消了选择'
       end
     end)
   end)
@@ -48,24 +48,24 @@ function M.setup()
       if choice then
         lc.notify('选择了: ' .. choice)
       else
-        lc.notify('取消了选择')
+        lc.notify '取消了选择'
       end
     end)
   end)
 
   -- Initialize with some dummy entries
-  lc.api.page_set_entries({
-    { key = "test1", display = "按 's' 测试简单选择" },
-    { key = "test2", display = "按 'p' 测试带图标的选择" },
-    { key = "test3", display = "按 'l' 测试长列表筛选" },
-  })
+  lc.api.page_set_entries {
+    { key = 'test1', display = "按 's' 测试简单选择" },
+    { key = 'test2', display = "按 'p' 测试带图标的选择" },
+    { key = 'test3', display = "按 'l' 测试长列表筛选" },
+  }
 end
 
 function M.list(path, cb)
   cb {
-    { key = "test1", display = "按 's' 测试简单选择" },
-    { key = "test2", display = "按 'p' 测试带图标的选择" },
-    { key = "test3", display = "按 'l' 测试长列表筛选" },
+    { key = 'test1', display = "按 's' 测试简单选择" },
+    { key = 'test2', display = "按 'p' 测试带图标的选择" },
+    { key = 'test3', display = "按 'l' 测试长列表筛选" },
   }
 end
 

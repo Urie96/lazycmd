@@ -181,7 +181,6 @@ function M.select_action()
         title = 'Delete Message',
         prompt = 'Are you sure you want to delete this message?',
         on_confirm = function() require('himalaya.action').delete() end,
-        on_cancel = function() lc.notify 'Delete cancelled' end,
       }
     else
       -- 其他操作直接执行

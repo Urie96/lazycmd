@@ -1,5 +1,5 @@
 use anyhow::Result;
-use crossterm::event::{KeyEvent, KeyEventKind, KeyCode};
+use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
 use mlua::Lua;
 
 use crate::{plugin, ConfirmButton, State};
@@ -42,9 +42,9 @@ pub fn handle_confirm_dialog_key(
                         })?;
                     }
                     ConfirmButton::No => {
-                        plugin::scope(lua, state, event_sender, || {
-                            dialog.on_cancel.call::<()>(())
-                        })?;
+                        if let Some(on_cancel) = dialog.on_cancel {
+                            plugin::scope(lua, state, event_sender, || on_cancel.call::<()>(()))?;
+                        }
                     }
                 }
             }
@@ -62,18 +62,18 @@ pub fn handle_confirm_dialog_key(
         // N key: cancel (execute on_cancel)
         KeyCode::Char('n') | KeyCode::Char('N') => {
             if let Some(dialog) = state.confirm_dialog.take() {
-                plugin::scope(lua, state, event_sender, || {
-                    dialog.on_cancel.call::<()>(())
-                })?;
+                if let Some(on_cancel) = dialog.on_cancel {
+                    plugin::scope(lua, state, event_sender, || on_cancel.call::<()>(()))?;
+                }
             }
             Ok(true)
         }
         // Esc: cancel (execute on_cancel)
         KeyCode::Esc => {
             if let Some(dialog) = state.confirm_dialog.take() {
-                plugin::scope(lua, state, event_sender, || {
-                    dialog.on_cancel.call::<()>(())
-                })?;
+                if let Some(on_cancel) = dialog.on_cancel {
+                    plugin::scope(lua, state, event_sender, || on_cancel.call::<()>(()))?;
+                }
             }
             Ok(true)
         }

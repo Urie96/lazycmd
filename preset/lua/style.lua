@@ -6,35 +6,13 @@ local style = {}
 
 ---@class Span
 ---A TUI Span widget
-
----@param Span
-local Span = {}
-
----Set foreground color for the Span (modifies in place and returns self)
----@param color string Color name (e.g., "blue", "red", "green")
----@return Span self Returns self for method chaining
-function Span:fg(color) end
-
----Set background color for the Span (modifies in place and returns self)
----@param color string Color name (e.g., "blue", "red", "green")
----@return Span self Returns self for method chaining
-function Span:bg(color) end
+---@field fg fun(self: Span, color: string): Span Set foreground color (modifies in place and returns self)
+---@field bg fun(self: Span, color: string): Span Set background color (modifies in place and returns self)
 
 ---@class Line
 ---A TUI Line widget containing multiple Spans
-
----@param Line
-local Line = {}
-
----Set foreground color for the Line (modifies in place and returns self)
----@param color string Color name (e.g., "blue", "red", "green")
----@return Line self Returns self for method chaining
-function Line:fg(color) end
-
----Set background color for the Line (modifies in place and returns self)
----@param color string Color name (e.g., "blue", "red", "green")
----@return Line self Returns self for method chaining
-function Line:bg(color) end
+---@field fg fun(self: Line, color: string): Line Set foreground color (modifies in place and returns self)
+---@field bg fun(self: Line, color: string): Line Set background color (modifies in place and returns self)
 
 ---Create a Span from a string
 ---@param s string The string into a Line

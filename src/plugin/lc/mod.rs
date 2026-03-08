@@ -158,7 +158,7 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
         let title = title.or_else(|| Some("Confirm".to_string()));
         let prompt: String = opts.get("prompt")?;
         let on_confirm: LuaFunction = opts.get("on_confirm")?;
-        let on_cancel: LuaFunction = opts.get("on_cancel")?;
+        let on_cancel = opts.get("on_cancel").ok();
         plugin::send_event(
             lua,
             Event::ShowConfirm {

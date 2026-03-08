@@ -40,7 +40,7 @@ pub enum Event {
         title: Option<String>,
         prompt: String,
         on_confirm: LuaFunction,
-        on_cancel: LuaFunction,
+        on_cancel: Option<LuaFunction>,
     },
     ShowSelect {
         prompt: Option<String>,

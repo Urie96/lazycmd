@@ -261,7 +261,7 @@ pub struct ConfirmDialog {
     pub title: Option<String>,
     pub prompt: String,
     pub on_confirm: LuaFunction,
-    pub on_cancel: LuaFunction,
+    pub on_cancel: Option<LuaFunction>,
     pub selected_button: ConfirmButton,
 }
 
@@ -270,7 +270,7 @@ impl ConfirmDialog {
         title: Option<String>,
         prompt: String,
         on_confirm: LuaFunction,
-        on_cancel: LuaFunction,
+        on_cancel: Option<LuaFunction>,
     ) -> Self {
         Self {
             title,
@@ -492,7 +492,7 @@ impl State {
         title: Option<String>,
         prompt: String,
         on_confirm: LuaFunction,
-        on_cancel: LuaFunction,
+        on_cancel: Option<LuaFunction>,
     ) {
         self.confirm_dialog = Some(ConfirmDialog::new(title, prompt, on_confirm, on_cancel));
     }
