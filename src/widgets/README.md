@@ -66,6 +66,15 @@ let paragraph = StatefulParagraph::from(text);
 - 当前路径（青色）
 - 过滤输入（黄色）
 
+### FooterWidget
+
+底部组件，显示在右下角，格式为 ` current/total `：
+
+- 当前选中的条目索引（从 1 开始）
+- 过滤后列表的总数
+- `` 和 `` 符号使用蓝色前景色
+- 中间的计数文本使用蓝色背景和白色前景色
+
 包含多个 Span 的行：
 
 ```rust
@@ -207,6 +216,7 @@ pub struct SelectOption {
 ```
 App::draw()
   ├── HeaderWidget.render()
+  ├── FooterWidget.render()
   ├── ListWidget.render()
   ├── InputWidget.render() (filter mode)
   ├── ConfirmWidget.render() (confirm dialog)

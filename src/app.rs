@@ -19,8 +19,8 @@ use crate::{
     input_handler, plugin, select_handler,
     term::{self, Term},
     widgets::{
-        confirm::ConfirmWidget, header::HeaderWidget, input::InputWidget, list::ListWidget,
-        select::SelectWidget,
+        confirm::ConfirmWidget, footer::FooterWidget, header::HeaderWidget, input::InputWidget,
+        list::ListWidget, select::SelectWidget,
     },
     State,
 };
@@ -493,10 +493,13 @@ impl StatefulWidget for AppWidget {
         use Constraint::*;
 
         // Layout: header (1), main (remaining), footer (1)
-        let [header_area, main_area, _footer] =
+        let [header_area, main_area, footer_area] =
             Layout::vertical([Length(1), Min(3), Length(1)]).areas(area);
 
         HeaderWidget.render(header_area, buf, state);
+
+        // Render footer with list counter
+        FooterWidget.render(footer_area, buf, state);
 
         let block_color = Color::DarkGray;
 
