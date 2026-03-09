@@ -1,54 +1,11 @@
 local promise = require 'promise'
+local adapter = require 'docker.adapter'
 
 local M = {}
 
-local function exec(cmd)
-  return promise.new(function(resolve, reject)
-    lc.system(cmd, function(output)
-      if output.code == 0 then
-        resolve(output.stdout)
-      else
-        reject(output.stderr)
-      end
-    end)
-  end)
-end
-
-local function docker_container_list()
-  local cmd = { 'docker', 'container', 'ps', '-a', '--format', '{{json .}}' }
-
-  return exec(cmd):next(function(stdout)
-    local containers = lc.tbl_map(function(line)
-      local success, data = pcall(lc.json.decode, line)
-      assert(success and type(data) == 'table', 'Failed to parse JSON output: ' .. line)
-
-      return {
-        id = data.ID,
-        name = data.Names,
-        image = data.Image,
-        state = data.State,
-        status = data.Status,
-        ports = data.Ports,
-        created = data.CreatedAt,
-      }
-    end, stdout:trim():split '\n')
-
-    return containers
-  end)
-end
-
-local function docker_inspect_container(container_id)
-  local cmd = { 'docker', 'container', 'inspect', container_id }
-
-  return exec(cmd):next(function(stdout)
-    local success, data = pcall(lc.json.decode, stdout)
-    assert(success and type(data) == 'table' and #data > 0, 'Failed to parse JSON output: ' .. stdout)
-    return data[1]
-  end)
-end
-
 function M.list(cb)
-  docker_container_list()
+  adapter
+    .container_list()
     :next(function(containers)
       local state_info = {
         running = { priority = 1, color = 'green' },
@@ -87,7 +44,8 @@ function M.list(cb)
 end
 
 function M.preview(entry, cb)
-  local detail_area = docker_inspect_container(entry.container.id)
+  local detail_area = adapter
+    .inspect_container(entry.container.id)
     :next(function(detail)
       local container = entry.container
       local config = detail.Config or {}
@@ -109,7 +67,8 @@ function M.preview(entry, cb)
     end)
     :catch(function(err) lc.notify('Failed to get container details: ' .. tostring(err)) end)
 
-  local log_area = exec({ 'docker', 'container', 'logs', entry.container.id, '--tail', '35' })
+  local log_area = adapter
+    .exec({ 'docker', 'container', 'logs', entry.container.id, '--tail', '35' })
     :next(function(logs)
       local lines = {
         ('Logs: '):fg 'blue',
@@ -242,13 +201,15 @@ function M.exec(container) lc.interactive { 'docker', 'exec', '-it', container.i
 function M.stats(container) lc.interactive { 'docker', 'container', 'stats', container.id } end
 
 function M.inspect(container)
-  exec({ 'docker', 'inspect', container.id })
+  adapter
+    .exec({ 'docker', 'inspect', container.id })
     :next(function(stdout) lc.api.page_set_preview(lc.style.highlight(stdout, 'json')) end)
     :catch(function(stderr) lc.notify('Failed to get container details: ' .. tostring(stderr)) end)
 end
 
 function M.all_logs(container)
-  exec({ 'docker', 'logs', container.id })
+  adapter
+    .exec({ 'docker', 'logs', container.id })
     :next(function(stdout) lc.api.page_set_preview(stdout) end)
     :catch(function(stderr) lc.notify('Failed to get container logs: ' .. tostring(stderr)) end)
 end

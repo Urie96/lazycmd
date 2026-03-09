@@ -45,6 +45,24 @@ function lc.tbl_extend(target, ...)
   return target
 end
 
+--- Filter a table using a predicate function
+---
+---@generic T
+---@param func fun(value: T): boolean (function) Function
+---@param t table<any, T> (table) Table
+---@return T[] : Table of filtered values
+function lc.tbl_filter(func, t)
+  --- @cast t table<any,any>
+
+  local rettab = {} --- @type table<any,any>
+  for _, entry in pairs(t) do
+    if func(entry) then
+      rettab[#rettab + 1] = entry
+    end
+  end
+  return rettab
+end
+
 ---@generic T: table
 ---@param dst T List which will be modified and appended to
 ---@param src table List from which values will be inserted

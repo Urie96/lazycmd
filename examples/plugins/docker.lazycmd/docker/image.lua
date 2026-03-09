@@ -1,54 +1,11 @@
 local promise = require 'promise'
+local adapter = require 'docker.adapter'
 
 local M = {}
 
-local function exec(cmd)
-  return promise.new(function(resolve, reject)
-    lc.system(cmd, function(output)
-      if output.code == 0 then
-        resolve(output.stdout)
-      else
-        reject(output.stderr)
-      end
-    end)
-  end)
-end
-
-local function docker_image_list()
-  local cmd = { 'docker', 'image', 'ls', '--format', '{{json .}}' }
-
-  return exec(cmd):next(function(stdout)
-    local images = lc.tbl_map(function(line)
-      local success, data = pcall(lc.json.decode, line)
-      assert(success and type(data) == 'table', 'Failed to parse JSON output: ' .. line)
-
-      return {
-        id = data.ID,
-        repository = data.Repository,
-        tag = data.Tag,
-        created_since = data.CreatedSince,
-        size = data.Size,
-        digest = data.Digest,
-        created_at = data.CreatedAt,
-      }
-    end, stdout:trim():split '\n')
-
-    return images
-  end)
-end
-
-local function docker_inspect_image(image_id)
-  local cmd = { 'docker', 'image', 'inspect', image_id }
-
-  return exec(cmd):next(function(stdout)
-    local success, data = pcall(lc.json.decode, stdout)
-    assert(success and type(data) == 'table' and #data > 0, 'Failed to parse JSON output: ' .. stdout)
-    return data[1]
-  end)
-end
-
 function M.list(cb)
-  docker_image_list()
+  adapter
+    .image_list()
     :next(function(images)
       -- 按创建时间排序（新的在前）
       table.sort(images, function(a, b)
@@ -61,7 +18,7 @@ function M.list(cb)
         local display_parts = {
           (image.repository .. ':' .. image.tag):fg 'yellow',
           ' ',
-          image.size:fg 'cyan',
+          tostring(image.size):fg 'cyan',
         }
 
         return {
@@ -81,7 +38,8 @@ function M.list(cb)
 end
 
 function M.preview(entry, cb)
-  local detail_area = docker_inspect_image(entry.image.id)
+  local detail_area = adapter
+    .inspect_image(entry.image.id)
     :next(function(detail)
       local image = entry.image
       local config = detail.Config or {}
@@ -134,22 +92,14 @@ function M.preview(entry, cb)
     end)
 
   -- 获取使用该镜像的容器
-  local container_area = exec({ 'docker', 'ps', '-a', '--format', '{{json .}}' })
-    :next(function(stdout)
-      local containers = {}
-      for line in stdout:trim():gmatch '[^\n]+' do
-        local success, data = pcall(lc.json.decode, line)
-        if success and type(data) == 'table' then
-          -- 检查容器是否使用当前镜像
-          if
-            data.Image == entry.image.repository .. ':' .. entry.image.tag
-            or data.Image == entry.image.id
-            or data.Image:sub(1, entry.image.id:len()) == entry.image.id
-          then
-            table.insert(containers, data)
-          end
-        end
-      end
+  local container_area = adapter
+    .container_list()
+    :next(function(containers)
+      containers = lc.tbl_filter(function(data)
+        -- 检查容器是否使用当前镜像
+        return data.image == entry.image.repository .. ':' .. entry.image.tag
+          or data.image:sub(1, entry.image.id:len()) == entry.image.id
+      end, containers)
 
       if #containers > 0 then
         local lines = {
@@ -157,8 +107,8 @@ function M.preview(entry, cb)
           ('Containers using this image (' .. #containers .. '):'):fg 'yellow',
         }
         for _, container in ipairs(containers) do
-          local color = container.State == 'running' and 'green' or 'red'
-          table.insert(lines, lc.style.line { '  • ', container.Names:fg(color), ' ', container.State:fg 'white' })
+          local color = container.state == 'running' and 'green' or 'red'
+          table.insert(lines, lc.style.line { '  • ', container.name:fg(color), ' ', container.state:fg 'white' })
         end
         return lines
       else
@@ -167,20 +117,18 @@ function M.preview(entry, cb)
     end)
     :catch(function(err) lc.notify('Failed to get container list' .. tostring(err)) end)
 
-  local history_area = exec({ 'docker', 'image', 'history', entry.image.id, '--no-trunc', '--format', '{{json .}}' })
-    :next(function(stdout)
+  local history_area = adapter
+    .image_history(entry.image.id)
+    :next(function(layers)
       local lines = {
         ' ',
         ' ',
         lc.style.line { 'SIZE', ' ', 'COMMAND' },
       }
-      for _, line in ipairs(stdout:trim():split '\n') do
-        local success, data = pcall(lc.json.decode, line)
-        if success and type(data) == 'table' then
-          local created_by = data.CreatedBy or ''
-          table.insert(lines, lc.style.line { data.Size:fg 'cyan', ' ', created_by })
-        end
+      for _, layer in ipairs(layers) do
+        table.insert(lines, lc.style.line { tostring(layer.size):fg 'cyan', ' ', layer.created_by })
       end
+
       lc.style.align_columns(lines)
       return lines
     end)
@@ -225,7 +173,8 @@ function M.select_action()
 end
 
 function M.inspect(image)
-  exec({ 'docker', 'image', 'inspect', image.id })
+  adapter
+    .exec({ 'docker', 'image', 'inspect', image.id })
     :next(function(stdout) lc.api.page_set_preview(lc.style.highlight(stdout, 'json')) end)
     :catch(function(stderr) lc.notify('Failed to inspect image: ' .. tostring(stderr)) end)
 end
