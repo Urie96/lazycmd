@@ -62,16 +62,16 @@ impl StatefulWidget for ListWidget {
             let line = entry.display();
 
             if is_selected {
-                let selected_color = Color::DarkGray;
-                // Selected: render with blue background and markers
-                let selected_style = Style::default().bg(selected_color);
+                let selected_color = Color::Rgb(60, 60, 70);
+                // Selected: render with background and white foreground for contrast
+                let selected_style = Style::default().fg(Color::White).bg(selected_color);
 
-                // Left marker  with blue foreground only (no background)
+                // Left marker  with selected color foreground only (no background)
                 buf[(area.left(), y)]
                     .set_char('')
                     .set_style(Style::default().fg(selected_color));
 
-                // Right marker  with blue foreground only (no background)
+                // Right marker  with selected color foreground only (no background)
                 buf[(area.right() - 1, y)]
                     .set_char('')
                     .set_style(Style::default().fg(selected_color));
@@ -84,12 +84,12 @@ impl StatefulWidget for ListWidget {
                     height: 1,
                 };
 
-                // Clear and fill content area with blue background
+                // Clear and fill content area with background
                 for x in content_area.left()..content_area.right() {
                     buf[(x, y)].set_char(' ').set_style(selected_style);
                 }
 
-                // Create a new line with black foreground and blue background
+                // Create a new line with white foreground and background
                 line.patch_style(selected_style).render(content_area, buf);
             } else {
                 // Normal: render with padding on both sides

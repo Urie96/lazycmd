@@ -18,7 +18,7 @@ function string.split(s, sep) return _lc.split(s, sep) end
 ---Trim leading and trailing whitespace from a string
 ---@param s string content
 ---@return string trimmed The trimmed string
-function string.trim(s) return string.match(s, '^%s*(.*%S)' or '') end
+function string.trim(s) return string.match(s, '^%s*(.-)%s*$') end
 
 --- Extracts a substring from a UTF-8 encoded string, operating on characters rather than bytes.
 ---

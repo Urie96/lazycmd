@@ -2,8 +2,8 @@ local M = {}
 
 function M.setup()
   -- 测试 lc.system.executable
-  local has_ps = lc.system.executable('ps')
-  local has_pstree = lc.system.executable('pstree')
+  local has_ps = lc.system.executable 'ps'
+  local has_pstree = lc.system.executable 'pstree'
 
   if not has_ps then
     lc.notify 'Error: ps command not found'
@@ -22,7 +22,7 @@ end
 
 function M.list(_, cb)
   lc.system({ 'ps', '-eo', 'pid,command' }, function(out)
-    local lines = lc.split(out.stdout, '\n')
+    local lines = out.stdout:trim():split '\n'
     local entries = {}
     for _, line in ipairs(lines) do
       local pid, cmd = line:match '^%s*(%d+)%s+(.+)$'

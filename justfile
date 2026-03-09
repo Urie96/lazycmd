@@ -1,2 +1,2 @@
 run:
-    cargo run -- docker
+    cargo run -- launchd

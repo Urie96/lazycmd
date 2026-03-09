@@ -41,5 +41,9 @@ lc.config {
       'docker',
       config = function() require('docker').setup() end,
     },
+    {
+      'launchd',
+      config = function() require('launchd').setup() end,
+    },
   },
 }
