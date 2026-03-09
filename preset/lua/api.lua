@@ -4,7 +4,6 @@ local api = {}
 ---@class PageEntry
 ---@field key string The unique key for the entry
 ---@field display? string|Span The display text or Span widget
----@field pid? number Process ID (for process plugin)
 ---@field [string] any Additional custom fields
 
 ---Set the entries for the current page

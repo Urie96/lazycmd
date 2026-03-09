@@ -77,7 +77,7 @@ function M.list(cb)
 
       cb(entries)
     end)
-    :catch(function(err) lc.notify('Failed to list images: ' .. err) end)
+    :catch(function(err) lc.notify('Failed to list images: ' .. tostring(err)) end)
 end
 
 function M.preview(entry, cb)
@@ -129,7 +129,7 @@ function M.preview(entry, cb)
       return lines
     end)
     :catch(function(err)
-      lc.notify('Failed to get image details: ' .. err)
+      lc.notify('Failed to get image details: ' .. tostring(err))
       return { 'Failed to get image details' }
     end)
 
@@ -165,7 +165,7 @@ function M.preview(entry, cb)
         return { ' ', ('No containers using this image'):fg 'gray' }
       end
     end)
-    :catch(function(err) lc.notify('Failed to get container list' .. err) end)
+    :catch(function(err) lc.notify('Failed to get container list' .. tostring(err)) end)
 
   local history_area = exec({ 'docker', 'image', 'history', entry.image.id, '--no-trunc', '--format', '{{json .}}' })
     :next(function(stdout)
@@ -184,7 +184,7 @@ function M.preview(entry, cb)
       lc.style.align_columns(lines)
       return lines
     end)
-    :catch(function(err) lc.notify('Failed to get image history' .. err) end)
+    :catch(function(err) lc.notify('Failed to get image history' .. tostring(err)) end)
 
   promise.all({ detail_area, container_area, history_area }):next(function(results)
     local lines = results[1]
@@ -227,7 +227,7 @@ end
 function M.inspect(image)
   exec({ 'docker', 'image', 'inspect', image.id })
     :next(function(stdout) lc.api.page_set_preview(lc.style.highlight(stdout, 'json')) end)
-    :catch(function(stderr) lc.notify('Failed to inspect image: ' .. stderr) end)
+    :catch(function(stderr) lc.notify('Failed to inspect image: ' .. tostring(stderr)) end)
 end
 
 function M.pull(image)

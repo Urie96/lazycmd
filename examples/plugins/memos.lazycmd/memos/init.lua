@@ -49,7 +49,7 @@ local function edit_current_memo()
   -- Write current content to temp file
   local success, err = lc.fs.write_file_sync(temp_file, content)
   if not success then
-    lc.notify('Failed to create temp file: ' .. (err or 'Unknown error'))
+    lc.notify('Failed to create temp file: ' .. tostring(err or 'Unknown error'))
     return
   end
 
@@ -78,8 +78,7 @@ local function edit_current_memo()
       content = new_content,
     }, function(res)
       if not res.success then
-        lc.notify('Failed to update memo: ' .. (res.error or 'Unknown error'))
-        lc.log('error', 'Failed to update memo: {}', res.error or 'Unknown')
+        lc.notify('Failed to update memo: ' .. tostring(res.error or 'Unknown error'))
         return
       end
 
@@ -136,8 +135,7 @@ local function delete_current_memo()
     on_confirm = function()
       api_call('DELETE', '/memos/' .. memo.id, nil, function(res)
         if not res.success then
-          lc.notify('Failed to delete memo: ' .. (res.error or 'Unknown error'))
-          lc.log('error', 'Failed to delete memo: {}', res.error or 'Unknown')
+          lc.notify('Failed to delete memo: ' .. tostring(res.error or 'Unknown error'))
           return
         end
 
@@ -181,7 +179,7 @@ local function create_new_memo()
       visibility = config.visibility,
     }, function(res)
       if not res.success then
-        lc.notify('Failed to create memo: ' .. (res.error or 'Unknown error'))
+        lc.notify('Failed to create memo: ' .. tostring(res.error or 'Unknown error'))
         return
       end
 
@@ -213,7 +211,7 @@ function M.list(_, cb)
 
   api_call('GET', '/memos?state=NORMAL&pageSize=100', nil, function(res)
     if not res.success then
-      lc.notify('Error: ' .. (res.error or 'Unknown error'))
+      lc.notify('Error: ' .. tostring(res.error or 'Unknown error'))
       return
     end
 

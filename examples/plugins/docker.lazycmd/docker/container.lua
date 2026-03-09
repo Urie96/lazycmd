@@ -83,7 +83,7 @@ function M.list(cb)
 
       cb(entries)
     end)
-    :catch(function(err) lc.notify('Failed to list containers: ' .. err) end)
+    :catch(function(err) lc.notify('Failed to list containers: ' .. tostring(err)) end)
 end
 
 function M.preview(entry, cb)
@@ -98,7 +98,7 @@ function M.preview(entry, cb)
         lc.style.line({ '⌨️ Command: ', table.concat(config.Cmd or {}, ' ') }):fg 'blue',
         lc.style.line({ '🚪 Entrypoint: ', table.concat(config.Entrypoint or {}, ' ') }):fg 'yellow',
       }
-      if container.ports and container.ports ~= '' then
+      if container.ports and container.ports ~= '' and type(container.ports) == 'string' then
         table.insert(lines, lc.style.line({ '🔌 Ports: ', container.ports }):fg 'magenta')
       end
       if container.created then
@@ -107,7 +107,7 @@ function M.preview(entry, cb)
       lc.style.align_columns(lines)
       return lines
     end)
-    :catch(function(err) lc.notify('Failed to get container details: ' .. err) end)
+    :catch(function(err) lc.notify('Failed to get container details: ' .. tostring(err)) end)
 
   local log_area = exec({ 'docker', 'container', 'logs', entry.container.id, '--tail', '35' })
     :next(function(logs)
@@ -117,7 +117,7 @@ function M.preview(entry, cb)
       }
       return lines
     end)
-    :catch(function(err) lc.notify('Failed to get container logs: ' .. err) end)
+    :catch(function(err) lc.notify('Failed to get container logs: ' .. tostring(err)) end)
 
   promise.all({ detail_area, log_area }):next(function(results)
     local lines = results[1]
@@ -244,13 +244,13 @@ function M.stats(container) lc.interactive { 'docker', 'container', 'stats', con
 function M.inspect(container)
   exec({ 'docker', 'inspect', container.id })
     :next(function(stdout) lc.api.page_set_preview(lc.style.highlight(stdout, 'json')) end)
-    :catch(function(stderr) lc.notify('Failed to get container details: ' .. stderr) end)
+    :catch(function(stderr) lc.notify('Failed to get container details: ' .. tostring(stderr)) end)
 end
 
 function M.all_logs(container)
   exec({ 'docker', 'logs', container.id })
     :next(function(stdout) lc.api.page_set_preview(stdout) end)
-    :catch(function(stderr) lc.notify('Failed to get container logs: ' .. stderr) end)
+    :catch(function(stderr) lc.notify('Failed to get container logs: ' .. tostring(stderr)) end)
 end
 
 return M

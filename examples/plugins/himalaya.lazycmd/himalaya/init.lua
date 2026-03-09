@@ -381,7 +381,7 @@ function M.list(path, cb)
 
       local entries, err = parse_accounts(output)
       if err then
-        lc.notify('Failed to parse accounts: ' .. err)
+        lc.notify('Failed to parse accounts: ' .. tostring(err))
         cb {}
         return
       end
@@ -412,7 +412,7 @@ function M.list(path, cb)
 
       local entries, err = parse_folders(output, account)
       if err then
-        lc.notify('Failed to parse folders: ' .. err)
+        lc.notify('Failed to parse folders: ' .. tostring(err))
         cb {}
         return
       end
@@ -461,7 +461,7 @@ function M.list(path, cb)
 
       local entries, err = parse_envelopes(output, account, folder)
       if err then
-        lc.log('error', 'Failed to parse envelopes: {}', err)
+        lc.log('error', 'Failed to parse envelopes: {}', tostring(err))
         cb {}
         return
       end
@@ -528,7 +528,7 @@ function M.preview(entry, cb)
     local body_message, err = parse_message(output)
     if err then
       lc.log('error', 'Failed to parse message: {}', err)
-      cb('Error: ' .. err)
+      cb('Error: ' .. tostring(err))
       return
     end
 
