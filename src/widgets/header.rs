@@ -14,13 +14,20 @@ impl StatefulWidget for HeaderWidget {
             format!("/{}", state.current_path.join("/"))
         };
 
+        // Get filter from current page
+        let filter = state
+            .current_page
+            .as_ref()
+            .map(|p| p.list_filter.as_str())
+            .unwrap_or("");
+
         // Build styled spans
         let text = if state.current_plugin.is_empty() {
             // Just path in cyan, plus filter if active
             let mut spans = vec![Span::styled(path_str, Style::default().fg(Color::Cyan))];
-            if !state.filter_input.is_empty() {
+            if !filter.is_empty() {
                 spans.push(Span::styled(
-                    format!(" [filter: {}]", state.filter_input),
+                    format!(" [filter: {}]", filter),
                     Style::default().fg(Color::Yellow),
                 ));
             }
@@ -34,9 +41,9 @@ impl StatefulWidget for HeaderWidget {
                 ),
                 Span::styled(path_str, Style::default().fg(Color::Cyan)),
             ];
-            if !state.filter_input.is_empty() {
+            if !filter.is_empty() {
                 spans.push(Span::styled(
-                    format!(" [filter: {}]", state.filter_input),
+                    format!(" [filter: {}]", filter),
                     Style::default().fg(Color::Yellow),
                 ));
             }

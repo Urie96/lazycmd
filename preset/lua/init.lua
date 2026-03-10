@@ -29,16 +29,31 @@ map('main', '<pagedown>', 'scroll_preview_by 30')
 map('main', '<C-r>', 'reload')
 map('main', 'q', 'quit')
 map('main', '<C-q>', 'quit')
-map('main', '/', 'enter_filter_mode')
-map('main', '<esc>', 'filter_clear')
+-- Filter: use lc.input() to show input dialog, then set filter via lc.api.set_filter()
+map('main', '/', function()
+  -- Get current filter to pre-fill the input
+  local current_filter = ''
+  lc.input {
+    prompt = 'Filter:',
+    placeholder = '输入筛选内容...',
+    on_change = function(input)
+      lc.api.set_filter(input)
+    end,
+    on_submit = function(input)
+      lc.api.set_filter(input)
+    end,
+    on_cancel = function()
+      lc.api.set_filter('')
+    end,
+  }
+end)
+map('main', '<esc>', function()
+  -- Clear filter when pressing Escape
+  lc.api.set_filter('')
+end)
 map('main', '<left>', 'back')
 map('main', '<right>', 'enter')
 map('main', '<enter>', 'enter')
-
--- Input mode keymaps
-map('input', '<esc>', 'exit_filter_mode')
-map('input', '<enter>', 'accept_filter')
-map('input', '<C-u>', 'filter_clear')
 
 require 'init'
 

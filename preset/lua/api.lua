@@ -38,6 +38,12 @@ function api.argv() return _lc.api.argv() end
 ---@param callback fun() The callback function to execute before reload
 function api.append_hook_pre_reload(callback) _lc.api.append_hook_pre_reload(callback) end
 
+---Set the filter string for the current page
+---The page entries will be filtered based on this string
+---If empty string, no filter is applied (show all entries)
+---@param filter string The filter string to apply
+function api.set_filter(filter) _lc.api.set_filter(filter) end
+
 lc.api = api
 
 ---Send an internal command to Rust

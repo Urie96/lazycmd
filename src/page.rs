@@ -43,8 +43,8 @@ pub struct Page {
     pub list: Vec<PageEntry>,
     pub filtered_list: Vec<PageEntry>,
     pub list_state: widgets::ListState,
-    pub filter_input: String,
-    pub input_cursor_position: usize,
+    /// List filter string for this page
+    pub list_filter: String,
 }
 
 impl Page {
@@ -70,11 +70,11 @@ impl Page {
     }
 
     /// Apply filter to the list, updating filtered_list
-    pub fn apply_filter(&mut self, filter: &str) {
-        self.filtered_list = if filter.is_empty() {
+    pub fn apply_filter(&mut self) {
+        self.filtered_list = if self.list_filter.is_empty() {
             self.list.clone()
         } else {
-            let filter_lower = filter.to_lowercase();
+            let filter_lower = self.list_filter.to_lowercase();
             self.list
                 .iter()
                 .filter(|entry| {

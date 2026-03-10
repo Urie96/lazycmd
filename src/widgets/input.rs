@@ -1,36 +1,48 @@
 use ratatui::{prelude::*, widgets::*};
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
-/// Current input state
-pub struct InputState {
+/// Alias for backward compatibility (used by filter mode)
+pub type InputState = InputDialogState;
+
+#[derive(Debug)]
+pub struct InputDialogState {
     pub text: String,
     pub cursor_position: usize,
     pub cursor_x: u16,
     pub cursor_y: u16,
+    /// Custom prompt to display
+    pub prompt: String,
+    /// Placeholder text (shown when text is empty)
+    pub placeholder: String,
 }
 
-impl InputState {
-    pub fn new() -> Self {
+impl InputDialogState {
+    pub fn new(prompt: &str, placeholder: &str) -> Self {
         Self {
             text: String::new(),
             cursor_position: 0,
             cursor_x: 0,
             cursor_y: 0,
+            prompt: prompt.to_string(),
+            placeholder: placeholder.to_string(),
         }
     }
 
-    pub fn from_str(s: &str) -> Self {
+    /// Create from filter input (for filter mode compatibility)
+    pub fn from_filter_input(s: &str) -> Self {
         Self {
             text: s.to_string(),
             cursor_position: s.len(),
             cursor_x: 0,
             cursor_y: 0,
+            prompt: " ".to_string(),
+            placeholder: String::new(),
         }
     }
 
     pub fn insert_char(&mut self, c: char) {
         self.text.insert(self.cursor_position, c);
-        self.cursor_position += 1;
+        self.cursor_position += c.len_utf8();
     }
 
     pub fn backspace(&mut self) {
@@ -68,57 +80,79 @@ impl InputState {
     }
 }
 
-impl Default for InputState {
-    fn default() -> Self {
-        Self::new()
+/// Widget for rendering an input dialog with customizable prompt and title
+pub struct InputDialogWidget;
+
+impl InputDialogWidget {
+    pub fn new() -> Self {
+        Self
     }
 }
 
-pub struct InputWidget;
-
-impl StatefulWidget for InputWidget {
-    type State = InputState;
+impl StatefulWidget for InputDialogWidget {
+    type State = InputDialogState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        let prompt = " ";
+        // Arrow prefix " " for inside the input box (like select component)
+        let arrow = " ";
+        
+        // Determine the text to display: actual text or placeholder
+        let display_text = if state.text.is_empty() {
+            &state.placeholder
+        } else {
+            state.text.as_str()
+        };
 
-        // Create text with different colors for prompt and user input
+        // Determine text color: gray for placeholder, white for actual input
+        let text_color = if state.text.is_empty() {
+            Color::DarkGray
+        } else {
+            Color::White
+        };
+
+        // Create text with arrow + user input (prompt is shown in title bar only)
         let text = Text::from(Line::from(vec![
-            Span::styled(prompt, Style::default().fg(Color::Yellow)),
-            Span::styled(state.text.as_str(), Style::default().fg(Color::White)),
+            Span::styled(arrow, Style::default().fg(Color::Cyan)),
+            Span::styled(display_text, Style::default().fg(text_color)),
         ]));
 
-        // Create paragraph for the input
+        // Title shows the prompt (like select component)
+        // If prompt is empty, show "Input" as default
+        let title_text = if state.prompt.is_empty() {
+            "Input".to_string()
+        } else {
+            state.prompt.clone()
+        };
+        
         let paragraph = Paragraph::new(text)
             .block(
                 Block::bordered()
                     .border_type(BorderType::Rounded)
-                    .border_style(Style::default().fg(Color::Yellow))
+                    .border_style(Style::default().fg(Color::Cyan))
+                    .title_style(
+                        Style::default()
+                            .fg(Color::Cyan)
+                            .add_modifier(Modifier::BOLD),
+                    )
                     .title_alignment(Alignment::Center)
-                    .title("Filter"),
+                    .title(title_text),
             );
 
         paragraph.render(area, buf);
 
-        // Calculate cursor position
-        // Block has borders, so content starts at area.x + 1, area.y + 1
-        // Prompt is rendered at area.x + 1
-        // Cursor should appear after the character at cursor_position in the text
-        // Use unicode width for proper cursor positioning with Unicode characters
-        let prompt_width = prompt.width() as u16;
-        let cursor_char_width: u16 = state.text
+        // Calculate cursor position (arrow + cursor position in text)
+        let arrow_width = arrow.width() as u16;
+        let cursor_char_width: u16 = state
+            .text
             .chars()
             .take(state.cursor_position)
             .map(|c| c.width().unwrap_or(0) as u16)
             .sum();
-        let cursor_x = area.x + 1 + prompt_width + cursor_char_width;
+        let cursor_x = area.x + 1 + arrow_width + cursor_char_width;
         let cursor_y = area.y + 1; // Inside the bordered area
 
         // Store cursor position for use by app.rs
         state.cursor_x = cursor_x;
         state.cursor_y = cursor_y;
-
-        // Note: Cursor positioning is done in app.rs after draw() completes
-        // to avoid conflicts with ratatui's rendering
     }
 }

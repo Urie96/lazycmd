@@ -47,6 +47,13 @@ pub enum Event {
         options: Vec<crate::SelectOption>,
         on_selection: LuaFunction,
     },
+    ShowInput {
+        prompt: String,
+        placeholder: String,
+        on_submit: LuaFunction,
+        on_cancel: LuaFunction,
+        on_change: LuaFunction,
+    },
 }
 
 impl Events {

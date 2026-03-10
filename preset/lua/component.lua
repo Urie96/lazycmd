@@ -34,6 +34,22 @@ function lc.confirm(opts) return _lc.confirm(opts) end
 ---@param message string The notification message
 function lc.notify(message) return _lc.notify(message) end
 
+---@class InputOptions
+---@field prompt? string Optional prompt text to display before input (defaults to "")
+---@field placeholder? string Optional placeholder text shown when input is empty (defaults to "")
+---@field on_submit fun(input: string) Callback function when user presses Enter
+---  - Called with the user's input text
+---@field on_cancel? fun() Callback function when user presses Escape
+---@field on_change? fun(input: string) Callback function when input text changes
+---  - Called with the current input text on each keystroke
+
+---Show an input dialog to the user
+---The dialog appears centered on screen with an input field
+---Users can type text, use Backspace/Delete to edit, Left/Right to move cursor
+---Press Enter to submit, Escape to cancel
+---@param opts InputOptions Configuration options
+function lc.input(opts) return _lc.input(opts) end
+
 ---Write a log entry to the log file
 ---@param level string Log level (e.g., "info", "warn", "error", "debug")
 ---@param format string Format string with {} placeholders

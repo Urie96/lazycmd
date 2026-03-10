@@ -6,7 +6,7 @@ use crossterm::execute;
 use mlua::prelude::*;
 use ratatui::{
     prelude::*,
-    widgets::{Block, BorderType, Clear, Paragraph},
+    widgets::{Block, BorderType, Paragraph},
 };
 use tokio::sync::mpsc;
 
@@ -19,8 +19,8 @@ use crate::{
     input_handler, plugin, select_handler,
     term::{self, Term},
     widgets::{
-        confirm::ConfirmWidget, footer::FooterWidget, header::HeaderWidget, input::InputWidget,
-        list::ListWidget, select::SelectWidget,
+        confirm::ConfirmWidget, footer::FooterWidget, header::HeaderWidget,
+        input::InputDialogState, input::InputDialogWidget, list::ListWidget, select::SelectWidget,
     },
     State,
 };
@@ -61,19 +61,18 @@ impl App {
 
     /// Get cursor information (position and style) based on current mode
     fn get_cursor_info(&self) -> Option<(u16, u16, SetCursorStyle)> {
-        // Check if select dialog is open (takes priority over filter mode)
+        // Check if input dialog is open (takes priority over select dialog and filter mode)
+        if let Some(dialog) = &self.state.input_dialog {
+            return Some((dialog.cursor_x, dialog.cursor_y, SetCursorStyle::SteadyBar));
+        }
+
+        // Check if select dialog is open (takes priority)
         if let Some(dialog) = &self.state.select_dialog {
             return Some((dialog.cursor_x, dialog.cursor_y, SetCursorStyle::SteadyBar));
         }
 
-        match self.state.current_mode {
-            crate::Mode::Input => Some((
-                self.state.filter_cursor_x,
-                self.state.filter_cursor_y,
-                SetCursorStyle::SteadyBar,
-            )),
-            crate::Mode::Main => None,
-        }
+        // No cursor in main mode
+        None
     }
 
     /// Set cursor after rendering (called by scopeguard)
@@ -155,9 +154,7 @@ impl App {
             }
             // Event::Tick => Some(Action::Tick),
             Event::Render => {
-                if self.state.check_notification_expiry() {
-                    self.dirty = true;
-                }
+                self.dirty = true;
             }
             // Event::Crossterm(CrosstermEvent::Resize(x, y)) => Some(Action::Resize(x, y)),
             Event::Crossterm(CrosstermEvent::Key(key)) => {
@@ -187,29 +184,25 @@ impl App {
                     return Ok(());
                 }
 
-                // Handle character input in Input mode
-                if self.state.current_mode == crate::Mode::Input {
-                    if input_handler::handle_input_mode_key(&mut self.state, key)? {
-                        input_handler::apply_filter(&mut self.state)?;
-                        self.state.current_preview.take();
-                        self.call_preview()?;
+                // If input dialog is shown, handle its keyboard input
+                if self.state.input_dialog.is_some() {
+                    if input_handler::handle_input_dialog_key(
+                        &self.lua,
+                        &mut self.state,
+                        &self.event_sender,
+                        key,
+                    )? {
                         self.dirty = true;
-                    } else {
-                        // Try keymap first
-                        let cb = { self.state.tap_key(key)? };
-                        if let Some(cb) = cb {
-                            plugin::scope(&self.lua, &mut self.state, &self.event_sender, || {
-                                cb.call::<()>(())
-                            })?;
-                        }
                     }
-                } else {
-                    let cb = { self.state.tap_key(key)? };
-                    if let Some(cb) = cb {
-                        plugin::scope(&self.lua, &mut self.state, &self.event_sender, || {
-                            cb.call::<()>(())
-                        })?;
-                    }
+                    return Ok(());
+                }
+
+                // Handle key events in main mode
+                let cb = { self.state.tap_key(key)? };
+                if let Some(cb) = cb {
+                    plugin::scope(&self.lua, &mut self.state, &self.event_sender, || {
+                        cb.call::<()>(())
+                    })?;
                 }
             }
             Event::Crossterm(_) => {}
@@ -278,6 +271,22 @@ impl App {
             } => {
                 self.state.select_dialog =
                     Some(crate::SelectDialog::new(prompt, options, on_selection));
+                self.dirty = true;
+            }
+            Event::ShowInput {
+                prompt,
+                placeholder,
+                on_submit,
+                on_cancel,
+                on_change,
+            } => {
+                self.state.input_dialog = Some(crate::InputDialog::new(
+                    prompt,
+                    placeholder,
+                    on_submit,
+                    on_cancel,
+                    on_change,
+                ));
                 self.dirty = true;
             }
         }
@@ -421,35 +430,6 @@ impl App {
                 }
                 self.dirty = true;
             }
-            "enter_filter_mode" => {
-                input_handler::enter_filter_mode(&mut self.state);
-                self.dirty = true;
-            }
-            "exit_filter_mode" => {
-                input_handler::exit_filter_mode(&mut self.state, false);
-                input_handler::apply_filter(&mut self.state)?;
-                self.state.current_preview.take();
-                self.call_preview()?;
-                self.dirty = true; // Redraw to clear filter input
-            }
-            "accept_filter" => {
-                input_handler::exit_filter_mode(&mut self.state, true);
-                self.state.current_preview.take();
-                self.call_preview()?;
-                self.dirty = true; // Redraw to clear filter input
-            }
-            "filter_backspace" => {
-                input_handler::handle_filter_backspace(&mut self.state);
-                input_handler::apply_filter(&mut self.state)?;
-                self.state.current_preview.take();
-                self.call_preview()?;
-            }
-            "filter_clear" => {
-                input_handler::handle_filter_clear(&mut self.state);
-                input_handler::apply_filter(&mut self.state)?;
-                self.state.current_preview.take();
-                self.call_preview()?;
-            }
             "enter" => {
                 if let Some(hovered) = self.state.hovered() {
                     let mut path = self.state.current_path.clone();
@@ -514,12 +494,7 @@ impl StatefulWidget for AppWidget {
         let [list_area, _divider_area, preview_area] =
             Layout::horizontal([Percentage(50), Length(1), Fill(1)]).areas(main_inner);
 
-        // Update list height for scroll offset calculation before rendering
-        if state.current_page.is_some() {
-            state.set_list_height(list_area.height);
-        }
-
-        let scrolloff = state.scrolloff();
+        let scrolloff = state.scrolloff;
 
         if let Some(page) = &mut state.current_page {
             let list_widget = ListWidget { scrolloff };
@@ -547,41 +522,6 @@ impl StatefulWidget for AppWidget {
 
         if let Some(p) = state.current_preview.as_mut() {
             p.render(preview_area, buf);
-        }
-
-        // Render floating input widget if in filter mode (render last to appear on top)
-        if state.current_mode == crate::Mode::Input {
-            // Fixed width of 50, height of 3 (top border + content + bottom border)
-            let input_width = 50u16;
-            let input_height = 3u16;
-
-            // Horizontally centered: x = (area_width - input_width) / 2
-            let x = (area.width.saturating_sub(input_width)) / 2;
-
-            // Vertically at row 5 (0-indexed)
-            let y = 5u16;
-
-            // Ensure input box is within bounds
-            let x = x.min(area.width.saturating_sub(input_width));
-            let y = y.min(area.height.saturating_sub(input_height));
-
-            let input_area = Rect {
-                x,
-                y,
-                width: input_width,
-                height: input_height,
-            };
-
-            // Clear the area first to prevent underlying content from showing through
-            Clear.render(input_area, buf);
-
-            let mut input_state = crate::InputState::from_str(&state.filter_input);
-            input_state.cursor_position = state.input_cursor_position;
-            InputWidget.render(input_area, buf, &mut input_state);
-
-            // Store cursor position for use in app.rs after draw completes
-            state.filter_cursor_x = input_state.cursor_x;
-            state.filter_cursor_y = input_state.cursor_y;
         }
 
         // Draw notification in bottom-right corner
@@ -664,6 +604,37 @@ impl StatefulWidget for AppWidget {
             };
 
             SelectWidget.render(dialog_area, buf, dialog);
+        }
+
+        // Render input dialog (render last to appear on top of everything)
+        if let Some(dialog) = &mut state.input_dialog {
+            // Fixed size: width 50, height 3
+            let dialog_width = 50u16;
+            let dialog_height = 3u16;
+
+            // Center the dialog
+            let x = (area.width.saturating_sub(dialog_width)) / 2;
+            let y = (area.height.saturating_sub(dialog_height)) / 2;
+
+            // Ensure dialog is within bounds
+            let x = x.min(area.width.saturating_sub(dialog_width));
+            let y = y.min(area.height.saturating_sub(dialog_height));
+
+            let dialog_area = Rect {
+                x,
+                y,
+                width: dialog_width,
+                height: dialog_height,
+            };
+
+            let mut input_state = InputDialogState::new(&dialog.prompt, &dialog.placeholder);
+            input_state.text = dialog.text.clone();
+            input_state.cursor_position = dialog.cursor_position;
+            InputDialogWidget::new().render(dialog_area, buf, &mut input_state);
+
+            // Store cursor position for use in app.rs after draw completes
+            dialog.cursor_x = input_state.cursor_x;
+            dialog.cursor_y = input_state.cursor_y;
         }
     }
 }

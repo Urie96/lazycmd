@@ -289,6 +289,39 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
         ("notify", notify_fn),
         ("confirm", mlua::Value::Function(confirm_fn)),
         ("select", mlua::Value::Function(select_fn)),
+        // lc.input: show an input dialog
+        (
+            "input",
+            mlua::Value::Function(lua.create_function(|lua, opts: LuaTable| -> mlua::Result<()> {
+                let prompt: String = opts.get("prompt").unwrap_or_else(|_| "".to_string());
+                let placeholder: String = opts
+                    .get("placeholder")
+                    .unwrap_or_else(|_| "".to_string());
+                let on_submit: LuaFunction = opts.get("on_submit")?;
+
+                // Default callbacks that do nothing
+                let on_cancel: LuaFunction = opts.get("on_cancel").unwrap_or_else(|_| {
+                    lua.create_function(|_, ()| Ok(()))
+                        .unwrap()
+                });
+                let on_change: LuaFunction = opts.get("on_change").unwrap_or_else(|_| {
+                    lua.create_function(|_, ()| Ok(()))
+                        .unwrap()
+                });
+
+                plugin::send_event(
+                    lua,
+                    Event::ShowInput {
+                        prompt,
+                        placeholder,
+                        on_submit,
+                        on_cancel,
+                        on_change,
+                    },
+                )?;
+                Ok(())
+            })?),
+        ),
         ("style", mlua::Value::Table(style_tbl)),
     ])?;
     lua.globals().raw_set("lc", lua.create_table()?)?;

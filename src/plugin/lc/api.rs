@@ -62,16 +62,18 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
         .create_function(|lua, ()| lua.create_sequence_from(std::env::args()))?
         .into_lua(lua)?;
 
-    let enter_filter_mode = lua
-        .create_function(|lua, ()| plugin::send_command(lua, "enter_filter_mode"))?
-        .into_lua(lua)?;
-
-    let exit_filter_mode = lua
-        .create_function(|lua, ()| plugin::send_command(lua, "exit_filter_mode"))?
-        .into_lua(lua)?;
-
-    let accept_filter = lua
-        .create_function(|lua, ()| plugin::send_command(lua, "accept_filter"))?
+    let set_filter = lua
+        .create_function(|lua, filter: String| {
+            plugin::mut_scope_state(lua, |state| {
+                // Apply filter to current page
+                if let Some(page) = &mut state.current_page {
+                    page.list_filter = filter;
+                    page.apply_filter();
+                }
+                plugin::send_render_event(lua)?;
+                Ok(())
+            })
+        })?
         .into_lua(lua)?;
 
     let append_hook_pre_reload = lua
@@ -91,9 +93,7 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
         ("get_current_path", get_current_path),
         ("get_hovered_path", get_hovered_path),
         ("argv", argv),
-        ("enter_filter_mode", enter_filter_mode),
-        ("exit_filter_mode", exit_filter_mode),
-        ("accept_filter", accept_filter),
+        ("set_filter", set_filter),
         ("append_hook_pre_reload", append_hook_pre_reload),
     ])
 }

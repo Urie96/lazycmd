@@ -255,6 +255,96 @@ impl ConfirmButton {
     }
 }
 
+/// State for the input dialog
+#[derive(Debug)]
+pub struct InputDialog {
+    pub prompt: String,
+    pub placeholder: String,
+    pub text: String,
+    pub cursor_position: usize,
+    pub cursor_x: u16,
+    pub cursor_y: u16,
+    pub on_submit: LuaFunction,
+    pub on_cancel: LuaFunction,
+    pub on_change: LuaFunction,
+}
+
+impl InputDialog {
+    pub fn new(
+        prompt: String,
+        placeholder: String,
+        on_submit: LuaFunction,
+        on_cancel: LuaFunction,
+        on_change: LuaFunction,
+    ) -> Self {
+        Self {
+            prompt,
+            placeholder,
+            text: String::new(),
+            cursor_position: 0,
+            cursor_x: 0,
+            cursor_y: 0,
+            on_submit,
+            on_cancel,
+            on_change,
+        }
+    }
+
+    pub fn insert_char(&mut self, c: char) {
+        self.text.insert(self.cursor_position, c);
+        self.cursor_position += c.len_utf8();
+    }
+
+    pub fn backspace(&mut self) {
+        if self.cursor_position > 0 {
+            self.text.remove(self.cursor_position - 1);
+            self.cursor_position -= 1;
+        }
+    }
+
+    pub fn delete(&mut self) {
+        if self.cursor_position < self.text.len() {
+            self.text.remove(self.cursor_position);
+        }
+    }
+
+    pub fn clear(&mut self) {
+        self.text.clear();
+        self.cursor_position = 0;
+    }
+
+    pub fn cursor_left(&mut self) {
+        if self.cursor_position > 0 {
+            let prev_pos = self.text[..self.cursor_position]
+                .char_indices()
+                .rev()
+                .nth(0)
+                .map(|(idx, _)| idx)
+                .unwrap_or(0);
+            self.cursor_position = prev_pos;
+        }
+    }
+
+    pub fn cursor_right(&mut self) {
+        if self.cursor_position < self.text.len() {
+            let next_pos = self.text[self.cursor_position..]
+                .char_indices()
+                .nth(1)
+                .map(|(idx, _)| self.cursor_position + idx)
+                .unwrap_or(self.text.len());
+            self.cursor_position = next_pos;
+        }
+    }
+
+    pub fn cursor_to_start(&mut self) {
+        self.cursor_position = 0;
+    }
+
+    pub fn cursor_to_end(&mut self) {
+        self.cursor_position = self.text.len();
+    }
+}
+
 /// State for the confirm dialog
 #[derive(Debug)]
 pub struct ConfirmDialog {
@@ -291,12 +381,7 @@ pub struct State {
     pub last_key_event_buffer: Vec<KeyEvent>,
     pub current_preview: Option<Box<dyn Renderable>>,
     pub notification: Option<(String, Instant)>,
-    pub filter_input: String,
-    pub input_cursor_position: usize,
-    /// Filter cursor position (for terminal cursor display)
-    pub filter_cursor_x: u16,
-    /// Filter cursor position (for terminal cursor display)
-    pub filter_cursor_y: u16,
+
     /// Cache for pages to preserve cursor position, entries and filter when navigating back
     page_cache: HashMap<Vec<String>, Page>,
     /// Hooks to call before reload command
@@ -307,10 +392,10 @@ pub struct State {
     pub confirm_dialog: Option<ConfirmDialog>,
     /// Select dialog state (shown on top of all UI)
     pub select_dialog: Option<SelectDialog>,
-    /// Height of the list widget area (number of visible rows)
-    list_height: Option<u16>,
+    /// Input dialog state (shown on top of all UI)
+    pub input_dialog: Option<InputDialog>,
     /// Minimum lines to keep between cursor and edge (like vim's scrolloff)
-    scrolloff: usize,
+    pub scrolloff: usize,
 }
 
 impl State {
@@ -334,11 +419,8 @@ impl State {
         let old_selected = page.list_state.selected();
 
         page.list = entries;
-        // Sync filter state from State to Page
-        page.filter_input = self.filter_input.clone();
-        page.input_cursor_position = self.input_cursor_position;
         // Apply current filter to new entries
-        page.apply_filter(&self.filter_input);
+        page.apply_filter();
 
         // Restore selection if possible
         if let Some(old_idx) = old_selected {
@@ -402,10 +484,7 @@ impl State {
 
     pub fn go_to(&mut self, path: Vec<String>) -> bool {
         // Cache current page before navigating away
-        if let Some(mut page) = self.current_page.take() {
-            // Sync filter state from State to Page before caching
-            page.filter_input = self.filter_input.clone();
-            page.input_cursor_position = self.input_cursor_position;
+        if let Some(page) = self.current_page.take() {
             self.page_cache.insert(self.current_path.clone(), page);
         }
 
@@ -414,15 +493,9 @@ impl State {
 
         // Try to restore page from cache
         if let Some(page) = self.page_cache.remove(&path) {
-            // Sync filter state from Page to State after restoring
-            self.filter_input = page.filter_input.clone();
-            self.input_cursor_position = page.input_cursor_position;
             self.current_page = Some(page);
             true // Restored from cache
         } else {
-            // Clear filter for new paths
-            self.filter_input.clear();
-            self.input_cursor_position = 0;
             false // Not in cache, needs to be loaded
         }
     }
@@ -476,16 +549,6 @@ impl State {
         self.notification = Some((message, Instant::now() + std::time::Duration::from_secs(3)));
     }
 
-    pub fn check_notification_expiry(&mut self) -> bool {
-        if let Some((_, expires_at)) = &self.notification {
-            if Instant::now() > *expires_at {
-                self.notification.take();
-                return true;
-            }
-        }
-        false
-    }
-
     /// Show the confirm dialog
     pub fn show_confirm_dialog(
         &mut self,
@@ -495,6 +558,24 @@ impl State {
         on_cancel: Option<LuaFunction>,
     ) {
         self.confirm_dialog = Some(ConfirmDialog::new(title, prompt, on_confirm, on_cancel));
+    }
+
+    /// Show the input dialog
+    pub fn show_input_dialog(
+        &mut self,
+        prompt: String,
+        placeholder: String,
+        on_submit: LuaFunction,
+        on_cancel: LuaFunction,
+        on_change: LuaFunction,
+    ) {
+        self.input_dialog = Some(InputDialog::new(
+            prompt,
+            placeholder,
+            on_submit,
+            on_cancel,
+            on_change,
+        ));
     }
 
     /// Toggle selected button in confirm dialog
@@ -507,11 +588,6 @@ impl State {
     /// Get the current selected button
     pub fn get_selected_button(&self) -> Option<ConfirmButton> {
         self.confirm_dialog.as_ref().map(|d| d.selected_button)
-    }
-
-    /// Set the list widget height for scroll offset calculation
-    pub fn set_list_height(&mut self, height: u16) {
-        self.list_height = Some(height);
     }
 
     /// Get the current scrolloff value
