@@ -24,15 +24,7 @@ end)()
 local function get_domain() end
 
 function M.setup()
-  -- lc.keymap.set('main', '<enter>', function() require('launchd.action').select_action() end)
-  lc.keymap.set('main', '<enter>', function()
-    lc.input {
-      prompt = 'Enter service name:',
-      placeholder = 'Service name',
-      on_submit = function(input) lc.notify(input) end,
-      on_change = function(input) lc.notify(input) end,
-    }
-  end)
+  lc.keymap.set('main', '<enter>', function() require('launchd.action').select_action() end)
 end
 
 function M.list(_, cb)

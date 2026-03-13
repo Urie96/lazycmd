@@ -45,5 +45,9 @@ lc.config {
       'launchd',
       config = function() require('launchd').setup() end,
     },
+    {
+      'quick-access-tools',
+      config = function() require('quick-access-tools').setup() end,
+    },
   },
 }

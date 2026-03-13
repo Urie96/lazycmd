@@ -45,14 +45,17 @@ local function do_service_action(action_name)
   end
 
   local cmd = { 'launchctl' }
-  local label = service_info.label
+  local label = service_info.label ---@type string
   local target = service_info.domain .. '/' .. label
 
   -- 根据操作类型构建命令
   if action_name == 'start' then
-    table.insert(cmd, 'kickstart')
-    table.insert(cmd, target)
+    table.insert(cmd, 'start')
+    table.insert(cmd, label)
   elseif action_name == 'stop' then
+    table.insert(cmd, 'stop')
+    table.insert(cmd, label)
+  elseif action_name == 'bootout' then
     table.insert(cmd, 'bootout')
     table.insert(cmd, target)
   elseif action_name == 'enable' then
@@ -72,16 +75,6 @@ local function do_service_action(action_name)
   elseif action_name == 'print' then
     table.insert(cmd, 'print')
     table.insert(cmd, target)
-  elseif action_name == 'blame' then
-    table.insert(cmd, 'blame')
-    table.insert(cmd, target)
-  elseif action_name == 'remove' then
-    table.insert(cmd, 'bootout')
-    table.insert(cmd, target)
-  elseif action_name == 'load' then
-    -- 加载服务（需要 plist 文件路径）
-    lc.notify 'Load operation requires plist file path'
-    return
   else
     lc.notify('Unknown action: ' .. action_name)
     return
@@ -100,11 +93,11 @@ end
 
 function M.start() do_service_action 'start' end
 function M.stop() do_service_action 'stop' end
+function M.bootout() do_service_action 'bootout' end
 function M.enable() do_service_action 'enable' end
 function M.disable() do_service_action 'disable' end
 function M.kill() do_service_action 'kill' end
 function M.kill9() do_service_action 'kill9' end
-function M.remove() do_service_action 'remove' end
 
 -- 显示可用操作的选择对话框
 function M.select_action()
@@ -152,10 +145,9 @@ function M.select_action()
       })
     end
 
-    -- 卸载操作
     table.insert(options, {
-      value = 'remove',
-      display = lc.style.line { ('🗑️ Remove'):fg 'yellow' },
+      value = 'bootout',
+      display = lc.style.line { ('🗑️ '):fg 'red' },
     })
 
     lc.select({
