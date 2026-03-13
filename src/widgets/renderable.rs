@@ -1,7 +1,7 @@
 use mlua::{prelude::*, FromLua};
 use ratatui::{layout::Rect, prelude::*, widgets::Widget};
 
-use super::LuaText;
+use super::{LuaLine, LuaSpan, LuaText};
 
 pub trait Renderable {
     fn render(&mut self, area: Rect, buf: &mut ratatui::buffer::Buffer);
@@ -16,17 +16,14 @@ impl FromLua for Box<dyn Renderable> {
             LuaValue::UserData(ud) => {
                 if let Ok(text) = ud.take::<LuaText>() {
                     Box::new(StatefulParagraph::from(text.0))
+                } else if let Ok(span) = ud.take::<LuaSpan>() {
+                    Box::new(StatefulParagraph::from(Text::from(span.0)))
+                } else if let Ok(line) = ud.take::<LuaLine>() {
+                    Box::new(StatefulParagraph::from(Text::from(line.0)))
                 } else {
                     Err("expect string or userdata ListItem".into_lua_err())?
                 }
             }
-            // LuaValue::UserData(ud) => {
-            //     if let Ok(span) = ud.take::<Text>() {
-            //         Text(ratatui::widgets::Text::from(span.0))
-            //     } else {
-            //         Err("expect string or userdata ListItem".into_lua_err())?
-            //     }
-            // }
             _ => Err("expect string or userdata ListItem".into_lua_err())?,
         })
     }

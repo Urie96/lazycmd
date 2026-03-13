@@ -8,6 +8,7 @@ use ratatui::{
     prelude::*,
     widgets::{Block, BorderType, Paragraph},
 };
+use std::time::Instant;
 use tokio::sync::mpsc;
 
 use libc::{sigaction, sigemptyset, SIGINT, SIG_IGN};
@@ -527,6 +528,13 @@ impl StatefulWidget for AppWidget {
 
         if let Some(p) = state.current_preview.as_mut() {
             p.render(preview_area, buf);
+        }
+
+        // Check and clear expired notification
+        if let Some((_, expiry)) = &state.notification {
+            if Instant::now() > *expiry {
+                state.notification = None;
+            }
         }
 
         // Draw notification in bottom-right corner

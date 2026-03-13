@@ -15,7 +15,7 @@ function api.page_set_entries(entries) return _lc.api.page_set_entries(entries) 
 function api.page_get_hovered() return _lc.api.page_get_hovered() end
 
 ---Set the preview panel content
----@param widget string|Text|Line The widget to display in the preview panel
+---@param widget string|Span|Text|Line The widget to display in the preview panel
 function api.page_set_preview(widget) return _lc.api.page_set_preview(widget) end
 
 ---Navigate to a specific path

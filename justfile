@@ -1,2 +1,2 @@
 run:
-    cargo run -- launchd
+    cargo run -- quick-access-tools
