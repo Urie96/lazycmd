@@ -7,7 +7,9 @@
 ```
 preset/lua/
 ├── api.lua           # 页面管理 API 封装
+├── base64.lua        # Base64 编解码
 ├── cache.lua         # 缓存 API 封装
+├── clipboard.lua     # 系统剪贴板访问
 ├── component.lua     # UI 组件（对话框、通知）
 ├── fs.lua            # 文件系统 API 封装
 ├── http.lua          # HTTP API 封装
@@ -21,6 +23,7 @@ preset/lua/
 ├── system.lua        # 系统命令 API 封装
 ├── time.lua          # 时间 API 封装
 ├── util.lua          # 工具函数
+├── yaml.lua          # YAML 编解码
 └── global.d.lua      # 类型声明文件
 ```
 
@@ -60,6 +63,15 @@ lc.cache.get(key)           -- 获取缓存
 lc.cache.set(key, value, opts)  -- 设置缓存（支持 TTL）
 lc.cache.delete(key)        -- 删除缓存
 lc.cache.clear()            -- 清空缓存
+```
+
+### clipboard.lua - 系统剪贴板
+
+系统剪贴板访问封装：
+
+```lua
+lc.clipboard.get()         -- 获取剪贴板内容
+lc.clipboard.set(text)     -- 设置剪贴板内容
 ```
 
 ### component.lua - UI 组件
@@ -247,7 +259,10 @@ Lua 语言服务器类型声明文件，为 IDE 提供类型提示。
 12. `cache.lua`
 13. `fs.lua`
 14. `util.lua`
-15. `init.lua` ← 最后加载，执行初始化逻辑
+15. `base64.lua`
+16. `clipboard.lua`
+17. `yaml.lua`
+18. `init.lua` ← 最后加载，执行初始化逻辑
 
 ## 使用示例
 
