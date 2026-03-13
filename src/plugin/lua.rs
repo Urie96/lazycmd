@@ -104,6 +104,7 @@ pub fn init_lua(lua: &Lua) -> mlua::Result<()> {
     load_preset!("fs")?;
     load_preset!("util")?;
     load_preset!("base64")?;
+    load_preset!("clipboard")?;
     load_preset!("yaml")?;
     load_preset!("init")?;
     Ok(())

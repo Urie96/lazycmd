@@ -1,6 +1,7 @@
 mod api;
 mod base64;
 mod cache;
+mod clipboard;
 mod fs;
 mod highlighter;
 mod http;
@@ -57,6 +58,7 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
     let keymap = keymap::new_table(lua)?.into_lua(lua)?;
     let api = api::new_table(lua)?.into_lua(lua)?;
     let cache = cache::new_table(lua)?.into_lua(lua)?;
+    let clipboard = clipboard::new_table(lua)?.into_lua(lua)?;
     let fs = fs::new_table(lua)?.into_lua(lua)?;
     let http = http::new_table(lua)?.into_lua(lua)?;
     let path = path::new_table(lua)?.into_lua(lua)?;
@@ -284,6 +286,7 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
         ("keymap", keymap),
         ("api", api),
         ("cache", cache),
+        ("clipboard", clipboard),
         ("fs", fs),
         ("http", http),
         ("cmd", cmd),

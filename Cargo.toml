@@ -29,3 +29,4 @@ unicode-width      = "0.2"
 syntect            = { version = "5.3.0", default-features = false, features = ["parsing", "plist-load", "regex-onig"] }
 ratatui            = { version = "0.30.0", features = ["unstable-rendered-line-info"] }
 serde_yaml = "0.9.34"
+arboard = "3.4.0"
