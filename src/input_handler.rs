@@ -59,18 +59,19 @@ pub fn handle_input_dialog_key(
         }
         // Ctrl-U: delete all characters before cursor
         KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            let old_text = dialog.text.clone();
             if dialog.cursor_position > 0 {
                 dialog.text = dialog.text[dialog.cursor_position..].to_string();
                 dialog.cursor_position = 0;
+            }
 
-                // Call on_change callback using plugin::scope
-                let text = dialog.text.clone();
-                let on_change = dialog.on_change.clone();
-                if !text.is_empty() || dialog.cursor_position > 0 {
-                    plugin::scope(lua, state, event_sender, || {
-                        on_change.call::<()>(text)
-                    })?;
-                }
+            // Always call on_change callback to update the filter
+            let text = dialog.text.clone();
+            let on_change = dialog.on_change.clone();
+            if text != old_text {
+                plugin::scope(lua, state, event_sender, || {
+                    on_change.call::<()>(text)
+                })?;
             }
             Ok(true)
         }

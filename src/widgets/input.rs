@@ -93,6 +93,15 @@ impl StatefulWidget for InputDialogWidget {
     type State = InputDialogState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+        // Clear the area first to prevent previous content from leaking through
+        for y in area.top()..area.bottom() {
+            for x in area.left()..area.right() {
+                if let Some(cell) = buf.cell_mut((x, y)) {
+                    cell.set_char(' ');
+                }
+            }
+        }
+
         // Arrow prefix " " for inside the input box (like select component)
         let arrow = " ";
         

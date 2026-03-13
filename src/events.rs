@@ -25,6 +25,7 @@ enum StreamName {
 pub enum Event {
     Quit,
     Render,
+    RefreshPreview,
     Enter(Vec<String>),
     Command(String),
     Crossterm(CrosstermEvent),
