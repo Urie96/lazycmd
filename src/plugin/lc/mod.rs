@@ -1,17 +1,21 @@
 mod api;
+mod base64;
 mod cache;
 mod fs;
 mod highlighter;
 mod http;
+mod json;
 mod keymap;
 mod path;
 mod style;
 mod system;
 mod time;
+mod yaml;
 
+use ::base64::engine::general_purpose;
+use ::base64::Engine;
 use crate::widgets::{LuaLine, LuaSpan};
 use crate::{plugin, Event};
-use base64::Engine;
 use mlua::prelude::*;
 use ratatui::text::Line;
 use std::io::{self, Write};
@@ -57,6 +61,9 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
     let http = http::new_table(lua)?.into_lua(lua)?;
     let path = path::new_table(lua)?.into_lua(lua)?;
     let time = time::new_table(lua)?.into_lua(lua)?;
+    let json = json::new_table(lua)?.into_lua(lua)?;
+    let yaml = yaml::new_table(lua)?.into_lua(lua)?;
+    let base64 = base64::new_table(lua)?.into_lua(lua)?;
 
     let defer_fn = lua
         .create_function(|lua, (f, ms): (LuaFunction, u64)| {
@@ -122,7 +129,7 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
     let osc52_copy = lua
         .create_function(|_, text: String| {
             // Encode text as base64
-            let encoded = base64::engine::general_purpose::STANDARD.encode(&text);
+            let encoded = general_purpose::STANDARD.encode(&text);
 
             // Build OSC 52 escape sequence: ESC ] 52 ; c ; <base64_data> BEL
             let osc_sequence = format!("\x1b]52;c;{}\x07", encoded);
@@ -284,6 +291,9 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
         ("system", mlua::Value::Table(system_tbl)),
         ("path", path),
         ("time", time),
+        ("json", json),
+        ("yaml", yaml),
+        ("base64", base64),
         ("log", log_fn),
         ("osc52_copy", osc52_copy),
         ("notify", notify_fn),
