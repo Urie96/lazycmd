@@ -148,11 +148,212 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
         )?
         .into_lua(lua)?;
 
+    let tempfile_sync = lua.create_function(
+        |_lua, opts: Option<LuaTable>| -> mlua::Result<(String, Option<String>)> {
+            // Parse options
+            let prefix: Option<String> = opts.as_ref().and_then(|t| t.get("prefix").ok());
+            let suffix: Option<String> = opts.as_ref().and_then(|t| t.get("suffix").ok());
+            let content: Option<String> = opts.as_ref().and_then(|t| t.get("content").ok());
+
+            // Generate random filename
+            use std::time::{SystemTime, UNIX_EPOCH};
+            let timestamp = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos();
+            let random_part = format!("{:x}", timestamp);
+
+            // Build filename
+            let filename = match (prefix, suffix) {
+                (Some(p), Some(s)) => format!("{}{}.{}", p, &random_part[..8], s.trim_start_matches('.')),
+                (Some(p), None) => format!("{}{}", p, &random_part[..8]),
+                (None, Some(s)) => format!("{}.{}", &random_part[..8], s.trim_start_matches('.')),
+                (None, None) => format!("tmp.{}", &random_part[..8]),
+            };
+
+            // Get temp directory
+            let temp_dir = std::env::temp_dir();
+            let temp_path = temp_dir.join(&filename);
+
+            // Create file with optional content
+            match std::fs::write(&temp_path, content.as_deref().unwrap_or("")) {
+                Ok(_) => {
+                    // Convert to string path
+                    let path_str = temp_path.to_string_lossy().to_string();
+                    Ok((path_str, None))
+                }
+                Err(e) => Ok((String::new(), Some(e.to_string()))),
+            }
+        },
+    )?
+    .into_lua(lua)?;
+
+    let remove_sync = lua
+        .create_function(|_, path: String| -> mlua::Result<(bool, Option<String>)> {
+            let path_obj = std::path::Path::new(&path);
+
+            let result = if path_obj.is_dir() {
+                // Remove directory and its contents recursively
+                std::fs::remove_dir_all(&path)
+            } else {
+                // Remove file
+                std::fs::remove_file(&path)
+            };
+
+            match result {
+                Ok(_) => Ok((true, None)),
+                Err(e) => Ok((false, Some(e.to_string()))),
+            }
+        })?
+        .into_lua(lua)?;
+
     lua.create_table_from([
         ("read_dir_sync", read_dir_sync),
         ("read_file_sync", read_file_sync),
         ("write_file_sync", write_file_sync),
         ("stat", stat_sync),
         ("mkdir", mkdir_sync),
+        ("tempfile", tempfile_sync),
+        ("remove", remove_sync),
     ])
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tempfile_generation() {
+        use mlua::Lua;
+        use std::path::Path;
+
+        let lua = Lua::new();
+
+        // Test basic tempfile (no options)
+        {
+            let table = new_table(&lua).unwrap();
+            let tempfile: mlua::Function = table.get("tempfile").unwrap();
+            let (path, err): (String, Option<String>) = tempfile.call(LuaNil).unwrap();
+            assert!(err.is_none(), "Basic tempfile should not error");
+            assert!(path.contains("/tmp/") || path.contains("/T/"), "Path should be in temp dir");
+            assert!(Path::new(&path).exists(), "File should exist");
+            std::fs::remove_file(&path).ok();
+        }
+
+        // Test with prefix
+        {
+            let table = new_table(&lua).unwrap();
+            let tempfile: mlua::Function = table.get("tempfile").unwrap();
+            let opts = lua.create_table().unwrap();
+            opts.set("prefix", "test").unwrap();
+            let (path, err): (String, Option<String>) = tempfile.call(opts.clone()).unwrap();
+            assert!(err.is_none(), "Tempfile with prefix should not error");
+            assert!(path.contains("test"), "Path should contain prefix");
+            assert!(Path::new(&path).exists(), "File should exist");
+            std::fs::remove_file(&path).ok();
+        }
+
+        // Test with suffix
+        {
+            let table = new_table(&lua).unwrap();
+            let tempfile: mlua::Function = table.get("tempfile").unwrap();
+            let opts = lua.create_table().unwrap();
+            opts.set("suffix", ".log").unwrap();
+            let (path, err): (String, Option<String>) = tempfile.call(opts.clone()).unwrap();
+            assert!(err.is_none(), "Tempfile with suffix should not error");
+            assert!(path.contains(".log"), "Path should contain .log extension");
+            assert!(Path::new(&path).exists(), "File should exist");
+            std::fs::remove_file(&path).ok();
+        }
+
+        // Test with both prefix and suffix
+        {
+            let table = new_table(&lua).unwrap();
+            let tempfile: mlua::Function = table.get("tempfile").unwrap();
+            let opts = lua.create_table().unwrap();
+            opts.set("prefix", "memo").unwrap();
+            opts.set("suffix", ".md").unwrap();
+            let (path, err): (String, Option<String>) = tempfile.call(opts.clone()).unwrap();
+            assert!(err.is_none(), "Tempfile with both options should not error");
+            assert!(path.contains("memo"), "Path should contain prefix");
+            assert!(path.contains(".md"), "Path should contain .md extension");
+            assert!(Path::new(&path).exists(), "File should exist");
+            std::fs::remove_file(&path).ok();
+        }
+
+        // Test with content
+        {
+            let table = new_table(&lua).unwrap();
+            let tempfile: mlua::Function = table.get("tempfile").unwrap();
+            let opts = lua.create_table().unwrap();
+            opts.set("content", "hello world").unwrap();
+            let (path, err): (String, Option<String>) = tempfile.call(opts.clone()).unwrap();
+            assert!(err.is_none(), "Tempfile with content should not error");
+            assert!(Path::new(&path).exists(), "File should exist");
+
+            // Verify content
+            let content = std::fs::read_to_string(&path).unwrap();
+            assert_eq!(content, "hello world", "File should contain the specified content");
+            std::fs::remove_file(&path).ok();
+        }
+
+        // Test with prefix, suffix and content
+        {
+            let table = new_table(&lua).unwrap();
+            let tempfile: mlua::Function = table.get("tempfile").unwrap();
+            let opts = lua.create_table().unwrap();
+            opts.set("prefix", "test").unwrap();
+            opts.set("suffix", ".txt").unwrap();
+            opts.set("content", "# Test File\nContent here").unwrap();
+            let (path, err): (String, Option<String>) = tempfile.call(opts.clone()).unwrap();
+            assert!(err.is_none(), "Tempfile with all options should not error");
+            assert!(path.contains("test"), "Path should contain prefix");
+            assert!(path.contains(".txt"), "Path should contain extension");
+            assert!(Path::new(&path).exists(), "File should exist");
+
+            // Verify content
+            let content = std::fs::read_to_string(&path).unwrap();
+            assert_eq!(content, "# Test File\nContent here", "File should contain the specified content");
+            std::fs::remove_file(&path).ok();
+        }
+
+        // Test remove file
+        {
+            let table = new_table(&lua).unwrap();
+            let tempfile: mlua::Function = table.get("tempfile").unwrap();
+            let remove: mlua::Function = table.get("remove").unwrap();
+            let (path, _): (String, Option<String>) = tempfile.call(LuaNil).unwrap();
+            assert!(Path::new(&path).exists(), "File should exist before removal");
+
+            let (ok, err): (bool, Option<String>) = remove.call(path.clone()).unwrap();
+            assert!(ok, "Remove file should succeed");
+            assert!(err.is_none(), "Remove file should not error");
+            assert!(!Path::new(&path).exists(), "File should not exist after removal");
+        }
+
+        // Test remove directory
+        {
+            let table = new_table(&lua).unwrap();
+            let mkdir: mlua::Function = table.get("mkdir").unwrap();
+            let remove: mlua::Function = table.get("remove").unwrap();
+
+            let temp_dir = std::env::temp_dir();
+            let test_dir = temp_dir.join("test_remove_dir");
+            let test_file = test_dir.join("nested_file.txt");
+
+            // Create directory and nested file
+            let _: (bool, Option<String>) = mkdir.call(test_dir.to_string_lossy().to_string()).unwrap();
+            std::fs::write(&test_file, "test content").unwrap();
+            assert!(test_dir.exists(), "Directory should exist");
+            assert!(test_file.exists(), "Nested file should exist");
+
+            // Remove directory recursively
+            let (ok, err): (bool, Option<String>) =
+                remove.call(test_dir.to_string_lossy().to_string()).unwrap();
+            assert!(ok, "Remove directory should succeed");
+            assert!(err.is_none(), "Remove directory should not error");
+            assert!(!test_dir.exists(), "Directory should not exist after removal");
+        }
+    }
+}
+

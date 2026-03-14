@@ -1,20 +1,170 @@
 -- Formatter and data conversion tools
 
 -- Check if a command is available
-local function has_cmd(cmd) return lc.system.executable(cmd) end
-
--- Read from clipboard
-local function read_clipboard()
-  local ok, content = pcall(lc.clipboard.get)
-  if ok then
-    return content
-  else
-    return nil, content
-  end
+local function check_has(cmd)
+  if not lc.system.executable(cmd) then error(cmd .. ' not found') end
 end
 
 -- Show error in preview
 local function show_error(err) lc.api.page_set_preview(('Error: ' .. tostring(err)):fg 'red') end
+
+local tools = {
+  {
+    key = 'json_format',
+    display = 'JSON Format',
+    description = 'Format JSON with indentation',
+    converter = function(input, cb)
+      local decoded = lc.json.decode(input)
+      local encoded = lc.json.encode(decoded, { indent = 2 })
+      cb(encoded, { language = 'json' })
+    end,
+  },
+  {
+    key = 'json_minify',
+    display = 'JSON Minify',
+    description = 'Minify JSON (remove whitespace)',
+    converter = function(input, cb)
+      lc.log('info', input)
+      local decoded = lc.json.decode(input)
+      local encoded = lc.json.encode(decoded)
+      cb(encoded, { language = 'json' })
+    end,
+  },
+  {
+    key = 'stringify',
+    display = 'Stringify',
+    description = 'Convert text to JSON string',
+    converter = function(input, cb)
+      local encoded = lc.json.encode(input:trim())
+      cb(encoded)
+    end,
+  },
+  {
+    key = 'unstringify',
+    display = 'Unstringify',
+    description = 'Convert JSON string to text',
+    converter = function(input, cb)
+      local decoded = lc.json.decode(input:trim())
+      cb(decoded)
+    end,
+  },
+
+  {
+    key = 'base64_decode',
+    display = 'Base64 Decode',
+    description = 'Decode Base64 string',
+    converter = function(input, cb)
+      local decoded = lc.base64.decode(input:trim())
+      cb(decoded)
+    end,
+  },
+  {
+    key = 'base64_encode',
+    display = 'Base64 Encode',
+    description = 'Encode string to Base64',
+    converter = function(input, cb)
+      local encoded = lc.base64.encode(input:trim())
+      cb(encoded)
+    end,
+  },
+  {
+    key = 'url_encode',
+    display = 'URL Encode',
+    description = 'URL encode string',
+    converter = function(input, cb)
+      check_has 'python3'
+      local script = "import sys; from urllib.parse import quote; print(quote(sys.stdin.read(), safe=''))"
+      lc.system({ 'python3', '-c', script }, { stdin = input }, function(out)
+        if out.code == 0 then
+          cb(out.stdout)
+        else
+          show_error(out.stderr)
+        end
+      end)
+    end,
+  },
+  {
+    key = 'url_decode',
+    display = 'URL Decode',
+    description = 'URL decode string',
+    converter = function(input, cb)
+      check_has 'python3'
+      local script = 'import sys; from urllib.parse import unquote; print(unquote(sys.stdin.read()))'
+      lc.system({ 'python3', '-c', script }, { stdin = input }, function(out)
+        if out.code == 0 then
+          cb(out.stdout)
+        else
+          show_error(out.stderr)
+        end
+      end)
+    end,
+  },
+  {
+    key = 'json_to_nix',
+    display = 'Convert JSON To Nix',
+    description = 'Convert JSON to Nix expression',
+    converter = function(input, cb)
+      check_has 'nix'
+      local tmp = lc.fs.tempfile { suffix = '.json', content = input }
+
+      local expr = 'builtins.fromJSON (builtins.readFile "' .. tmp .. '")'
+      lc.system({ 'nix-instantiate', '--eval', '--expr', expr }, function(out)
+        lc.fs.remove(tmp)
+
+        if out.code == 0 then
+          cb(out.stdout, { language = 'nix' })
+        else
+          show_error(out.stderr)
+        end
+      end)
+    end,
+  },
+  {
+    key = 'yaml_to_json',
+    display = 'Convert YAML To JSON',
+    description = 'Convert YAML to JSON',
+    converter = function(input, cb)
+      local decoded = lc.yaml.decode(input)
+      local json = lc.json.encode(decoded)
+      cb(json, { language = 'json' })
+    end,
+  },
+  {
+    key = 'json_to_yaml',
+    display = 'Convert JSON To YAML',
+    description = 'Convert JSON to YAML',
+    converter = function(input, cb)
+      local decoded = lc.json.decode(input)
+      local yaml = lc.yaml.encode(decoded)
+      cb(yaml, { language = 'yaml' })
+    end,
+  },
+}
+
+-- Show result in preview
+local function show_preview(result, opt)
+  if opt and opt.language then
+    lc.api.page_set_preview(lc.style.highlight(result, opt.language))
+  else
+    lc.api.page_set_preview(lc.style.text {
+      lc.style.line {
+        lc.style.span(result),
+      },
+    })
+  end
+end
+
+-- Read from clipboard
+local function read_clipboard(cb)
+  local ok, content = pcall(lc.clipboard.get)
+  if not ok then
+    show_error(content)
+  elseif #content == 0 then
+    show_error 'Clipboard is empty'
+  else
+    cb(content)
+  end
+end
 
 -- Write to clipboard
 local function write_clipboard(text)
@@ -27,283 +177,22 @@ local function write_clipboard(text)
   return ok, err
 end
 
--- Show result in preview
-local function show_preview(result, language)
-  if language then
-    lc.api.page_set_preview(lc.style.highlight(result, language))
-  else
-    lc.api.page_set_preview(lc.style.text {
-      lc.style.line {
-        lc.style.span(result),
-      },
-    })
-  end
-end
-
--- Tool implementations
-local function json_format(cb)
-  local input, err = read_clipboard()
-  if err or not input or #input == 0 then
-    show_error(err or 'Clipboard is empty')
-    return
-  end
-  local ok, decoded = pcall(lc.json.decode, input)
-  if not ok then
-    show_error('Invalid JSON: ' .. tostring(decoded))
-    return
-  end
-  local encoded = lc.json.encode(decoded, { indent = 2 })
-  cb(encoded, 'json')
-end
-
-local function json_minify(cb)
-  local input, err = read_clipboard()
-  if err or not input or #input == 0 then
-    show_error(err or 'Clipboard is empty')
-    return
-  end
-  local ok, decoded = pcall(lc.json.decode, input)
-  if not ok then
-    show_error('Invalid JSON: ' .. tostring(decoded))
-    return
-  end
-  local encoded = lc.json.encode(decoded)
-  cb(encoded, 'json')
-end
-
-local function stringify(cb)
-  local input, err = read_clipboard()
-  if err or not input or #input == 0 then
-    show_error(err or 'Clipboard is empty')
-    return
-  end
-  local encoded = lc.json.encode(input:trim())
-  cb(encoded)
-end
-
-local function unstringify(cb)
-  local input, err = read_clipboard()
-  if err or not input or #input == 0 then
-    show_error(err or 'Clipboard is empty')
-    return
-  end
-  local ok, decoded = pcall(lc.json.decode, input:trim())
-  if not ok then
-    show_error('Invalid JSON string: ' .. tostring(decoded))
-    return
-  end
-  if type(decoded) ~= 'string' then
-    show_error 'Input is not a JSON string'
-    return
-  end
-  cb(decoded)
-end
-
-local function base64_decode(cb)
-  local input, err = read_clipboard()
-  if err or not input or #input == 0 then
-    show_error(err or 'Clipboard is empty')
-    return
-  end
-  local ok, decoded = pcall(lc.base64.decode, input:trim())
-  if not ok then
-    show_error('Invalid Base64: ' .. tostring(decoded))
-    return
-  end
-  cb(decoded)
-end
-
-local function base64_encode(cb)
-  local input, err = read_clipboard()
-  if err or not input or #input == 0 then
-    show_error(err or 'Clipboard is empty')
-    return
-  end
-  local encoded = lc.base64.encode(input:trim())
-  cb(encoded)
-end
-
-local function url_encode(cb)
-  if not has_cmd 'python3' then
-    show_error 'python3 not found'
-    return
-  end
-  local input, err = read_clipboard()
-  if err or not input or #input == 0 then
-    show_error(err or 'Clipboard is empty')
-    return
-  end
-  local script = "import sys; from urllib.parse import quote; print(quote(sys.stdin.read(), safe=''))"
-  lc.system({ 'python3', '-c', script }, { stdin = input }, function(out)
-    if out.code == 0 then
-      cb(out.stdout)
-    else
-      show_error(out.stderr)
-    end
-  end)
-end
-
-local function url_decode(cb)
-  if not has_cmd 'python3' then
-    show_error 'python3 not found'
-    return
-  end
-  local input, err = read_clipboard()
-  if err or not input or #input == 0 then
-    show_error(err or 'Clipboard is empty')
-    return
-  end
-  local script = 'import sys; from urllib.parse import unquote; print(unquote(sys.stdin.read()))'
-  lc.system({ 'python3', '-c', script }, { stdin = input }, function(out)
-    if out.code == 0 then
-      cb(out.stdout)
-    else
-      show_error(out.stderr)
-    end
-  end)
-end
-
-local function json_to_nix(cb)
-  local input, err = read_clipboard()
-  if err or not input or #input == 0 then
-    show_error(err or 'Clipboard is empty')
-    return
-  end
-  local tmp = '/tmp/lazycmd_t_json.json'
-  lc.fs.write_file_sync(tmp, input, function(err)
-    if err then
-      show_error(err)
-      return
-    end
-
-    local expr = 'builtins.fromJSON (builtins.readFile "' .. tmp .. '")'
-    lc.system({ 'nix', 'eval', '--impure', '--expr', expr }, function(out)
-      lc.system({ 'rm', tmp }, function() end)
-
-      if out.code == 0 then
-        cb(out.stdout, 'nix')
-      else
-        show_error(out.stderr)
-      end
-    end)
-  end)
-end
-
-local function yaml_to_nix(cb)
-  if not has_cmd 'yq' then
-    show_error 'yq not found'
-    return
-  end
-  local input, err = read_clipboard()
-  if err or not input or #input == 0 then
-    show_error(err or 'Clipboard is empty')
-    return
-  end
-  lc.system({ 'yq', '-o=json', '.' }, { stdin = input }, function(out)
-    if out.code ~= 0 then
-      show_error(out.stderr)
-      return
-    end
-
-    local tmp = '/tmp/lazycmd_t_yaml.json'
-    lc.fs.write_file_sync(tmp, out.stdout, function(err)
-      if err then
-        show_error(err)
-        return
-      end
-
-      local expr = 'builtins.fromJSON (builtins.readFile "' .. tmp .. '")'
-      lc.system({ 'nix', 'eval', '--impure', '--expr', expr }, function(out)
-        lc.system({ 'rm', tmp }, function() end)
-
-        if out.code == 0 then
-          cb(out.stdout, 'nix')
-        else
-          show_error(out.stderr)
-        end
+for _, tool in ipairs(tools) do
+  if tool.converter then
+    tool.on_enter = function()
+      read_clipboard(function(content)
+        local ok, err = pcall(tool.converter, content, show_preview)
+        if not ok then show_error(err) end
       end)
-    end)
-  end)
+    end
+
+    tool.on_copy = function()
+      read_clipboard(function(content)
+        local ok, err = pcall(tool.converter, content, write_clipboard)
+        if not ok then show_error(err) end
+      end)
+    end
+  end
 end
 
-return {
-  {
-    key = 'json_format',
-    display = 'JSON Format',
-    description = 'Format JSON with indentation',
-    on_enter = function() json_format(show_preview) end,
-    on_copy = function() json_format(write_clipboard) end,
-  },
-
-  {
-    key = 'json_minify',
-    display = 'JSON Minify',
-    description = 'Minify JSON (remove whitespace)',
-    on_enter = function() json_minify(show_preview) end,
-    on_copy = function() json_minify(write_clipboard) end,
-  },
-
-  {
-    key = 'stringify',
-    display = 'Stringify',
-    description = 'Convert text to JSON string',
-    on_enter = function() stringify(show_preview) end,
-    on_copy = function() stringify(write_clipboard) end,
-  },
-
-  {
-    key = 'unstringify',
-    display = 'Unstringify',
-    description = 'Convert JSON string to text',
-    on_enter = function() unstringify(show_preview) end,
-    on_copy = function() unstringify(write_clipboard) end,
-  },
-
-  {
-    key = 'base64_decode',
-    display = 'Base64 Decode',
-    description = 'Decode Base64 string',
-    on_enter = function() base64_decode(show_preview) end,
-    on_copy = function() base64_decode(write_clipboard) end,
-  },
-
-  {
-    key = 'base64_encode',
-    display = 'Base64 Encode',
-    description = 'Encode string to Base64',
-    on_enter = function() base64_encode(show_preview) end,
-    on_copy = function() base64_encode(write_clipboard) end,
-  },
-
-  {
-    key = 'url_encode',
-    display = 'URL Encode',
-    description = 'URL encode string',
-    on_enter = function() url_encode(show_preview) end,
-    on_copy = function() url_encode(write_clipboard) end,
-  },
-
-  {
-    key = 'url_decode',
-    display = 'URL Decode',
-    description = 'URL decode string',
-    on_enter = function() url_decode(show_preview) end,
-    on_copy = function() url_decode(write_clipboard) end,
-  },
-
-  {
-    key = 'json_to_nix',
-    display = 'Convert JSON To Nix',
-    description = 'Convert JSON to Nix expression',
-    on_enter = function() json_to_nix(show_preview) end,
-    on_copy = function() json_to_nix(write_clipboard) end,
-  },
-
-  {
-    key = 'yaml_to_nix',
-    display = 'Convert YAML To Nix',
-    description = 'Convert YAML to Nix expression',
-    on_enter = function() yaml_to_nix(show_preview) end,
-    on_copy = function() yaml_to_nix(write_clipboard) end,
-  },
-}
+return tools

@@ -31,16 +31,12 @@ end
 function M.list(_, cb) cb(all_tools) end
 
 function M.preview(entry, cb)
-  local desc = entry.description or 'No description'
-
-  local preview_text = entry.display
-    .. '\n\n'
-    .. desc
-    .. '\n\n'
-    .. 'Press Enter to execute (reads from clipboard, writes result back)\n'
-    .. 'Press y to copy result to clipboard'
-
-  cb(preview_text)
+  cb(lc.style.text {
+    (entry.description or 'No description'):fg 'green',
+    ' ',
+    entry.on_enter and ('Press Enter to execute'):fg 'darkgray',
+    entry.on_copy and ('Press y to copy result to clipboard'):fg 'darkgray',
+  })
 end
 
 return M
