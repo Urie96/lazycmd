@@ -206,12 +206,14 @@ function M.container_list()
   local cmd = { 'docker', 'container', 'ps', '-a', '--format', '{{json .}}' }
 
   return M.exec(cmd):next(function(stdout)
+    stdout = stdout:trim()
+    if stdout == '' then error 'No containers found' end
     local containers = lc.tbl_map(function(line)
       local success, data = pcall(lc.json.decode, line)
       assert(success and type(data) == 'table', 'Failed to parse JSON output: ' .. line)
 
       return normalize_container_data(data)
-    end, stdout:trim():split '\n')
+    end, stdout:split '\n')
 
     return containers
   end)
@@ -231,12 +233,14 @@ function M.image_list()
   local cmd = { 'docker', 'image', 'ls', '--format', '{{json .}}' }
 
   return M.exec(cmd):next(function(stdout)
+    stdout = stdout:trim()
+    if stdout == '' then error 'No images found' end
     local images = lc.tbl_map(function(line)
       local success, data = pcall(lc.json.decode, line)
       assert(success and type(data) == 'table', 'Failed to parse JSON output: ' .. line)
 
       return normalize_image_data(data)
-    end, stdout:trim():split '\n')
+    end, stdout:split '\n')
 
     return images
   end)

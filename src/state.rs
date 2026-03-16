@@ -1,6 +1,6 @@
 use crossterm::event::KeyEvent;
 use mlua::prelude::*;
-use ratatui::{text::Line, widgets::ListState};
+use ratatui::{text::Line, text::Text, widgets::ListState};
 use std::collections::HashMap;
 use std::time::Instant;
 
@@ -380,7 +380,7 @@ pub struct State {
     pub keymap_config: Vec<Keymap>,
     pub last_key_event_buffer: Vec<KeyEvent>,
     pub current_preview: Option<Box<dyn Renderable>>,
-    pub notification: Option<(String, Instant)>,
+    pub notification: Option<(Text<'static>, Instant)>,
 
     /// Cache for pages to preserve cursor position, entries and filter when navigating back
     page_cache: HashMap<Vec<String>, Page>,
@@ -545,7 +545,7 @@ impl State {
         }
     }
 
-    pub fn set_notification(&mut self, message: String) {
+    pub fn set_notification(&mut self, message: Text<'static>) {
         self.notification = Some((message, Instant::now() + std::time::Duration::from_secs(3)));
     }
 

@@ -157,7 +157,7 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
         .into_lua(lua)?;
 
     let notify_fn = lua
-        .create_function(|lua, message: String| plugin::send_event(lua, Event::Notify(message)))?
+        .create_function(|lua, message: crate::widgets::LuaText| plugin::send_event(lua, Event::Notify(message.0)))?
         .into_lua(lua)?;
 
     // lc.confirm: show a confirmation dialog

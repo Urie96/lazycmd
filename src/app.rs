@@ -544,9 +544,13 @@ impl StatefulWidget for AppWidget {
             let min_height = 1u16;
 
             // Calculate required dimensions based on message content
-            let lines: Vec<&str> = message.lines().collect();
-            let line_count = lines.len().max(min_height as usize);
-            let max_line_width = lines.iter().map(|l| l.len()).max().unwrap_or(0) as u16;
+            let line_count = message.lines.len().max(min_height as usize);
+            let max_line_width = message
+                .lines
+                .iter()
+                .map(|l| l.width() as u16)
+                .max()
+                .unwrap_or(0);
 
             // Width: max of min_width and (max_line_width + 2 for padding)
             let notification_width = (max_line_width + 2).max(min_width);
@@ -570,7 +574,7 @@ impl StatefulWidget for AppWidget {
                 .border_style(Style::default().fg(Color::Yellow));
             let inner = block.inner(notification_area);
             block.render(notification_area, buf);
-            Paragraph::new(message.as_str())
+            Paragraph::new(message.clone())
                 .style(Style::default().fg(Color::Yellow))
                 .render(inner, buf);
         }

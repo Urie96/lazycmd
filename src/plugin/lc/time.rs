@@ -245,9 +245,9 @@ mod tests {
         let formatted: String = format_fn
             .call((timestamp, Some("compact".to_string())))
             .unwrap();
-        // Should be in MM-DD format
-        assert!(formatted.len() == 5); // "MM-DD"
-        assert!(formatted.contains('-'));
+        // Should be in MM/DD format
+        assert!(formatted.len() == 5); // "MM/DD"
+        assert!(formatted.contains('/'));
         assert!(!formatted.contains(':'));
     }
 
@@ -268,9 +268,9 @@ mod tests {
         let formatted: String = format_fn
             .call((timestamp, Some("compact".to_string())))
             .unwrap();
-        // Should be in YYYY-MM format
-        assert!(formatted.len() == 7); // "YYYY-MM"
-        assert!(formatted.contains('-'));
+        // Should be in YYYY/MM format
+        assert!(formatted.len() == 7); // "YYYY/MM"
+        assert!(formatted.contains('/'));
         assert!(!formatted.contains(':'));
     }
 }

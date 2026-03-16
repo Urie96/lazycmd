@@ -204,7 +204,7 @@ lc.keymap.set('main', '<C-x>', function() ... end)
 | `lc.split(s, sep)` | 分割字符串 |
 | `lc.log(level, msg, ...)` | 写入日志 |
 | `lc.osc52_copy(text)` | 通过 OSC 52 复制到剪贴板 |
-| `lc.notify(msg)` | 显示通知 |
+| `lc.notify(msg)` | 显示通知 (支持 string、Span、Line 或 Text 类型) |
 | `lc.confirm(opts)` | 显示确认对话框 |
 | `lc.select(opts, callback)` | 显示选择对话框 |
 

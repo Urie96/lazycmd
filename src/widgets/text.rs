@@ -95,6 +95,41 @@ impl LuaUserData for LuaLine {
 
 impl LuaUserData for LuaText {}
 
+impl FromLua for LuaText {
+    fn from_lua(value: LuaValue, _lua: &Lua) -> mlua::Result<Self> {
+        match value {
+            LuaValue::UserData(ud) => {
+                // Try LuaText first
+                if let Ok(text) = ud.take::<LuaText>() {
+                    return Ok(text);
+                }
+                // Try LuaLine (convert single Line to Text)
+                if let Ok(line) = ud.take::<LuaLine>() {
+                    return Ok(LuaText(Text::from(vec![line.0])));
+                }
+                // Try LuaSpan (convert single Span to Text via Line)
+                if let Ok(span) = ud.take::<LuaSpan>() {
+                    return Ok(LuaText(Text::from(Line::from(span.0))));
+                }
+                Err(mlua::Error::FromLuaConversionError {
+                    from: "UserData",
+                    to: "LuaText".to_string(),
+                    message: Some("UserData is not a LuaText, LuaLine, or LuaSpan".to_string()),
+                })
+            }
+            LuaValue::String(s) => {
+                let s = s.to_str()?.to_string();
+                Ok(LuaText(Text::raw(s)))
+            }
+            _ => Err(mlua::Error::FromLuaConversionError {
+                from: value.type_name(),
+                to: "LuaText".to_string(),
+                message: Some("expected UserData, String".to_string()),
+            }),
+        }
+    }
+}
+
 impl FromLua for LuaSpan {
     fn from_lua(value: LuaValue, _lua: &Lua) -> mlua::Result<Self> {
         match value {

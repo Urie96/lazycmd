@@ -1,4 +1,5 @@
 use mlua::prelude::*;
+use ratatui::text::Text;
 use std::{hash::Hash, pin::Pin, time::Duration};
 
 use crossterm::event::{Event as CrosstermEvent, *};
@@ -36,7 +37,7 @@ pub enum Event {
         on_complete: Option<LuaFunction>,
         wait_confirm: Option<LuaFunction>,
     },
-    Notify(String),
+    Notify(Text<'static>),
     ShowConfirm {
         title: Option<String>,
         prompt: String,

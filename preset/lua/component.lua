@@ -31,7 +31,7 @@ function lc.select(opts, on_selection) return _lc.select(opts, on_selection) end
 function lc.confirm(opts) return _lc.confirm(opts) end
 
 ---Display a notification in bottom-right corner
----@param message string The notification message
+---@param message string|Span|Line|Text The notification message (supports styled Text, Line, or Span)
 function lc.notify(message) return _lc.notify(message) end
 
 ---@class InputOptions

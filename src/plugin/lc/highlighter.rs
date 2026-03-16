@@ -36,7 +36,12 @@ fn init() -> (&'static Theme, &'static SyntaxSet) {
 /// Find a syntax definition by language name or file extension
 fn find_syntax(name: &str) -> Option<&'static syntect::parsing::SyntaxReference> {
     let (_, syntaxes) = init();
-    return syntaxes.find_syntax_by_extension(name);
+    // Try extension first
+    if let Some(syntax) = syntaxes.find_syntax_by_extension(name) {
+        return Some(syntax);
+    }
+    // Fall back to language token/name search
+    syntaxes.find_syntax_by_token(name)
 }
 
 /// Convert syntect color to ratatui Color
@@ -80,8 +85,12 @@ fn syntect_font_style_to_modifier(font_style: syntect::highlighting::FontStyle) 
 pub fn highlight(code: &str, language: &str) -> Result<Text<'static>, String> {
     let (theme, syntaxes) = init();
 
-    // Find syntax for the language
-    let syntax = find_syntax(language).unwrap();
+    // Find syntax for the language, fall back to plain text if not found
+    let syntax = find_syntax(language).unwrap_or_else(|| {
+        syntaxes
+            .find_syntax_by_name("Plain Text")
+            .expect("Plain Text syntax should always exist")
+    });
 
     let mut highlighter = HighlightLines::new(syntax, theme);
 

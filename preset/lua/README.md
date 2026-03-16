@@ -81,7 +81,7 @@ lc.clipboard.set(text)     -- 设置剪贴板内容
 ```lua
 lc.select(opts, on_selection)  -- 选择对话框
 lc.confirm(opts)              -- 确认对话框
-lc.notify(message)            -- 通知消息
+lc.notify(message)            -- 通知消息 (支持 string、Span、Line 或 Text 类型)
 lc.log(level, format, ...)   -- 写入日志
 ```
 
