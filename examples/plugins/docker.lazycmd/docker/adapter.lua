@@ -279,4 +279,44 @@ function M.image_history(image_id)
   )
 end
 
+-- 检查容器是否使用 journald 日志驱动
+-- 返回一个 promise，成功时传递 true/false
+function M.is_journald_logging(container_id)
+  return M
+    .inspect_container(container_id)
+    :next(function(detail)
+      local log_config = detail.HostConfig and detail.HostConfig.LogConfig
+      return log_config and log_config.Type == 'journald'
+    end)
+end
+
+-- 获取容器日志命令
+-- 如果容器使用 journald，返回 journalctl 命令；否则返回 docker logs 命令
+function M.get_log_cmd(container_id, container_name, follow)
+  return M.is_journald_logging(container_id)
+    :next(function(is_journald)
+      if is_journald then
+        local args = { 'journalctl', '--no-pager' }
+        if follow then
+          table.insert(args, '-f')
+        else
+          table.insert(args, '-n')
+          table.insert(args, '35')
+        end
+        table.insert(args, 'CONTAINER_NAME=' .. container_name)
+        return args
+      else
+        local args = { 'docker', 'container', 'logs' }
+        if follow then
+          table.insert(args, '--follow')
+        else
+          table.insert(args, '--tail')
+          table.insert(args, '35')
+        end
+        table.insert(args, container_id)
+        return args
+      end
+    end)
+end
+
 return M

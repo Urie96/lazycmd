@@ -49,12 +49,15 @@ function M.preview(entry, cb)
     :next(function(detail)
       local container = entry.container
       local config = detail.Config or {}
+      local log_config = detail.HostConfig and detail.HostConfig.LogConfig or {}
+      local log_type = log_config.Type or 'unknown'
       local lines = {
         lc.style.line({ '🆔 ID: ', container.id or 'unknown' }):fg 'magenta',
         lc.style.line({ '📊 State: ', container.state or 'unknown' }):fg 'yellow',
         lc.style.line({ 'ℹ️ Status: ', container.status or 'unknown' }):fg 'cyan',
         lc.style.line({ '⌨️ Command: ', table.concat(config.Cmd or {}, ' ') }):fg 'blue',
         lc.style.line({ '🚪 Entrypoint: ', table.concat(config.Entrypoint or {}, ' ') }):fg 'yellow',
+        lc.style.line({ '📋 Log Driver: ', log_type }):fg 'cyan',
       }
       if container.ports and container.ports ~= '' and type(container.ports) == 'string' then
         table.insert(lines, lc.style.line({ '🔌 Ports: ', container.ports }):fg 'magenta')
@@ -68,7 +71,10 @@ function M.preview(entry, cb)
     :catch(function(err) lc.notify('Failed to get container details: ' .. tostring(err)) end)
 
   local log_area = adapter
-    .exec({ 'docker', 'container', 'logs', entry.container.id, '--tail', '35' })
+    .get_log_cmd(entry.container.id, entry.container.name, false)
+    :next(function(cmd)
+      return adapter.exec(cmd)
+    end)
     :next(function(logs)
       local lines = {
         ('Logs: '):fg 'blue',
@@ -194,7 +200,16 @@ function M.unpause(container) operate_container('unpause', container.name) end
 
 function M.remove(container) operate_container('rm', container.name) end
 
-function M.follow_logs(container) lc.interactive { 'docker', 'container', 'logs', '--follow', container.id } end
+function M.follow_logs(container)
+  adapter
+    .get_log_cmd(container.id, container.name, true)
+    :next(function(cmd)
+      lc.interactive(cmd)
+    end)
+    :catch(function(err)
+      lc.notify('Failed to get log command: ' .. tostring(err))
+    end)
+end
 
 function M.exec(container) lc.interactive { 'docker', 'exec', '-it', container.id, '/bin/sh' } end
 
@@ -209,7 +224,10 @@ end
 
 function M.all_logs(container)
   adapter
-    .exec({ 'docker', 'logs', container.id })
+    .get_log_cmd(container.id, container.name, false)
+    :next(function(cmd)
+      return adapter.exec(cmd)
+    end)
     :next(function(stdout) lc.api.page_set_preview(stdout) end)
     :catch(function(stderr) lc.notify('Failed to get container logs: ' .. tostring(stderr)) end)
 end
