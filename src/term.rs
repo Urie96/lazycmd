@@ -21,6 +21,7 @@ pub fn init() -> Result<Term> {
 }
 
 pub fn restore() {
+    execute!(stdout(), crossterm::cursor::Show).ok();
     disable_raw_mode().ok();
     execute!(stdout(), LeaveAlternateScreen).ok();
 }
