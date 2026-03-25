@@ -86,6 +86,7 @@ scope(lua, state, sender, || {
 | `exit_filter_mode()` | 退出过滤模式 |
 | `accept_filter()` | 应用过滤 |
 | `append_hook_pre_reload(cb)` | 添加重载前钩子 |
+| `append_hook_pre_quit(cb)` | 添加退出前钩子 |
 
 ### lc.cache - 缓存系统
 
@@ -187,6 +188,8 @@ lc.keymap.set('main', '<C-x>', function() ... end)
 | `lc.system.executable(cmd)` | 检查命令是否可执行 |
 | `lc.system.open(path)` | 用默认应用打开文件 |
 | `lc.system.exec(opts)` | 异步执行命令 |
+| `lc.system.spawn(cmd)` | 启动后台命令 |
+| `lc.system.socket_request(opts)` | 向 Unix Socket 发送请求并读取一行响应 |
 | `lc.system.interactive(opts)` | 执行交互式命令 |
 
 ### lc.time - 时间处理

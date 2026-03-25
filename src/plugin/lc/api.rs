@@ -88,6 +88,15 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
         })?
         .into_lua(lua)?;
 
+    let append_hook_pre_quit = lua
+        .create_function(|lua, cb: LuaFunction| {
+            plugin::mut_scope_state(lua, |state| {
+                state.pre_quit_hooks.push(cb);
+                Ok(())
+            })
+        })?
+        .into_lua(lua)?;
+
     lua.create_table_from([
         ("page_set_entries", page_set_entries),
         ("page_get_hovered", page_get_hovered),
@@ -98,5 +107,6 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
         ("argv", argv),
         ("set_filter", set_filter),
         ("append_hook_pre_reload", append_hook_pre_reload),
+        ("append_hook_pre_quit", append_hook_pre_quit),
     ])
 }

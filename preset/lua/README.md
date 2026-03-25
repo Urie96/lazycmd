@@ -212,7 +212,9 @@ lc.style.align_columns(lines)    -- 列对齐
 ```lua
 lc.system.exec({cmd = {"ls", "-la"}, callback = function(out) end})
 lc.system.exec({"ls", "-la"}, function(out) end)
+lc.system.spawn({"mpv", "--idle=yes"})
 lc.system.executable("rustc")  -- 检查命令是否存在
+lc.system.socket_request({path = "/tmp/mpv.sock", message = '{"command":["get_property","pause"]}'}, function(resp) end)
 lc.system.open("file.txt")       -- 用默认应用打开文件
 ```
 

@@ -55,6 +55,23 @@ end
 ---@return boolean executable Whether the command exists and is executable
 function system.executable(cmd) return _lc.system.executable(cmd) end
 
+---Spawn a detached background process without waiting for completion.
+---@param cmd string[] The command and its arguments
+function system.spawn(cmd) return _lc.system.spawn({ cmd = cmd }) end
+
+---Send a request over a Unix domain socket and receive one line of response.
+---@param opts {path: string, message: string}
+---@param callback fun(response: {success: boolean, body: string, error: string?})
+function system.socket_request(opts, callback)
+  opts.callback = callback
+  return _lc.system.socket_request(opts)
+end
+
+---Send a request over a Unix domain socket synchronously and receive one line of response.
+---@param opts {path: string, message: string}
+---@return {success: boolean, body: string, error: string?}
+function system.socket_request_sync(opts) return _lc.system.socket_request_sync(opts) end
+
 ---Open a file using the system's default application
 ---Cross-platform support: uses 'open' on macOS, 'xdg-open' on Linux, 'start' on Windows
 ---@param file_path string The path to the file to open

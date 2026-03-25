@@ -17,6 +17,22 @@ pub struct InputDialogState {
 }
 
 impl InputDialogState {
+    fn prev_char_boundary(text: &str, cursor_position: usize) -> usize {
+        text[..cursor_position]
+            .char_indices()
+            .next_back()
+            .map(|(idx, _)| idx)
+            .unwrap_or(0)
+    }
+
+    fn next_char_boundary(text: &str, cursor_position: usize) -> usize {
+        text[cursor_position..]
+            .char_indices()
+            .nth(1)
+            .map(|(idx, _)| cursor_position + idx)
+            .unwrap_or(text.len())
+    }
+
     pub fn new(prompt: &str, placeholder: &str) -> Self {
         Self {
             text: String::new(),
@@ -47,8 +63,9 @@ impl InputDialogState {
 
     pub fn backspace(&mut self) {
         if self.cursor_position > 0 {
-            self.text.remove(self.cursor_position - 1);
-            self.cursor_position -= 1;
+            let prev_pos = Self::prev_char_boundary(&self.text, self.cursor_position);
+            self.text.remove(prev_pos);
+            self.cursor_position = prev_pos;
         }
     }
 
@@ -64,11 +81,15 @@ impl InputDialogState {
     }
 
     pub fn cursor_left(&mut self) {
-        self.cursor_position = self.cursor_position.saturating_sub(1);
+        if self.cursor_position > 0 {
+            self.cursor_position = Self::prev_char_boundary(&self.text, self.cursor_position);
+        }
     }
 
     pub fn cursor_right(&mut self) {
-        self.cursor_position = self.cursor_position.saturating_add(1).min(self.text.len());
+        if self.cursor_position < self.text.len() {
+            self.cursor_position = Self::next_char_boundary(&self.text, self.cursor_position);
+        }
     }
 
     pub fn cursor_to_start(&mut self) {
@@ -77,6 +98,22 @@ impl InputDialogState {
 
     pub fn cursor_to_end(&mut self) {
         self.cursor_position = self.text.len();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::InputDialogState;
+
+    #[test]
+    fn input_dialog_state_backspace_handles_utf8() {
+        let mut state = InputDialogState::new("Search", "keyword");
+        state.insert_char('搜');
+        state.insert_char('索');
+
+        state.backspace();
+        assert_eq!(state.text, "搜");
+        assert_eq!(state.cursor_position, '搜'.len_utf8());
     }
 }
 

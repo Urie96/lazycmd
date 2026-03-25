@@ -38,6 +38,10 @@ function api.argv() return _lc.api.argv() end
 ---@param callback fun() The callback function to execute before reload
 function api.append_hook_pre_reload(callback) _lc.api.append_hook_pre_reload(callback) end
 
+---Append a hook callback to be called before quit command
+---@param callback fun() The callback function to execute before quit
+function api.append_hook_pre_quit(callback) _lc.api.append_hook_pre_quit(callback) end
+
 ---Set the filter string for the current page
 ---The page entries will be filtered based on this string
 ---If empty string, no filter is applied (show all entries)

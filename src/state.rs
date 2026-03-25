@@ -270,6 +270,22 @@ pub struct InputDialog {
 }
 
 impl InputDialog {
+    fn prev_char_boundary(text: &str, cursor_position: usize) -> usize {
+        text[..cursor_position]
+            .char_indices()
+            .next_back()
+            .map(|(idx, _)| idx)
+            .unwrap_or(0)
+    }
+
+    fn next_char_boundary(text: &str, cursor_position: usize) -> usize {
+        text[cursor_position..]
+            .char_indices()
+            .nth(1)
+            .map(|(idx, _)| cursor_position + idx)
+            .unwrap_or(text.len())
+    }
+
     pub fn new(
         prompt: String,
         placeholder: String,
@@ -297,8 +313,9 @@ impl InputDialog {
 
     pub fn backspace(&mut self) {
         if self.cursor_position > 0 {
-            self.text.remove(self.cursor_position - 1);
-            self.cursor_position -= 1;
+            let prev_pos = Self::prev_char_boundary(&self.text, self.cursor_position);
+            self.text.remove(prev_pos);
+            self.cursor_position = prev_pos;
         }
     }
 
@@ -315,23 +332,14 @@ impl InputDialog {
 
     pub fn cursor_left(&mut self) {
         if self.cursor_position > 0 {
-            let prev_pos = self.text[..self.cursor_position]
-                .char_indices()
-                .rev()
-                .nth(0)
-                .map(|(idx, _)| idx)
-                .unwrap_or(0);
+            let prev_pos = Self::prev_char_boundary(&self.text, self.cursor_position);
             self.cursor_position = prev_pos;
         }
     }
 
     pub fn cursor_right(&mut self) {
         if self.cursor_position < self.text.len() {
-            let next_pos = self.text[self.cursor_position..]
-                .char_indices()
-                .nth(1)
-                .map(|(idx, _)| self.cursor_position + idx)
-                .unwrap_or(self.text.len());
+            let next_pos = Self::next_char_boundary(&self.text, self.cursor_position);
             self.cursor_position = next_pos;
         }
     }
@@ -342,6 +350,42 @@ impl InputDialog {
 
     pub fn cursor_to_end(&mut self) {
         self.cursor_position = self.text.len();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::InputDialog;
+    use mlua::Lua;
+
+    fn make_dialog() -> InputDialog {
+        let lua = Lua::new();
+        let on_submit = lua.create_function(|_, ()| Ok(())).unwrap().to_owned();
+        let on_cancel = lua.create_function(|_, ()| Ok(())).unwrap().to_owned();
+        let on_change = lua.create_function(|_, ()| Ok(())).unwrap().to_owned();
+
+        InputDialog::new(
+            "Search".to_string(),
+            "keyword".to_string(),
+            on_submit,
+            on_cancel,
+            on_change,
+        )
+    }
+
+    #[test]
+    fn input_dialog_backspace_handles_utf8() {
+        let mut dialog = make_dialog();
+        dialog.insert_char('搜');
+        dialog.insert_char('索');
+
+        dialog.backspace();
+        assert_eq!(dialog.text, "搜");
+        assert_eq!(dialog.cursor_position, '搜'.len_utf8());
+
+        dialog.backspace();
+        assert_eq!(dialog.text, "");
+        assert_eq!(dialog.cursor_position, 0);
     }
 }
 
@@ -386,6 +430,8 @@ pub struct State {
     page_cache: HashMap<Vec<String>, Page>,
     /// Hooks to call before reload command
     pub pre_reload_hooks: Vec<LuaFunction>,
+    /// Hooks to call before quit command
+    pub pre_quit_hooks: Vec<LuaFunction>,
     /// Current plugin name
     pub current_plugin: String,
     /// Confirm dialog state (shown on top of all UI)

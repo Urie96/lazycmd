@@ -382,6 +382,11 @@ impl App {
         let mut it = splits.iter();
         match it.next().unwrap().as_str() {
             "quit" => {
+                for hook in self.state.pre_quit_hooks.clone() {
+                    plugin::scope(&self.lua, &mut self.state, &self.event_sender, || {
+                        hook.call::<()>(())
+                    })?;
+                }
                 self.quitting = true;
             }
             "scroll_by" => {
