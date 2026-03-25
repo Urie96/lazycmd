@@ -63,9 +63,16 @@ lazycmd/
 │   ├── events.rs          # 事件系统
 │   ├── keymap.rs          # 键盘映射
 │   ├── plugin/            # Lua 插件系统
+│   │   ├── lua.rs        # Lua 初始化和路径配置
+│   │   ├── scope.rs      # 作用域管理
+│   │   └── lc/           # Lua API 实现
 │   └── widgets/           # UI 组件
 ├── preset/                # 预设文件
 │   ├── lua/              # Lua 预设脚本
+│   │   ├── init.lua       # 初始化脚本
+│   │   ├── plugin_manager.lua  # 插件管理核心逻辑
+│   │   ├── manager.lua    # 插件管理器 UI
+│   │   └── ...           # 其他工具模块
 │   ├── syntaxes/         # 语法定义文件
 │   └── themes/           # 颜色主题
 └── examples/             # 示例插件和配置
@@ -181,17 +188,102 @@ lazycmd 自带多个示例插件：
 ```lua
 lc.config {
   plugins = {
+    -- 远程插件字符串语法
+    'owner/process.lazycmd',
+    'owner/memos.lazycmd',
+
+    -- 完整表格式
+    {
+      'owner/myplugin.lazycmd',
+      config = function()
+        require('myplugin').setup { option = value }
+      end,
+    },
+
+    -- 本地目录插件：必须显式使用 dir
+    {
+      dir = 'plugins/myplugin.lazycmd',   -- 相对路径基于 examples/ 或 ~/.config/lazycmd/
+    },
     {
       'myplugin',
-      config = function()
-        require('myplugin').setup {
-          option = value,
-        }
-      end,
+      dir = '/absolute/path/to/myplugin.lazycmd',
+      config = function() require('myplugin').setup() end,
+    },
+
+    -- GitHub 远程插件
+    {
+      'owner/remote-plugin.lazycmd',
+      config = function() require('remote-plugin').setup() end,
+    },
+
+    -- 带版本约束
+    {
+      'owner/versioned-plugin.lazycmd',
+      tag = '1.0.0',                       -- 指定 tag
+      config = function() end,
+    },
+    {
+      'owner/dev-plugin.lazycmd',
+      branch = 'develop',                  -- 指定分支
+      config = function() end,
+    },
+    {
+      'owner/pinned-plugin.lazycmd',
+      commit = 'abc1234567890',            -- 锁定到具体 commit
+      config = function() end,
+    },
+
+    -- 带依赖
+    {
+      'owner/my-plugin.lazycmd',
+      dependencies = { 'owner/dep1.lazycmd', 'owner/dep2.lazycmd' },
+      config = function() require('my-plugin').setup() end,
     },
   },
 }
 ```
+
+**语法说明**：
+- 字符串形式：`'owner/plugin.lazycmd'`
+- 表形式：`{ 'owner/plugin.lazycmd' }`
+- 本地目录形式：`{ dir = 'plugins/myplugin.lazycmd' }` 或 `{ 'myplugin', dir = '/abs/path/myplugin.lazycmd' }`
+- 字符串中包含 `/` 时，始终按 GitHub 仓库处理；本地文件路径不再从字符串推断
+- `dir` 只能是相对路径或绝对路径；相对路径基于配置目录解析
+- Lua 会根据 `plugins` 配置动态把本地 `dir` 和远程插件安装目录加入 `package.path`
+- 无 `config` 字段时，自动生成 `config = function() require('plugin').setup() end`
+- `dependencies` 字段支持数组形式的字符串列表，会自动按拓扑序解析并去重
+```
+
+### 插件管理器
+
+不带参数启动 lazycmd 时，会自动进入插件管理器界面：
+
+```bash
+lazycmd          # 进入插件管理器
+lazycmd process  # 直接运行指定插件
+```
+
+在插件管理器界面中：
+
+| 按键 | 功能 |
+|------|------|
+| `U` | 更新所有插件到最新版本（遵循约束） |
+| `S` | 根据锁文件恢复所有插件到锁定版本 |
+| `u` | 更新当前选中的插件 |
+| `i` | 安装当前选中的缺失插件 |
+| `↓` / `↑` | 上/下选择插件 |
+| `Enter` | 查看插件详情和更新状态 |
+
+**插件约束说明**：
+- `tag`：更新时只追踪指定 tag 的最新代码，不会更新到其他 tag
+- `branch`：更新时只追踪指定分支的最新代码
+- `commit`：锁定到具体 commit，无法更新
+
+**数据目录**：
+- 插件安装目录：`~/.local/share/lazycmd/plugins/`
+- 锁文件：`~/.local/share/lazycmd/plugins.lock`
+
+锁文件记录了每个插件安装时的具体 commit，下次可以通过 `S` 恢复。
 
 ## 文档
 

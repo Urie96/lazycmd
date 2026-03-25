@@ -1,53 +1,29 @@
+-- lazycmd plugin configuration
 lc.config {
   plugins = {
+    { dir = 'plugins/align-test.lazycmd' },
+    { dir = 'plugins/highlight-test.lazycmd' },
+    { dir = 'plugins/interactive-test.lazycmd' },
+    { dir = 'plugins/select-test.lazycmd' },
+    { dir = 'plugins/quick-access-tools.lazycmd' },
+    -- Local directory plugin example:
+    -- { dir = 'plugins/myplugin.lazycmd' },
+    'urie96/process.lazycmd',
+    'urie96/himalaya.lazycmd',
+    'urie96/systemd.lazycmd',
+    'urie96/launchd.lazycmd',
     {
-      'align-test',
-      config = function() require('align-test').setup() end,
+      'urie96/docker.lazycmd',
+      dependencies = { 'urie96/promise.lazycmd' },
     },
     {
-      'highlight-test',
-      config = function() require('highlight-test').setup() end,
-    },
-    {
-      'interactive-test',
-      config = function() require('interactive-test').setup() end,
-    },
-    {
-      'select-test',
-      config = function() require('select-test').setup() end,
-    },
-    {
-      'memos',
+      'urie96/memos.lazycmd',
       config = function()
         require('memos').setup {
           token = os.getenv 'MEMOS_TOKEN',
           base_url = 'https://memos.lubui.com:8443',
         }
       end,
-    },
-    {
-      'process',
-      config = function() require('process').setup() end,
-    },
-    {
-      'himalaya',
-      config = function() require('himalaya').setup() end,
-    },
-    {
-      'systemd',
-      config = function() require('systemd').setup() end,
-    },
-    {
-      'docker',
-      config = function() require('docker').setup() end,
-    },
-    {
-      'launchd',
-      config = function() require('launchd').setup() end,
-    },
-    {
-      'quick-access-tools',
-      config = function() require('quick-access-tools').setup() end,
     },
   },
 }

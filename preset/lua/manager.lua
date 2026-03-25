@@ -1,0 +1,444 @@
+--- Plugin Manager UI: built-in plugin that displays the plugin list
+--- and allows installing, updating, and restoring plugins.
+
+local M = {}
+local pm -- will be set to lc._pm
+
+--- Setup the plugin manager UI with keybindings.
+--- @param plugins table Array of plugin spec tables from user config
+function M.setup(plugins)
+  pm = lc._pm
+  -- Flatten plugins to include dependencies
+  M.plugins = pm.flatten_plugins(plugins or {})
+  -- Track which plugins were explicitly configured (not auto-added as dependencies)
+  local explicit_names = {}
+  for _, p in ipairs(plugins or {}) do
+    local spec = pm.parse_plugin_spec(p)
+    if spec then explicit_names[spec.name] = true end
+  end
+  -- Mark dependency-only plugins
+  for _, spec in ipairs(M.plugins) do
+    spec.is_dependency = not explicit_names[spec.name]
+  end
+
+  M._update_status = {} -- Track per-plugin update check results
+
+  -- U: Update all plugins
+  lc.keymap.set('main', 'U', function()
+    lc.notify(lc.style.line {
+      lc.style.span('⟳ '):fg 'cyan',
+      lc.style.span 'Updating all plugins...',
+    })
+    pm.update_all(plugins or {}, function()
+      M._update_status = {}
+      lc.cmd 'reload'
+    end)
+  end)
+
+  -- S: Restore all plugins from lock file
+  lc.keymap.set('main', 'S', function()
+    lc.confirm {
+      title = 'Restore from Lock File',
+      prompt = 'Restore all plugins to locked versions?',
+      on_confirm = function()
+        lc.notify(lc.style.line {
+          lc.style.span('⟳ '):fg 'cyan',
+          lc.style.span 'Restoring from lock file...',
+        })
+        pm.restore_all(plugins or {}, function()
+          M._update_status = {}
+          lc.cmd 'reload'
+        end)
+      end,
+    }
+  end)
+
+  -- u: Update current plugin
+  lc.keymap.set('main', 'u', function()
+    local entry = lc.api.page_get_hovered()
+    if not entry then return end
+
+    local spec = M.find_spec_by_name(entry.key)
+    if not spec or not spec.is_remote then
+      lc.notify(lc.style.line {
+        lc.style.span('⊘ '):fg 'yellow',
+        lc.style.span(entry.key .. ' is a local plugin'),
+      })
+      return
+    end
+
+    lc.notify(lc.style.line {
+      lc.style.span('⟳ '):fg 'cyan',
+      lc.style.span('Updating ' .. spec.name .. '...'),
+    })
+    pm.update(spec, function(success)
+      if success then
+        M._update_status[spec.name] = nil -- Clear cached status
+        lc.notify(lc.style.line {
+          lc.style.span('✓ '):fg 'green',
+          lc.style.span(spec.name .. ' updated'),
+        })
+      end
+      lc.cmd 'reload'
+    end)
+  end)
+
+  -- i: Install current missing plugin
+  lc.keymap.set('main', 'i', function()
+    local entry = lc.api.page_get_hovered()
+    if not entry then return end
+
+    if entry.status ~= 'missing' then
+      lc.notify(lc.style.line {
+        lc.style.span('⊘ '):fg 'yellow',
+        lc.style.span(entry.key .. ' is already installed'),
+      })
+      return
+    end
+
+    local spec = M.find_spec_by_name(entry.key)
+    if not spec then return end
+
+    lc.notify(lc.style.line {
+      lc.style.span('⟳ '):fg 'cyan',
+      lc.style.span('Installing ' .. spec.name .. ' and dependencies...'),
+    })
+    pm.install_with_dependencies(spec, function(success)
+      if success then
+        lc.notify(lc.style.line {
+          lc.style.span('✓ '):fg 'green',
+          lc.style.span(spec.name .. ' installed'),
+        })
+      end
+      lc.cmd 'reload'
+    end)
+  end)
+end
+
+--- Find a parsed plugin spec by plugin name.
+--- @param name string Plugin name
+--- @return table|nil Parsed plugin spec
+function M.find_spec_by_name(name)
+  for _, spec in ipairs(M.plugins) do
+    if spec.name == name then return spec end
+  end
+end
+
+--- List all configured plugins for the UI.
+--- @param path table Current path
+--- @param cb function Callback with entries
+function M.list(path, cb)
+  -- Debug: track calls
+  M._call_count = (M._call_count or 0) + 1
+
+  local entries = {}
+  local lock = pm.read_lock()
+
+  for _, spec in ipairs(M.plugins) do
+    local installed = pm.is_installed(spec)
+    local status = installed and 'installed' or 'missing'
+
+    -- Build constraint label
+    local constraint = ''
+    if spec.tag then
+      constraint = ' [tag:' .. spec.tag .. ']'
+    elseif spec.branch then
+      constraint = ' [branch:' .. spec.branch .. ']'
+    elseif spec.commit then
+      constraint = ' [commit:' .. spec.commit:sub(1, 7) .. ']'
+    end
+
+    -- Build source label
+    local source_label = ''
+    if spec.is_remote then
+      source_label = ' (' .. spec.repo .. ')'
+    else
+      source_label = ' (local)'
+    end
+
+    -- Dependency indicator
+    local dep_label = ''
+    if spec.is_dependency then dep_label = ' [dep]' end
+
+    -- Lock info
+    local lock_info = ''
+    local lock_entry = lock[spec.name]
+    if lock_entry and lock_entry.commit then lock_info = ' @' .. lock_entry.commit:sub(1, 7) end
+
+    -- Status icon and color
+    local status_icon = installed and '✓' or '✗'
+    local icon_color = installed and 'green' or 'red'
+
+    table.insert(entries, {
+      key = spec.name,
+      status = status,
+      repo = spec.repo,
+      is_remote = spec.is_remote,
+      is_dependency = spec.is_dependency,
+      display = lc.style.line {
+        lc.style.span(status_icon .. ' '):fg(icon_color),
+        lc.style.span(spec.name):fg(spec.is_dependency and 'darkgray' or 'white'),
+        lc.style.span(source_label):fg 'gray',
+        lc.style.span(constraint):fg 'yellow',
+        lc.style.span(dep_label):fg 'magenta',
+        lc.style.span(lock_info):fg 'cyan',
+      },
+    })
+  end
+
+  cb(entries)
+end
+
+--- Show preview for the hovered plugin.
+--- @param entry table Hovered entry
+--- @param cb function Callback with preview widget
+function M.preview(entry, cb)
+  local spec = M.find_spec_by_name(entry.key)
+  if not spec then
+    cb(lc.style.text { lc.style.line { lc.style.span('Plugin not found'):fg 'red' } })
+    return
+  end
+
+  local lock = pm.read_lock()
+  local lock_entry = lock[spec.name]
+
+  -- Helper: build the preview lines array as LuaLine objects
+  local function build_lines(extra_lines)
+    local lines = {}
+
+    table.insert(
+      lines,
+      lc.style.line {
+        lc.style.span('Plugin: '):fg 'cyan',
+        lc.style.span(spec.name):fg 'white',
+      }
+    )
+
+    if spec.is_remote then
+      table.insert(
+        lines,
+        lc.style.line {
+          lc.style.span('Repo:   '):fg 'cyan',
+          lc.style.span(spec.repo):fg 'white',
+        }
+      )
+      table.insert(
+        lines,
+        lc.style.line {
+          lc.style.span('URL:    '):fg 'cyan',
+          lc.style.span(spec.url):fg 'gray',
+        }
+      )
+    else
+      table.insert(
+        lines,
+        lc.style.line {
+          lc.style.span('Source: '):fg 'cyan',
+          lc.style.span('local'):fg 'white',
+        }
+      )
+    end
+
+    local status_color = entry.status == 'installed' and 'green' or 'red'
+    table.insert(
+      lines,
+      lc.style.line {
+        lc.style.span('Status: '):fg 'cyan',
+        lc.style.span(entry.status):fg(status_color),
+      }
+    )
+
+    if spec.tag then
+      table.insert(
+        lines,
+        lc.style.line {
+          lc.style.span('Tag:    '):fg 'cyan',
+          lc.style.span(spec.tag):fg 'yellow',
+        }
+      )
+    elseif spec.branch then
+      table.insert(
+        lines,
+        lc.style.line {
+          lc.style.span('Branch: '):fg 'cyan',
+          lc.style.span(spec.branch):fg 'yellow',
+        }
+      )
+    elseif spec.commit then
+      table.insert(
+        lines,
+        lc.style.line {
+          lc.style.span('Commit: '):fg 'cyan',
+          lc.style.span(spec.commit):fg 'yellow',
+        }
+      )
+    end
+
+    -- Show dependency info
+    if spec.is_dependency then
+      table.insert(
+        lines,
+        lc.style.line {
+          lc.style.span('Dependency: '):fg 'cyan',
+          lc.style.span('auto-installed'):fg 'magenta',
+        }
+      )
+    end
+    if #spec.dependencies > 0 then
+      local dep_names = {}
+      for _, dep in ipairs(spec.dependencies) do
+        dep_names[#dep_names + 1] = dep.name
+      end
+      table.insert(
+        lines,
+        lc.style.line {
+          lc.style.span('Depends: '):fg 'cyan',
+          lc.style.span(table.concat(dep_names, ', ')):fg 'magenta',
+        }
+      )
+    end
+
+    if lock_entry then
+      table.insert(lines, lc.style.line {})
+      table.insert(
+        lines,
+        lc.style.line {
+          lc.style.span('Lock File:'):fg 'magenta',
+        }
+      )
+      if lock_entry.commit then
+        table.insert(
+          lines,
+          lc.style.line {
+            lc.style.span('   Commit: '):fg 'gray',
+            lc.style.span(lock_entry.commit):fg 'white',
+          }
+        )
+      end
+      if lock_entry.branch then
+        table.insert(
+          lines,
+          lc.style.line {
+            lc.style.span('   Branch: '):fg 'gray',
+            lc.style.span(lock_entry.branch):fg 'white',
+          }
+        )
+      end
+      if lock_entry.tag then
+        table.insert(
+          lines,
+          lc.style.line {
+            lc.style.span('   Tag:    '):fg 'gray',
+            lc.style.span(lock_entry.tag):fg 'white',
+          }
+        )
+      end
+    end
+
+    table.insert(lines, lc.style.line {})
+    table.insert(
+      lines,
+      lc.style.line {
+        lc.style.span('Keybindings:'):fg 'magenta',
+      }
+    )
+    table.insert(
+      lines,
+      lc.style.line {
+        lc.style.span('   U'):fg 'green',
+        lc.style.span(' Update all plugins'):fg 'gray',
+      }
+    )
+    table.insert(
+      lines,
+      lc.style.line {
+        lc.style.span('   u'):fg 'green',
+        lc.style.span(' Update this plugin'):fg 'gray',
+      }
+    )
+    table.insert(
+      lines,
+      lc.style.line {
+        lc.style.span('   S'):fg 'green',
+        lc.style.span(' Restore all from lock file'):fg 'gray',
+      }
+    )
+    table.insert(
+      lines,
+      lc.style.line {
+        lc.style.span('   i'):fg 'green',
+        lc.style.span(' Install missing plugin'):fg 'gray',
+      }
+    )
+
+    -- Append extra lines (e.g., update status)
+    if extra_lines then
+      for _, v in ipairs(extra_lines) do
+        table.insert(lines, v)
+      end
+    end
+
+    return lc.style.text(lines)
+  end
+
+  -- Build update status lines helper
+  local function build_update_lines(has_update, remote_info)
+    local lines = {}
+    table.insert(lines, lc.style.line {})
+    if has_update then
+      table.insert(
+        lines,
+        lc.style.line {
+          lc.style.span('New version available!'):fg 'yellow',
+        }
+      )
+      if remote_info then
+        table.insert(
+          lines,
+          lc.style.line {
+            lc.style.span('  Remote: '):fg 'gray',
+            lc.style.span(remote_info):fg 'white',
+          }
+        )
+      end
+    else
+      table.insert(
+        lines,
+        lc.style.line {
+          lc.style.span('Up to date'):fg 'green',
+        }
+      )
+    end
+    return lines
+  end
+
+  -- Async: check for updates (only for installed remote plugins)
+  if spec.is_remote and entry.status == 'installed' then
+    -- Show basic info first
+    cb(build_lines(nil))
+
+    -- Use cached result if available
+    if M._update_status[spec.name] ~= nil then
+      local cached = M._update_status[spec.name]
+      cb(build_lines(build_update_lines(cached.has_update, cached.remote_info)))
+      return
+    end
+
+    pm.check_update(spec, function(has_update, remote_info)
+      M._update_status[spec.name] = {
+        has_update = has_update,
+        remote_info = remote_info,
+      }
+
+      local current_entry = lc.api.page_get_hovered()
+      if current_entry and current_entry.key == entry.key then
+        cb(build_lines(build_update_lines(has_update, remote_info)))
+      end
+    end)
+  else
+    cb(build_lines(nil))
+  end
+end
+
+-- Attach _manager to the same underlying table that _lc points to.
+lc._manager = M

@@ -28,9 +28,27 @@ src/plugin/
 
 负责初始化 Lua 环境和加载预设文件：
 
-- `init_lua()` - 初始化 Lua 环境，配置 `package.path`
-- `add_plugin_paths()` - 添加插件目录到 Lua 搜索路径
-- 加载预设文件（debug 模式从文件读取，release 模式从嵌入的二进制读取）
+- `init_lua()` - 初始化 Lua 环境并设置配置基准目录
+- `package.path` 由 `preset/lua/init.lua` 根据 `plugins` 配置动态追加
+
+**插件路径搜索顺序**（`package.path`）：
+
+| 来源 | 路径 | 说明 |
+|------|------|------|
+| 本地（显式 `dir`） | 配置中的相对/绝对路径 | 通过 `{ dir = '...' }` 注入到 `package.path` |
+| **远程** | `~/.local/share/lazycmd/plugins/` | **从 GitHub 下载的插件** |
+| 预设 | `preset/lua/` | 内置预设脚本（嵌入二进制） |
+
+**远程插件目录结构**：
+```
+~/.local/share/lazycmd/plugins/
+└── owner-plugin.lazycmd/
+    └── owner-plugin/
+        └── init.lua       # 插件入口
+~/.local/share/lazycmd/plugins.lock   # 插件版本锁文件
+```
+
+加载预设文件（debug 模式从文件读取，release 模式从嵌入的二进制读取）：
 
 ### scope.rs - 作用域管理
 

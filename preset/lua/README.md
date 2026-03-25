@@ -115,6 +115,8 @@ lc.http.request(opts, callback)
 应用启动时执行的默认初始化：
 
 - 读取命令行参数确定默认插件
+- 根据 `plugins` 配置把本地 `dir` 和远程安装目录加入 `package.path`
+- 直接启动插件时，自动执行该插件在配置中的 `config/setup`
 - 设置默认键盘映射
 - 加载用户配置（通过 `require 'init'`）
 - 实现 `lc._list()` 和 `lc._preview()` 入口函数
@@ -237,6 +239,63 @@ lc.equals(o1, o2)          -- 深度比较
 lc.osc52_copy(text)        -- 复制到剪贴板
 ```
 
+### plugin_manager.lua - 插件管理核心
+
+插件管理的核心逻辑，提供 GitHub 插件的安装、更新、锁文件管理等功能。挂载在 `lc._pm`：
+
+```lua
+-- 解析插件声明为标准化结构
+-- 支持三种输入格式：字符串、表（单字符串）、表（完整配置）
+local spec = lc._pm.parse_plugin_spec('owner/plugin.lazycmd')
+-- spec.name = 'plugin'
+-- spec.url = 'https://github.com/owner/plugin.lazycmd.git'
+-- spec.install_path = '~/.local/share/lazycmd/plugins/plugin.lazycmd'
+-- spec.config = auto-generated function() require('plugin').setup() end
+
+local local_spec = lc._pm.parse_plugin_spec({ dir = 'plugins/my-plugin.lazycmd' })
+-- local_spec.name = 'my-plugin'
+-- local_spec.dir = '<config-base>/plugins/my-plugin.lazycmd'
+-- local_spec.is_remote = false
+
+-- 展开插件列表，包含依赖（去重、拓扑排序）
+local flat = lc._pm.flatten_plugins(plugins)
+-- flat[1].name = 'dep1'  -- 依赖优先
+-- flat[2].name = 'main'  -- 主插件
+
+-- 安装缺失的插件（包含依赖，按依赖顺序）
+lc._pm.install_missing(plugins, callback)
+
+-- 更新所有插件（遵循约束）
+lc._pm.update_all(plugins, callback)
+
+-- 根据锁文件恢复插件
+lc._pm.restore_all(plugins, callback)
+
+-- 安装单个插件
+lc._pm.install(spec, callback)
+
+-- 更新单个插件
+lc._pm.update(spec, callback)
+
+-- 检查插件是否有更新
+lc._pm.check_update(spec, callback)
+
+-- 读取/写入锁文件
+local lock = lc._pm.read_lock()
+lc._pm.write_lock(lock)
+```
+
+### manager.lua - 插件管理器 UI
+
+内置插件管理界面。当不带参数启动 lazycmd 时自动加载。提供以下函数：
+
+```lua
+local manager = lc._manager
+manager.setup(plugins)  -- 初始化并设置键盘映射
+manager.list(path, cb)  -- 列出所有插件
+manager.preview(entry, cb)  -- 显示插件详情和更新状态
+```
+
 ### global.d.lua - 类型声明
 
 Lua 语言服务器类型声明文件，为 IDE 提供类型提示。
@@ -262,7 +321,9 @@ Lua 语言服务器类型声明文件，为 IDE 提供类型提示。
 15. `base64.lua`
 16. `clipboard.lua`
 17. `yaml.lua`
-18. `init.lua` ← 最后加载，执行初始化逻辑
+18. `plugin_manager.lua` ← 插件管理核心逻辑（提供 `lc._pm`）
+19. `manager.lua` ← 插件管理器 UI（提供 `lc._manager`）
+20. `init.lua` ← 最后加载，执行初始化逻辑
 
 ## 使用示例
 

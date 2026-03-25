@@ -208,7 +208,7 @@ mod tests {
 
     #[test]
     fn test_time_format_compact_today() {
-        use chrono::{Duration, Local};
+        use chrono::Local;
 
         let lua = Lua::new();
         let time_table = new_table(&lua).unwrap();
