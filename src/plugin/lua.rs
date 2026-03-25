@@ -3,26 +3,6 @@ use mlua::Lua;
 use super::lc;
 
 pub fn init_lua(lua: &Lua) -> mlua::Result<()> {
-    let config_base_dir: String;
-
-    #[cfg(debug_assertions)]
-    {
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        config_base_dir = format!("{}/examples", manifest_dir);
-    }
-
-    #[cfg(not(debug_assertions))]
-    {
-        if let Ok(home) = std::env::var("HOME") {
-            config_base_dir = format!("{}/.config/lazycmd", home);
-        } else {
-            config_base_dir = ".".to_string();
-        }
-    }
-
-    lua.globals()
-        .set("__lazycmd_config_base_dir", config_base_dir)?;
-
     lc::register(lua)?;
 
     macro_rules! preset {

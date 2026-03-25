@@ -12,8 +12,7 @@ end
 
 local function add_config_base_path()
   local package = require 'package'
-  local base_dir = rawget(_G, '__lazycmd_config_base_dir')
-  if not base_dir or base_dir == '' then return end
+  local base_dir = os.getenv('HOME') .. '/.config/lazycmd'
 
   local paths = { package.path }
   local seen = {}

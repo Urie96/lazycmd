@@ -162,7 +162,9 @@ impl App {
                 self.call_preview()?;
                 self.dirty = true;
             }
-            // Event::Crossterm(CrosstermEvent::Resize(x, y)) => Some(Action::Resize(x, y)),
+            Event::Crossterm(CrosstermEvent::Resize(_, _)) => {
+                self.dirty = true;
+            }
             Event::Crossterm(CrosstermEvent::Key(key)) => {
                 // If confirm dialog is shown, handle its keyboard input first
                 if self.state.confirm_dialog.is_some() {

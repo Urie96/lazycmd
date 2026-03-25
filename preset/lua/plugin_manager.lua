@@ -22,7 +22,7 @@ local function resolve_local_dir(dir)
 
   if is_absolute_path(dir) then return dir end
 
-  local base_dir = rawget(_G, '__lazycmd_config_base_dir') or '.'
+  local base_dir = os.getenv('HOME') .. '/.config/lazycmd'
   return base_dir .. '/' .. dir
 end
 
