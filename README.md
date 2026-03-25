@@ -67,17 +67,14 @@ lazycmd/
 │   │   ├── scope.rs      # 作用域管理
 │   │   └── lc/           # Lua API 实现
 │   └── widgets/           # UI 组件
-├── preset/                # 预设文件
-│   ├── lua/              # Lua 预设脚本
-│   │   ├── init.lua       # 初始化脚本
-│   │   ├── plugin_manager.lua  # 插件管理核心逻辑
-│   │   ├── manager.lua    # 插件管理器 UI
-│   │   └── ...           # 其他工具模块
-│   ├── syntaxes/         # 语法定义文件
-│   └── themes/           # 颜色主题
-└── examples/             # 示例插件和配置
-    ├── init.lua          # 用户配置
-    └── plugins/          # 示例插件
+└── preset/                # 预设文件
+    ├── lua/              # Lua 预设脚本
+    │   ├── init.lua       # 初始化脚本
+    │   ├── plugin_manager.lua  # 插件管理核心逻辑
+    │   ├── manager.lua    # 插件管理器 UI
+    │   └── ...           # 其他工具模块
+    ├── syntaxes/         # 语法定义文件
+    └── themes/           # 颜色主题
 ```
 
 ## 核心概念
@@ -87,7 +84,7 @@ lazycmd/
 lazycmd 的核心功能通过 Lua 插件实现。每个插件是一个包含 `init.lua` 的目录：
 
 ```
-examples/plugins/myplugin.lazycmd/
+plugins/owner/myplugin.lazycmd/
 └── myplugin/
     └── init.lua
 ```
@@ -132,58 +129,58 @@ return M
 
 全局表 `lc` 提供丰富的 API：
 
-| 模块 | 功能 |
-|------|------|
-| `lc.api` | 页面管理、导航 |
-| `lc.fs` | 文件系统操作 |
-| `lc.http` | HTTP 请求 |
-| `lc.system` | 执行外部命令 |
-| `lc.cache` | 持久化缓存 |
-| `lc.time` | 时间解析格式化 |
-| `lc.style` | UI 样式和语法高亮 |
-| `lc.keymap` | 键盘映射 |
-| `lc.json` | JSON 编解码 |
-| `lc.cmd` | 发送内部命令 |
+| 模块        | 功能              |
+| ----------- | ----------------- |
+| `lc.api`    | 页面管理、导航    |
+| `lc.fs`     | 文件系统操作      |
+| `lc.http`   | HTTP 请求         |
+| `lc.system` | 执行外部命令      |
+| `lc.cache`  | 持久化缓存        |
+| `lc.time`   | 时间解析格式化    |
+| `lc.style`  | UI 样式和语法高亮 |
+| `lc.keymap` | 键盘映射          |
+| `lc.json`   | JSON 编解码       |
+| `lc.cmd`    | 发送内部命令      |
 
 ## 内置插件
 
 lazycmd 自带多个示例插件：
 
-| 插件 | 说明 |
-|------|------|
-| `process` | 进程管理器 |
-| `memos` | Memos 笔记客户端 |
-| `himalaya` | 邮件客户端 |
-| `systemd` | systemd 服务管理 |
-| `docker` | Docker 容器管理 |
+| 插件       | 说明             |
+| ---------- | ---------------- |
+| `process`  | 进程管理器       |
+| `memos`    | Memos 笔记客户端 |
+| `himalaya` | 邮件客户端       |
+| `systemd`  | systemd 服务管理 |
+| `docker`   | Docker 容器管理  |
 
 ## 键盘快捷键
 
 ### 主模式
 
-| 按键 | 功能 |
-|------|------|
-| `↑` / `↓` / `j` / `k` | 上下移动 |
-| `gg` | 跳到开头 |
-| `G` | 跳到结尾 |
-| `/` | 进入过滤模式 |
-| `Enter` / `→` | 进入目录 |
-| `←` | 返回上级 |
-| `q` | 退出 |
-| `Ctrl+r` | 刷新 |
+| 按键                  | 功能         |
+| --------------------- | ------------ |
+| `↑` / `↓` / `j` / `k` | 上下移动     |
+| `gg`                  | 跳到开头     |
+| `G`                   | 跳到结尾     |
+| `/`                   | 进入过滤模式 |
+| `Enter` / `→`         | 进入目录     |
+| `←`                   | 返回上级     |
+| `q`                   | 退出         |
+| `Ctrl+r`              | 刷新         |
 
 ### 过滤模式
 
-| 按键 | 功能 |
-|------|------|
+| 按键     | 功能         |
+| -------- | ------------ |
 | 任意字符 | 输入过滤文本 |
-| `Enter` | 应用过滤 |
-| `Esc` | 退出过滤模式 |
-| `Ctrl+u` | 清空过滤 |
+| `Enter`  | 应用过滤     |
+| `Esc`    | 退出过滤模式 |
+| `Ctrl+u` | 清空过滤     |
 
 ## 配置
 
-在 `examples/init.lua` (debug) 或 `~/.config/lazycmd/init.lua` (release) 中配置：
+在 `config/init.lua` 中配置（对应 `~/.config/lazycmd/init.lua`）：
 
 ```lua
 lc.config {
@@ -202,7 +199,7 @@ lc.config {
 
     -- 本地目录插件：必须显式使用 dir
     {
-      dir = 'plugins/myplugin.lazycmd',   -- 相对路径基于 examples/ 或 ~/.config/lazycmd/
+      dir = 'plugins/myplugin.lazycmd',   -- 相对路径基于 ~/.config/lazycmd/
     },
     {
       'myplugin',
@@ -244,6 +241,7 @@ lc.config {
 ```
 
 **语法说明**：
+
 - 字符串形式：`'owner/plugin.lazycmd'`
 - 表形式：`{ 'owner/plugin.lazycmd' }`
 - 本地目录形式：`{ dir = 'plugins/myplugin.lazycmd' }` 或 `{ 'myplugin', dir = '/abs/path/myplugin.lazycmd' }`
@@ -252,7 +250,8 @@ lc.config {
 - Lua 会根据 `plugins` 配置动态把本地 `dir` 和远程插件安装目录加入 `package.path`
 - 无 `config` 字段时，自动生成 `config = function() require('plugin').setup() end`
 - `dependencies` 字段支持数组形式的字符串列表，会自动按拓扑序解析并去重
-```
+
+````
 
 ### 插件管理器
 
@@ -261,25 +260,27 @@ lc.config {
 ```bash
 lazycmd          # 进入插件管理器
 lazycmd process  # 直接运行指定插件
-```
+````
 
 在插件管理器界面中：
 
-| 按键 | 功能 |
-|------|------|
-| `U` | 更新所有插件到最新版本（遵循约束） |
-| `S` | 根据锁文件恢复所有插件到锁定版本 |
-| `u` | 更新当前选中的插件 |
-| `i` | 安装当前选中的缺失插件 |
-| `↓` / `↑` | 上/下选择插件 |
-| `Enter` | 查看插件详情和更新状态 |
+| 按键      | 功能                               |
+| --------- | ---------------------------------- |
+| `U`       | 更新所有插件到最新版本（遵循约束） |
+| `S`       | 根据锁文件恢复所有插件到锁定版本   |
+| `u`       | 更新当前选中的插件                 |
+| `i`       | 安装当前选中的缺失插件             |
+| `↓` / `↑` | 上/下选择插件                      |
+| `Enter`   | 查看插件详情和更新状态             |
 
 **插件约束说明**：
+
 - `tag`：更新时只追踪指定 tag 的最新代码，不会更新到其他 tag
 - `branch`：更新时只追踪指定分支的最新代码
 - `commit`：锁定到具体 commit，无法更新
 
 **数据目录**：
+
 - 插件安装目录：`~/.local/share/lazycmd/plugins/`
 - 锁文件：`~/.local/share/lazycmd/plugins.lock`
 
@@ -306,17 +307,14 @@ lazycmd process  # 直接运行指定插件
 
 ## 开发
 
-### 调试模式
+配置和插件通过软链接访问：
 
-Debug 模式下：
-- 预设文件从 `preset/lua/` 读取
-- 用户配置从 `examples/` 读取
+```bash
+config/    -> ~/.config/lazycmd/      # 用户配置
+plugins/   -> ~/.local/share/lazycmd/plugins/  # 插件安装目录
+```
 
-### Release 模式
-
-Release 模式下：
-- 预设文件嵌入二进制
-- 用户配置从 `~/.config/lazycmd/` 读取
+修改配置或开发插件时，直接编辑这些目录下的文件。
 
 ### 日志
 

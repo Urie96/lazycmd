@@ -49,9 +49,8 @@ lazycmd/
 │   ├── lua/              # Lua 预设脚本
 │   ├── syntaxes/         # 语法高亮定义
 │   └── themes/           # 颜色主题
-└── examples/             # 示例插件和配置
-    ├── init.lua          # 用户配置
-    └── plugins/          # 示例插件
+├── config -> ~/.config/lazycmd/        # 用户配置（软链接）
+└── plugins -> ~/.local/share/lazycmd/plugins/  # 插件目录（软链接）
 ```
 
 ## 任务处理
@@ -65,7 +64,7 @@ lazycmd/
 3. 阅读参考文件：
    - 添加 LC API 函数：阅读 `src/plugin/lc/mod.rs` 了解注册方式，阅读现有 API 实现
    - 添加内部命令：阅读 `src/app.rs::handle_command()` 了解命令处理方式
-   - 创建插件：阅读 `examples/plugins/` 下的现有插件
+   - 创建插件：参考 `preset/lua/` 下的模块和 `plugins/` 下的现有插件
 4. 修改代码
 5. 同步更新 `preset/lua/` 中的相关文件
 6. 更新相关 README 文档
@@ -108,13 +107,12 @@ cargo test                 # 运行测试
 cargo test <test_name>     # 运行单个测试
 ```
 
-### 运行示例插件
+### 运行插件
 
 ```bash
 cargo run -- process    # 进程管理器
 cargo run -- memos      # Memos 笔记
-cargo run -- docker    # Docker 管理
-cargo run -- highlight-test  # 语法高亮测试
+cargo run -- docker     # Docker 管理
 ```
 
 ## 代码质量
@@ -191,8 +189,8 @@ tmux kill-session -t lazycmd-test
 
 ### 创建新插件
 
-1. 创建 `examples/plugins/myplugin.lazycmd/myplugin/init.lua`
-2. 在 `examples/init.lua` 中添加插件配置
+1. 创建 `plugins/myplugin.lazycmd/myplugin/init.lua`（或在 `config/` 对应目录）
+2. 在 `config/init.lua` 中添加插件配置
 3. 运行 `cargo run -- myplugin`
 
 ## 文档更新
