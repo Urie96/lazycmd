@@ -9,4 +9,6 @@ local keymap = {}
 ---@param callback string|fun() The command string or callback function
 function keymap.set(mode, key, callback) return _lc.keymap.set(mode, key, callback) end
 
+---@alias EntryKeymap table<string, fun()>
+
 lc.keymap = keymap

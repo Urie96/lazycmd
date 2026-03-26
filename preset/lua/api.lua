@@ -4,6 +4,7 @@ local api = {}
 ---@class PageEntry
 ---@field key string The unique key for the entry
 ---@field display? string|Span The display text or Span widget
+---@field keymap? table<string, fun()> Entry-local keymap table, resolved from the entry/metatable and preferred over global keymaps when matched
 ---@field [string] any Additional custom fields
 
 ---Set the entries for the current page

@@ -18,6 +18,7 @@ preset/lua/
 ├── interactive.lua   # 交互式命令封装
 ├── json.lua          # JSON 编解码
 ├── keymap.lua        # 键盘映射 API 封装
+├── socket.lua        # 长连接 socket 封装
 ├── string.lua        # 字符串扩展方法
 ├── style.lua         # 样式 API 封装
 ├── system.lua        # 系统命令 API 封装
@@ -180,6 +181,19 @@ lc.keymap.set(mode, key, callback)
 -- callback: 命令字符串或回调函数
 ```
 
+页面 entry 还可以定义 `keymap` 字段：
+
+```lua
+{
+  key = "item",
+  keymap = {
+    ["x"] = function() print("entry local action") end,
+  },
+}
+```
+
+当光标停在该 entry 上且 `entry.keymap` 对当前按键序列有前缀匹配时，会优先于全局 `lc.keymap.set`。
+
 ### string.lua - 字符串扩展
 
 为字符串添加方法：
@@ -215,8 +229,18 @@ lc.system.exec({cmd = {"ls", "-la"}, callback = function(out) end})
 lc.system.exec({"ls", "-la"}, function(out) end)
 lc.system.spawn({"mpv", "--idle=yes"})
 lc.system.executable("rustc")  -- 检查命令是否存在
-lc.system.socket_request({path = "/tmp/mpv.sock", message = '{"command":["get_property","pause"]}'}, function(resp) end)
 lc.system.open("file.txt")       -- 用默认应用打开文件
+```
+
+### socket.lua - 长连接 Socket
+
+复用 Unix socket 连接：
+
+```lua
+local sock = lc.socket.connect("unix:/tmp/test.sock")
+sock:on_line(function(line) print(line) end)
+sock:write("hello")
+sock:close()
 ```
 
 ### time.lua - 时间处理

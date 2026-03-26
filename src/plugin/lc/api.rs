@@ -70,6 +70,7 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
                     page.list_filter = filter;
                     page.apply_filter();
                 }
+                state.last_key_event_buffer.clear();
                 // Clear preview so it will be refreshed based on new selection
                 state.current_preview.take();
                 plugin::send_render_event(lua)?;

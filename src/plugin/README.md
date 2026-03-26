@@ -162,6 +162,22 @@ lc.keymap.set('main', 'j', 'scroll_by 1')
 lc.keymap.set('main', '<C-x>', function() ... end)
 ```
 
+页面 entry 也可以定义局部 keymap：
+
+```lua
+{
+  key = "container-1",
+  keymap = {
+    ["d"] = function() delete_container("container-1") end,
+    ["gg"] = function() open_logs("container-1") end,
+  },
+}
+```
+
+- `entry.keymap` 会通过 Lua 表访问，支持由元表 `__index` 提供
+- key 是按键序列字符串，value 必须是 Lua 函数
+- 只要 `entry.keymap` 对当前按键缓冲区存在前缀匹配，就优先于全局 `lc.keymap.set`
+
 ### lc.path - 路径操作
 
 | 函数 | 说明 |
@@ -190,8 +206,18 @@ lc.keymap.set('main', '<C-x>', function() ... end)
 | `lc.system.open(path)` | 用默认应用打开文件 |
 | `lc.system.exec(opts)` | 异步执行命令 |
 | `lc.system.spawn(cmd)` | 启动后台命令 |
-| `lc.system.socket_request(opts)` | 向 Unix Socket 发送请求并读取一行响应 |
 | `lc.system.interactive(opts)` | 执行交互式命令 |
+
+### lc.socket - 长连接 Socket
+
+| 函数 | 说明 |
+|------|------|
+| `lc.socket.connect(addr)` | 连接 socket，返回可复用连接对象 |
+
+连接对象方法：
+- `sock:on_line(cb)` - 注册逐行回调
+- `sock:write(message)` - 写入一条消息（自动补 `\n`）
+- `sock:close()` - 关闭连接
 
 ### lc.time - 时间处理
 

@@ -18,6 +18,17 @@ impl FromLua for PageEntry {
 }
 
 impl PageEntry {
+    pub fn keymap_table(&self) -> LuaResult<Option<LuaTable>> {
+        match self.tbl.get::<LuaValue>("keymap")? {
+            LuaValue::Nil => Ok(None),
+            LuaValue::Table(tbl) => Ok(Some(tbl)),
+            other => Err(LuaError::RuntimeError(format!(
+                "entry.keymap must be a table, got {}",
+                other.type_name()
+            ))),
+        }
+    }
+
     /// Extract the Text content from the display field
     pub fn display(&self) -> Line<'_> {
         let f = || match self.tbl.get::<LuaValue>("display")? {
