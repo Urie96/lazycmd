@@ -5,6 +5,7 @@ local api = {}
 ---@field key string The unique key for the entry
 ---@field display? string|Span The display text or Span widget
 ---@field keymap? table<string, fun()> Entry-local keymap table, resolved from the entry/metatable and preferred over global keymaps when matched
+---@field preview? fun(self: PageEntry, cb: fun(widget: string|Span|Text|Line)) Entry-local preview callback, preferred over plugin.preview when present
 ---@field [string] any Additional custom fields
 
 ---Set the entries for the current page

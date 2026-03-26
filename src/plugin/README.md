@@ -178,6 +178,23 @@ lc.keymap.set('main', '<C-x>', function() ... end)
 - key 是按键序列字符串，value 必须是 Lua 函数
 - 只要 `entry.keymap` 对当前按键缓冲区存在前缀匹配，就优先于全局 `lc.keymap.set`
 
+页面 entry 也可以定义局部 preview：
+
+```lua
+{
+  key = "song-1",
+  preview = function(self, cb)
+    cb(lc.style.text {
+      lc.style.line { "Preview for ", self.key },
+    })
+  end,
+}
+```
+
+- `entry.preview(cb)` 的优先级高于插件级 `plugin.preview(entry, cb)`
+- `entry.preview` 同样通过 Lua 表访问，支持由元表 `__index` 提供
+- 当异步回调返回时，如果当前 hovered entry 已经变化，这次 preview 更新会被丢弃
+
 ### lc.path - 路径操作
 
 | 函数 | 说明 |

@@ -194,6 +194,21 @@ lc.keymap.set(mode, key, callback)
 
 当光标停在该 entry 上且 `entry.keymap` 对当前按键序列有前缀匹配时，会优先于全局 `lc.keymap.set`。
 
+页面 entry 还可以定义 `preview` 字段：
+
+```lua
+{
+  key = "item",
+  preview = function(self, cb)
+    cb(lc.style.text {
+      lc.style.line { "Preview for " .. self.key },
+    })
+  end,
+}
+```
+
+当光标停在该 entry 上且 `entry.preview` 存在时，会优先于插件级 `preview(entry, cb)`。如果回调执行时 hovered entry 已经变化，这次预览更新会被自动忽略。
+
 ### string.lua - 字符串扩展
 
 为字符串添加方法：

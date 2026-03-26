@@ -41,6 +41,12 @@ end
 
 add_config_base_path()
 
+local function guarded_preview_callback(hovered_path)
+  return function(preview)
+    if lc.equals(hovered_path, lc.api.get_hovered_path()) then lc.api.page_set_preview(preview) end
+  end
+end
+
 function lc.config(opt)
   cfg = lc.tbl_extend(cfg, opt or {})
   add_plugin_paths(cfg.plugins)
@@ -74,10 +80,16 @@ function lc.config(opt)
   function lc._preview()
     local entry = lc.api.page_get_hovered()
     local path = lc.api.get_hovered_path()
-    if entry and plugin.preview then
-      plugin.preview(entry, function(entries)
-        if lc.equals(path, lc.api.get_hovered_path()) then lc.api.page_set_preview(entries) end
-      end)
+    if not entry then return end
+
+    local cb = guarded_preview_callback(path)
+    if type(entry.preview) == 'function' then
+      entry:preview(cb)
+      return
+    end
+
+    if plugin.preview then
+      plugin.preview(entry, cb)
     end
   end
 end
