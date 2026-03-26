@@ -1,10 +1,6 @@
 use crate::{plugin, Event};
 use mlua::prelude::*;
-use std::io::{BufRead, BufReader as StdBufReader, Write};
-use std::os::unix::net::UnixStream as StdUnixStream;
 use std::process::Stdio;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::net::UnixStream;
 use tokio::process::Command;
 
 /// Create the lc.system table with executable, open, and _exec functions
@@ -165,92 +161,6 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
             })?;
 
             Ok(())
-        })?
-        .into_lua(lua)?,
-    )?;
-
-    system_tbl.set(
-        "socket_request",
-        lua.create_function(|lua, args: LuaTable| {
-            let path: String = args.get("path")?;
-            let message: String = args.get("message")?;
-            let callback: LuaFunction = args.get("callback")?;
-            let sender = plugin::clone_sender(lua)?;
-
-            tokio::task::spawn_local(async move {
-                let response = async {
-                    let mut stream = UnixStream::connect(&path).await?;
-                    stream.write_all(message.as_bytes()).await?;
-                    if !message.ends_with('\n') {
-                        stream.write_all(b"\n").await?;
-                    }
-                    stream.flush().await?;
-
-                    let mut reader = BufReader::new(stream);
-                    let mut line = String::new();
-                    reader.read_line(&mut line).await?;
-                    Ok::<String, std::io::Error>(line)
-                }
-                .await;
-
-                let _ = sender.send(Event::LuaCallback(Box::new(move |lua| {
-                    let out = lua.create_table()?;
-                    match response {
-                        Ok(body) => {
-                            out.set("success", true)?;
-                            out.set("body", body)?;
-                            out.set("error", LuaNil)?;
-                        }
-                        Err(e) => {
-                            out.set("success", false)?;
-                            out.set("body", "")?;
-                            out.set("error", e.to_string())?;
-                        }
-                    }
-                    callback.call(out)
-                })));
-            });
-
-            Ok(())
-        })?
-        .into_lua(lua)?,
-    )?;
-
-    system_tbl.set(
-        "socket_request_sync",
-        lua.create_function(|lua, args: LuaTable| {
-            let path: String = args.get("path")?;
-            let message: String = args.get("message")?;
-            let out = lua.create_table()?;
-
-            let response = (|| -> std::io::Result<String> {
-                let mut stream = StdUnixStream::connect(&path)?;
-                stream.write_all(message.as_bytes())?;
-                if !message.ends_with('\n') {
-                    stream.write_all(b"\n")?;
-                }
-                stream.flush()?;
-
-                let mut reader = StdBufReader::new(stream);
-                let mut line = String::new();
-                reader.read_line(&mut line)?;
-                Ok(line)
-            })();
-
-            match response {
-                Ok(body) => {
-                    out.set("success", true)?;
-                    out.set("body", body)?;
-                    out.set("error", LuaNil)?;
-                }
-                Err(e) => {
-                    out.set("success", false)?;
-                    out.set("body", "")?;
-                    out.set("error", e.to_string())?;
-                }
-            }
-
-            Ok(out)
         })?
         .into_lua(lua)?,
     )?;

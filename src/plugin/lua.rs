@@ -39,6 +39,7 @@ pub fn init_lua(lua: &Lua) -> mlua::Result<()> {
     }
 
     load_preset!("system")?;
+    load_preset!("socket")?;
     load_preset!("component")?;
     load_preset!("api")?;
     load_preset!("style")?;
