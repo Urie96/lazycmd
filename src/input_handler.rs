@@ -1,5 +1,5 @@
 use anyhow::Result;
-use crossterm::event::{KeyEvent, KeyEventKind, KeyCode, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 use crate::{plugin, State};
 
@@ -29,9 +29,7 @@ pub fn handle_input_dialog_key(
             state.input_dialog.take();
 
             // Call on_submit callback using plugin::scope
-            plugin::scope(lua, state, event_sender, || {
-                on_submit.call::<()>(text)
-            })?;
+            plugin::scope(lua, state, event_sender, || on_submit.call::<()>(text))?;
 
             Ok(true)
         }
@@ -41,9 +39,7 @@ pub fn handle_input_dialog_key(
             state.input_dialog.take();
 
             // Call on_cancel callback using plugin::scope
-            plugin::scope(lua, state, event_sender, || {
-                on_cancel.call::<()>(())
-            })?;
+            plugin::scope(lua, state, event_sender, || on_cancel.call::<()>(()))?;
 
             Ok(true)
         }
@@ -69,15 +65,14 @@ pub fn handle_input_dialog_key(
             let text = dialog.text.clone();
             let on_change = dialog.on_change.clone();
             if text != old_text {
-                plugin::scope(lua, state, event_sender, || {
-                    on_change.call::<()>(text)
-                })?;
+                plugin::scope(lua, state, event_sender, || on_change.call::<()>(text))?;
             }
             Ok(true)
         }
         // For keys with modifiers (except SHIFT), let keymap handle them
         _ if key.modifiers.contains(KeyModifiers::CONTROL)
-            || key.modifiers.contains(KeyModifiers::ALT) => {
+            || key.modifiers.contains(KeyModifiers::ALT) =>
+        {
             Ok(false)
         }
         KeyCode::Char(c) => {
@@ -87,9 +82,7 @@ pub fn handle_input_dialog_key(
             // Call on_change callback using plugin::scope
             let text = dialog.text.clone();
             let on_change = dialog.on_change.clone();
-            plugin::scope(lua, state, event_sender, || {
-                on_change.call::<()>(text)
-            })?;
+            plugin::scope(lua, state, event_sender, || on_change.call::<()>(text))?;
 
             Ok(true)
         }
@@ -99,9 +92,7 @@ pub fn handle_input_dialog_key(
             // Call on_change callback using plugin::scope
             let text = dialog.text.clone();
             let on_change = dialog.on_change.clone();
-            plugin::scope(lua, state, event_sender, || {
-                on_change.call::<()>(text)
-            })?;
+            plugin::scope(lua, state, event_sender, || on_change.call::<()>(text))?;
 
             Ok(true)
         }
@@ -111,9 +102,7 @@ pub fn handle_input_dialog_key(
             // Call on_change callback using plugin::scope
             let text = dialog.text.clone();
             let on_change = dialog.on_change.clone();
-            plugin::scope(lua, state, event_sender, || {
-                on_change.call::<()>(text)
-            })?;
+            plugin::scope(lua, state, event_sender, || on_change.call::<()>(text))?;
 
             Ok(true)
         }

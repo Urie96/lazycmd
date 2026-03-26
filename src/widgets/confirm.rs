@@ -3,7 +3,7 @@ use ratatui::{
     widgets::{Block, BorderType, Clear, Paragraph},
 };
 
-use crate::{ConfirmDialog, ConfirmButton};
+use crate::{ConfirmButton, ConfirmDialog};
 
 use Constraint::*;
 
@@ -56,8 +56,8 @@ impl StatefulWidget for ConfirmWidget {
             }
 
             // Split buttons area into left half and right half
-            let [left_half, right_half] = Layout::horizontal([Percentage(50), Percentage(50)])
-                .areas(buttons_area);
+            let [left_half, right_half] =
+                Layout::horizontal([Percentage(50), Percentage(50)]).areas(buttons_area);
 
             // Render buttons
             let yes_selected = state.selected_button == ConfirmButton::Yes;

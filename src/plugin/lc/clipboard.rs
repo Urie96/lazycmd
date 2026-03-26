@@ -3,9 +3,8 @@ use mlua::prelude::*;
 
 /// Get clipboard content
 fn get(_lua: &Lua, _: ()) -> mlua::Result<String> {
-    let mut clipboard = Clipboard::new().map_err(|e| {
-        LuaError::RuntimeError(format!("Failed to access clipboard: {}", e))
-    })?;
+    let mut clipboard = Clipboard::new()
+        .map_err(|e| LuaError::RuntimeError(format!("Failed to access clipboard: {}", e)))?;
 
     clipboard
         .get_text()
@@ -14,9 +13,8 @@ fn get(_lua: &Lua, _: ()) -> mlua::Result<String> {
 
 /// Set clipboard content
 fn set(_lua: &Lua, text: String) -> mlua::Result<()> {
-    let mut clipboard = Clipboard::new().map_err(|e| {
-        LuaError::RuntimeError(format!("Failed to access clipboard: {}", e))
-    })?;
+    let mut clipboard = Clipboard::new()
+        .map_err(|e| LuaError::RuntimeError(format!("Failed to access clipboard: {}", e)))?;
 
     clipboard
         .set_text(&text)

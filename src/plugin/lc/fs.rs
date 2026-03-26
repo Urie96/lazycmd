@@ -15,7 +15,11 @@ fn is_readable(path: &std::path::Path) -> bool {
 /// Check if a path is writable
 fn is_writable(path: &std::path::Path) -> bool {
     // Try to open with write mode (without truncating)
-    match std::fs::OpenOptions::new().write(true).create(false).open(path) {
+    match std::fs::OpenOptions::new()
+        .write(true)
+        .create(false)
+        .open(path)
+    {
         Ok(file) => {
             // Successfully opened, can write
             drop(file);
@@ -90,12 +94,14 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
         .into_lua(lua)?;
 
     let read_file_sync = lua
-        .create_function(|_, path: String| -> mlua::Result<(String, Option<String>)> {
-            match std::fs::read_to_string(&path) {
-                Ok(content) => Ok((content, None)),
-                Err(e) => Ok((String::new(), Some(e.to_string()))),
-            }
-        })?
+        .create_function(
+            |_, path: String| -> mlua::Result<(String, Option<String>)> {
+                match std::fs::read_to_string(&path) {
+                    Ok(content) => Ok((content, None)),
+                    Err(e) => Ok((String::new(), Some(e.to_string()))),
+                }
+            },
+        )?
         .into_lua(lua)?;
 
     let write_file_sync = lua
@@ -109,84 +115,88 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
         )?
         .into_lua(lua)?;
 
-    let stat_sync = lua.create_function(|lua, path: String| -> mlua::Result<LuaTable> {
-        let path_obj = std::path::Path::new(&path);
-        let exists = path_obj.exists();
-        let (is_file, is_dir) = if exists {
-            let metadata = std::fs::metadata(&path).ok();
-            (
-                metadata.as_ref().map(|m| m.is_file()).unwrap_or(false),
-                metadata.as_ref().map(|m| m.is_dir()).unwrap_or(false),
-            )
-        } else {
-            (false, false)
-        };
+    let stat_sync = lua
+        .create_function(|lua, path: String| -> mlua::Result<LuaTable> {
+            let path_obj = std::path::Path::new(&path);
+            let exists = path_obj.exists();
+            let (is_file, is_dir) = if exists {
+                let metadata = std::fs::metadata(&path).ok();
+                (
+                    metadata.as_ref().map(|m| m.is_file()).unwrap_or(false),
+                    metadata.as_ref().map(|m| m.is_dir()).unwrap_or(false),
+                )
+            } else {
+                (false, false)
+            };
 
-        let is_readable = exists && is_readable(path_obj);
-        let is_writable = is_writable(path_obj);
-        let is_executable = exists && is_executable(path_obj);
+            let is_readable = exists && is_readable(path_obj);
+            let is_writable = is_writable(path_obj);
+            let is_executable = exists && is_executable(path_obj);
 
-        lua.create_table_from([
-            ("exists", exists.into_lua(lua)?),
-            ("is_file", is_file.into_lua(lua)?),
-            ("is_dir", is_dir.into_lua(lua)?),
-            ("is_readable", is_readable.into_lua(lua)?),
-            ("is_writable", is_writable.into_lua(lua)?),
-            ("is_executable", is_executable.into_lua(lua)?),
-        ])
-    })?
-    .into_lua(lua)?;
+            lua.create_table_from([
+                ("exists", exists.into_lua(lua)?),
+                ("is_file", is_file.into_lua(lua)?),
+                ("is_dir", is_dir.into_lua(lua)?),
+                ("is_readable", is_readable.into_lua(lua)?),
+                ("is_writable", is_writable.into_lua(lua)?),
+                ("is_executable", is_executable.into_lua(lua)?),
+            ])
+        })?
+        .into_lua(lua)?;
 
     let mkdir_sync = lua
+        .create_function(|_, path: String| -> mlua::Result<(bool, Option<String>)> {
+            match std::fs::create_dir_all(&path) {
+                Ok(_) => Ok((true, None)),
+                Err(e) => Ok((false, Some(e.to_string()))),
+            }
+        })?
+        .into_lua(lua)?;
+
+    let tempfile_sync = lua
         .create_function(
-            |_, path: String| -> mlua::Result<(bool, Option<String>)> {
-                match std::fs::create_dir_all(&path) {
-                    Ok(_) => Ok((true, None)),
-                    Err(e) => Ok((false, Some(e.to_string()))),
+            |_lua, opts: Option<LuaTable>| -> mlua::Result<(String, Option<String>)> {
+                // Parse options
+                let prefix: Option<String> = opts.as_ref().and_then(|t| t.get("prefix").ok());
+                let suffix: Option<String> = opts.as_ref().and_then(|t| t.get("suffix").ok());
+                let content: Option<String> = opts.as_ref().and_then(|t| t.get("content").ok());
+
+                // Generate random filename
+                use std::time::{SystemTime, UNIX_EPOCH};
+                let timestamp = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos();
+                let random_part = format!("{:x}", timestamp);
+
+                // Build filename
+                let filename = match (prefix, suffix) {
+                    (Some(p), Some(s)) => {
+                        format!("{}{}.{}", p, &random_part[..8], s.trim_start_matches('.'))
+                    }
+                    (Some(p), None) => format!("{}{}", p, &random_part[..8]),
+                    (None, Some(s)) => {
+                        format!("{}.{}", &random_part[..8], s.trim_start_matches('.'))
+                    }
+                    (None, None) => format!("tmp.{}", &random_part[..8]),
+                };
+
+                // Get temp directory
+                let temp_dir = std::env::temp_dir();
+                let temp_path = temp_dir.join(&filename);
+
+                // Create file with optional content
+                match std::fs::write(&temp_path, content.as_deref().unwrap_or("")) {
+                    Ok(_) => {
+                        // Convert to string path
+                        let path_str = temp_path.to_string_lossy().to_string();
+                        Ok((path_str, None))
+                    }
+                    Err(e) => Ok((String::new(), Some(e.to_string()))),
                 }
             },
         )?
         .into_lua(lua)?;
-
-    let tempfile_sync = lua.create_function(
-        |_lua, opts: Option<LuaTable>| -> mlua::Result<(String, Option<String>)> {
-            // Parse options
-            let prefix: Option<String> = opts.as_ref().and_then(|t| t.get("prefix").ok());
-            let suffix: Option<String> = opts.as_ref().and_then(|t| t.get("suffix").ok());
-            let content: Option<String> = opts.as_ref().and_then(|t| t.get("content").ok());
-
-            // Generate random filename
-            use std::time::{SystemTime, UNIX_EPOCH};
-            let timestamp = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_nanos();
-            let random_part = format!("{:x}", timestamp);
-
-            // Build filename
-            let filename = match (prefix, suffix) {
-                (Some(p), Some(s)) => format!("{}{}.{}", p, &random_part[..8], s.trim_start_matches('.')),
-                (Some(p), None) => format!("{}{}", p, &random_part[..8]),
-                (None, Some(s)) => format!("{}.{}", &random_part[..8], s.trim_start_matches('.')),
-                (None, None) => format!("tmp.{}", &random_part[..8]),
-            };
-
-            // Get temp directory
-            let temp_dir = std::env::temp_dir();
-            let temp_path = temp_dir.join(&filename);
-
-            // Create file with optional content
-            match std::fs::write(&temp_path, content.as_deref().unwrap_or("")) {
-                Ok(_) => {
-                    // Convert to string path
-                    let path_str = temp_path.to_string_lossy().to_string();
-                    Ok((path_str, None))
-                }
-                Err(e) => Ok((String::new(), Some(e.to_string()))),
-            }
-        },
-    )?
-    .into_lua(lua)?;
 
     let remove_sync = lua
         .create_function(|_, path: String| -> mlua::Result<(bool, Option<String>)> {
@@ -235,7 +245,10 @@ mod tests {
             let tempfile: mlua::Function = table.get("tempfile").unwrap();
             let (path, err): (String, Option<String>) = tempfile.call(LuaNil).unwrap();
             assert!(err.is_none(), "Basic tempfile should not error");
-            assert!(path.contains("/tmp/") || path.contains("/T/"), "Path should be in temp dir");
+            assert!(
+                path.contains("/tmp/") || path.contains("/T/"),
+                "Path should be in temp dir"
+            );
             assert!(Path::new(&path).exists(), "File should exist");
             std::fs::remove_file(&path).ok();
         }
@@ -293,7 +306,10 @@ mod tests {
 
             // Verify content
             let content = std::fs::read_to_string(&path).unwrap();
-            assert_eq!(content, "hello world", "File should contain the specified content");
+            assert_eq!(
+                content, "hello world",
+                "File should contain the specified content"
+            );
             std::fs::remove_file(&path).ok();
         }
 
@@ -313,7 +329,10 @@ mod tests {
 
             // Verify content
             let content = std::fs::read_to_string(&path).unwrap();
-            assert_eq!(content, "# Test File\nContent here", "File should contain the specified content");
+            assert_eq!(
+                content, "# Test File\nContent here",
+                "File should contain the specified content"
+            );
             std::fs::remove_file(&path).ok();
         }
 
@@ -323,12 +342,18 @@ mod tests {
             let tempfile: mlua::Function = table.get("tempfile").unwrap();
             let remove: mlua::Function = table.get("remove").unwrap();
             let (path, _): (String, Option<String>) = tempfile.call(LuaNil).unwrap();
-            assert!(Path::new(&path).exists(), "File should exist before removal");
+            assert!(
+                Path::new(&path).exists(),
+                "File should exist before removal"
+            );
 
             let (ok, err): (bool, Option<String>) = remove.call(path.clone()).unwrap();
             assert!(ok, "Remove file should succeed");
             assert!(err.is_none(), "Remove file should not error");
-            assert!(!Path::new(&path).exists(), "File should not exist after removal");
+            assert!(
+                !Path::new(&path).exists(),
+                "File should not exist after removal"
+            );
         }
 
         // Test remove directory
@@ -342,7 +367,8 @@ mod tests {
             let test_file = test_dir.join("nested_file.txt");
 
             // Create directory and nested file
-            let _: (bool, Option<String>) = mkdir.call(test_dir.to_string_lossy().to_string()).unwrap();
+            let _: (bool, Option<String>) =
+                mkdir.call(test_dir.to_string_lossy().to_string()).unwrap();
             std::fs::write(&test_file, "test content").unwrap();
             assert!(test_dir.exists(), "Directory should exist");
             assert!(test_file.exists(), "Nested file should exist");
@@ -352,8 +378,10 @@ mod tests {
                 remove.call(test_dir.to_string_lossy().to_string()).unwrap();
             assert!(ok, "Remove directory should succeed");
             assert!(err.is_none(), "Remove directory should not error");
-            assert!(!test_dir.exists(), "Directory should not exist after removal");
+            assert!(
+                !test_dir.exists(),
+                "Directory should not exist after removal"
+            );
         }
     }
 }
-

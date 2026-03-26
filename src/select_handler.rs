@@ -1,5 +1,5 @@
 use anyhow::Result;
-use crossterm::event::{KeyEvent, KeyEventKind, KeyCode, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use mlua::prelude::*;
 
 use crate::{plugin, State};

@@ -209,7 +209,11 @@ impl InputDialogWidget {
         let visible_text = text[start_byte..end_byte].to_string();
         let cursor_offset = Self::display_width(&text[start_byte..cursor_position]);
 
-        (start_byte, visible_text, cursor_offset.min(max_width_before_cursor))
+        (
+            start_byte,
+            visible_text,
+            cursor_offset.min(max_width_before_cursor),
+        )
     }
 }
 
@@ -228,7 +232,7 @@ impl StatefulWidget for InputDialogWidget {
 
         // Arrow prefix " " for inside the input box (like select component)
         let arrow = " ";
-        
+
         let inner_width = area.width.saturating_sub(2);
         let arrow_width = arrow.width() as u16;
         let text_max_width = inner_width.saturating_sub(arrow_width);
@@ -268,20 +272,19 @@ impl StatefulWidget for InputDialogWidget {
         } else {
             state.prompt.clone()
         };
-        
-        let paragraph = Paragraph::new(text)
-            .block(
-                Block::bordered()
-                    .border_type(BorderType::Rounded)
-                    .border_style(Style::default().fg(Color::Cyan))
-                    .title_style(
-                        Style::default()
-                            .fg(Color::Cyan)
-                            .add_modifier(Modifier::BOLD),
-                    )
-                    .title_alignment(Alignment::Center)
-                    .title(title_text),
-            );
+
+        let paragraph = Paragraph::new(text).block(
+            Block::bordered()
+                .border_type(BorderType::Rounded)
+                .border_style(Style::default().fg(Color::Cyan))
+                .title_style(
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                )
+                .title_alignment(Alignment::Center)
+                .title(title_text),
+        );
 
         paragraph.render(area, buf);
 

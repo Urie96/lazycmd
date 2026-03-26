@@ -11,9 +11,7 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
                     let cmd_str = s.to_str()?.to_string();
                     let lc = lua.globals().get::<LuaTable>("lc")?;
                     let cmd_fn = lc.get::<LuaFunction>("cmd")?;
-                    lua.create_function(move |_lua, ()| {
-                        cmd_fn.call::<()>(cmd_str.clone())
-                    })?
+                    lua.create_function(move |_lua, ()| cmd_fn.call::<()>(cmd_str.clone()))?
                 }
                 LuaValue::Function(f) => f,
                 other => {

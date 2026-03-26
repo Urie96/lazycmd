@@ -3,9 +3,8 @@ use serde_yaml::Value;
 
 /// Decode a YAML string to a Lua value
 fn decode(lua: &Lua, yaml_str: String) -> mlua::Result<LuaValue> {
-    let value: Value = serde_yaml::from_str(&yaml_str).map_err(|e| {
-        LuaError::RuntimeError(format!("YAML parse error: {}", e))
-    })?;
+    let value: Value = serde_yaml::from_str(&yaml_str)
+        .map_err(|e| LuaError::RuntimeError(format!("YAML parse error: {}", e)))?;
     yaml_to_lua(lua, value)
 }
 
@@ -65,9 +64,8 @@ fn yaml_to_lua(lua: &Lua, value: Value) -> mlua::Result<LuaValue> {
 /// Encode a Lua value to a YAML string
 fn encode(lua: &Lua, value: LuaValue) -> mlua::Result<String> {
     let yaml_value = lua_to_yaml(lua, value)?;
-    serde_yaml::to_string(&yaml_value).map_err(|e| {
-        LuaError::RuntimeError(format!("YAML encode error: {}", e))
-    })
+    serde_yaml::to_string(&yaml_value)
+        .map_err(|e| LuaError::RuntimeError(format!("YAML encode error: {}", e)))
 }
 
 /// Convert LuaValue to serde_yaml::Value
@@ -78,16 +76,14 @@ fn lua_to_yaml(lua: &Lua, value: LuaValue) -> mlua::Result<Value> {
         LuaValue::Integer(i) => Ok(Value::Number(serde_yaml::Number::from(i))),
         LuaValue::Number(n) => {
             // In Lua, all numbers are floats
-            Ok(Value::Number(
-                serde_yaml::Number::from(n as f64),
-            ))
+            Ok(Value::Number(serde_yaml::Number::from(n as f64)))
         }
         LuaValue::String(s) => Ok(Value::String(s.to_str()?.to_string())),
         LuaValue::Table(t) => {
             // Check if it's an array (sequential) or mapping
             let mut is_array = true;
             let len = t.len().unwrap_or(0);
-            
+
             // Check if all keys are sequential integers starting from 1
             if len > 0 {
                 for i in 1..=len {
@@ -119,9 +115,10 @@ fn lua_to_yaml(lua: &Lua, value: LuaValue) -> mlua::Result<Value> {
                         LuaValue::Number(n) => Value::String(n.to_string()),
                         LuaValue::Boolean(b) => Value::String(b.to_string()),
                         _ => {
-                            let key_str = lua_to_yaml(lua, LuaValue::String(
-                                lua.create_string(&format!("{:?}", k))?
-                            ))?;
+                            let key_str = lua_to_yaml(
+                                lua,
+                                LuaValue::String(lua.create_string(&format!("{:?}", k))?),
+                            )?;
                             key_str
                         }
                     };

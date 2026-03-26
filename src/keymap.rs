@@ -9,7 +9,7 @@ pub struct Keymap {
     pub callback: LuaFunction,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct KeySequence(Vec<KeyEvent>);
 
 impl KeySequence {
@@ -108,15 +108,27 @@ fn extract_modifiers(raw: &str) -> (&str, KeyModifiers) {
         match current {
             rest if rest.to_lowercase().starts_with("ctrl-") || rest.starts_with("C-") => {
                 modifiers.insert(KeyModifiers::CONTROL);
-                current = if rest.starts_with("C-") { &rest[2..] } else { &rest[5..] };
+                current = if rest.starts_with("C-") {
+                    &rest[2..]
+                } else {
+                    &rest[5..]
+                };
             }
             rest if rest.to_lowercase().starts_with("alt-") || rest.starts_with("A-") => {
                 modifiers.insert(KeyModifiers::ALT);
-                current = if rest.starts_with("A-") { &rest[2..] } else { &rest[4..] };
+                current = if rest.starts_with("A-") {
+                    &rest[2..]
+                } else {
+                    &rest[4..]
+                };
             }
             rest if rest.to_lowercase().starts_with("shift-") || rest.starts_with("S-") => {
                 modifiers.insert(KeyModifiers::SHIFT);
-                current = if rest.starts_with("S-") { &rest[2..] } else { &rest[6..] };
+                current = if rest.starts_with("S-") {
+                    &rest[2..]
+                } else {
+                    &rest[6..]
+                };
             }
             _ => break, // break out of the loop if no known prefix is detected
         };

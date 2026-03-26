@@ -44,19 +44,16 @@ fn save_cache(cache: &HashMap<String, CacheEntry>) -> mlua::Result<()> {
     if let Some(parent) = cache_path.parent() {
         std::fs::create_dir_all(parent)
             .into_lua_err()
-            .map_err(|e| LuaError::RuntimeError(format!("Failed to create cache directory: {}", e)))?;
+            .map_err(|e| {
+                LuaError::RuntimeError(format!("Failed to create cache directory: {}", e))
+            })?;
     }
 
     // Remove expired entries before saving
     let now = chrono::Utc::now().timestamp() as u64;
     let cleaned: HashMap<String, CacheEntry> = cache
         .iter()
-        .filter(|(_, entry)| {
-            entry
-                .expires
-                .map(|exp| exp > now)
-                .unwrap_or(true)
-        })
+        .filter(|(_, entry)| entry.expires.map(|exp| exp > now).unwrap_or(true))
         .map(|(k, v)| (k.clone(), v.clone()))
         .collect();
 
@@ -168,31 +165,31 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
         .into_lua(lua)?;
 
     let set = lua
-        .create_function(|_lua, (key, value, opts): (String, LuaValue, Option<LuaTable>)| {
-            let mut cache = load_cache()?;
+        .create_function(
+            |_lua, (key, value, opts): (String, LuaValue, Option<LuaTable>)| {
+                let mut cache = load_cache()?;
 
-            let json_value = lua_to_json(value)?;
+                let json_value = lua_to_json(value)?;
 
-            let expires = if let Some(opts) = opts {
-                let ttl: Option<u64> = opts.get("ttl").ok();
-                ttl.map(|ttl| {
-                    chrono::Utc::now().timestamp() as u64 + ttl
-                })
-            } else {
-                None
-            };
+                let expires = if let Some(opts) = opts {
+                    let ttl: Option<u64> = opts.get("ttl").ok();
+                    ttl.map(|ttl| chrono::Utc::now().timestamp() as u64 + ttl)
+                } else {
+                    None
+                };
 
-            cache.insert(
-                key,
-                CacheEntry {
-                    value: json_value,
-                    expires,
-                },
-            );
+                cache.insert(
+                    key,
+                    CacheEntry {
+                        value: json_value,
+                        expires,
+                    },
+                );
 
-            save_cache(&cache)?;
-            Ok(())
-        })?
+                save_cache(&cache)?;
+                Ok(())
+            },
+        )?
         .into_lua(lua)?;
 
     let delete = lua
@@ -212,7 +209,9 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
             if cache_path.exists() {
                 std::fs::remove_file(&cache_path)
                     .into_lua_err()
-                    .map_err(|e| LuaError::RuntimeError(format!("Failed to delete cache file: {}", e)))?;
+                    .map_err(|e| {
+                        LuaError::RuntimeError(format!("Failed to delete cache file: {}", e))
+                    })?;
             }
 
             Ok(())

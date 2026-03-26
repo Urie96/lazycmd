@@ -4,9 +4,8 @@ use serde_json::Value;
 
 /// Decode a JSON string to a Lua value
 fn decode(lua: &Lua, json_str: String) -> mlua::Result<LuaValue> {
-    let value: Value = serde_json::from_str(&json_str).map_err(|e| {
-        LuaError::RuntimeError(format!("JSON parse error: {}", e))
-    })?;
+    let value: Value = serde_json::from_str(&json_str)
+        .map_err(|e| LuaError::RuntimeError(format!("JSON parse error: {}", e)))?;
     json_to_lua(lua, value)
 }
 
@@ -48,30 +47,25 @@ fn json_to_lua(lua: &Lua, value: Value) -> mlua::Result<LuaValue> {
 /// Encode a Lua value to a JSON string
 fn encode(lua: &Lua, (value, opts): (LuaValue, Option<LuaTable>)) -> mlua::Result<String> {
     let json_value = lua_to_json(lua, value)?;
-    
+
     // Check for indent option
-    let indent = opts.and_then(|opt| {
-        opt.get::<Option<u32>>("indent").ok().flatten()
-    });
-    
+    let indent = opts.and_then(|opt| opt.get::<Option<u32>>("indent").ok().flatten());
+
     let json_string = if let Some(indent) = indent {
         // Use pretty printing with custom indent
         let indent_str = " ".repeat(indent as usize);
         let formatter = serde_json::ser::PrettyFormatter::with_indent(indent_str.as_bytes());
         let mut buf = Vec::new();
         let mut ser = serde_json::Serializer::with_formatter(&mut buf, formatter);
-        json_value.serialize(&mut ser).map_err(|e| {
-            LuaError::RuntimeError(format!("JSON encode error: {}", e))
-        })?;
-        String::from_utf8(buf).map_err(|e| {
-            LuaError::RuntimeError(format!("UTF-8 error: {}", e))
-        })?
+        json_value
+            .serialize(&mut ser)
+            .map_err(|e| LuaError::RuntimeError(format!("JSON encode error: {}", e)))?;
+        String::from_utf8(buf).map_err(|e| LuaError::RuntimeError(format!("UTF-8 error: {}", e)))?
     } else {
-        serde_json::to_string(&json_value).map_err(|e| {
-            LuaError::RuntimeError(format!("JSON encode error: {}", e))
-        })?
+        serde_json::to_string(&json_value)
+            .map_err(|e| LuaError::RuntimeError(format!("JSON encode error: {}", e)))?
     };
-    
+
     Ok(json_string)
 }
 
@@ -84,14 +78,16 @@ fn lua_to_json(lua: &Lua, value: LuaValue) -> mlua::Result<Value> {
         LuaValue::Number(n) => {
             // In Lua, all numbers are floats
             // Use as_f64 to get the value
-            Ok(Value::Number(serde_json::Number::from_f64(n).unwrap_or(serde_json::Number::from(0))))
+            Ok(Value::Number(
+                serde_json::Number::from_f64(n).unwrap_or(serde_json::Number::from(0)),
+            ))
         }
         LuaValue::String(s) => Ok(Value::String(s.to_str()?.to_string())),
         LuaValue::Table(t) => {
             // Check if it's an array (sequential) or mapping
             let mut is_array = true;
             let len = t.len().unwrap_or(0);
-            
+
             // Check if all keys are sequential integers starting from 1
             if len > 0 {
                 for i in 1..=len {

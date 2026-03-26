@@ -32,7 +32,15 @@ async fn execute_request(
         "PUT" => client.put(&url),
         "DELETE" => client.delete(&url),
         "PATCH" => client.patch(&url),
-        _ => return (false, 0, String::new(), HeaderMap::new(), Some(format!("Invalid method: {}", method))),
+        _ => {
+            return (
+                false,
+                0,
+                String::new(),
+                HeaderMap::new(),
+                Some(format!("Invalid method: {}", method)),
+            )
+        }
     };
 
     // Add headers if provided
@@ -51,10 +59,22 @@ async fn execute_request(
             let response_headers = response.headers().clone();
             match response.text().await {
                 Ok(body) => (true, status, body, response_headers, None),
-                Err(e) => (false, 0, String::new(), HeaderMap::new(), Some(e.to_string())),
+                Err(e) => (
+                    false,
+                    0,
+                    String::new(),
+                    HeaderMap::new(),
+                    Some(e.to_string()),
+                ),
             }
         }
-        Err(e) => (false, 0, String::new(), HeaderMap::new(), Some(e.to_string())),
+        Err(e) => (
+            false,
+            0,
+            String::new(),
+            HeaderMap::new(),
+            Some(e.to_string()),
+        ),
     }
 }
 
@@ -102,8 +122,7 @@ fn get_fn(lua: &Lua, (url, callback): (String, LuaFunction)) -> mlua::Result<()>
 
         sender
             .send(Event::LuaCallback(Box::new(move |lua| {
-                let response =
-                    create_response_table(lua, success, status, body, &headers, error)?;
+                let response = create_response_table(lua, success, status, body, &headers, error)?;
                 callback.call(response)
             })))
             .unwrap();
@@ -113,10 +132,7 @@ fn get_fn(lua: &Lua, (url, callback): (String, LuaFunction)) -> mlua::Result<()>
 }
 
 /// POST request
-fn post_fn(
-    lua: &Lua,
-    (url, body, callback): (String, String, LuaFunction),
-) -> mlua::Result<()> {
+fn post_fn(lua: &Lua, (url, body, callback): (String, String, LuaFunction)) -> mlua::Result<()> {
     let sender = plugin::clone_sender(lua)?;
 
     spawn_local(async move {
@@ -168,8 +184,7 @@ fn delete_fn(lua: &Lua, (url, callback): (String, LuaFunction)) -> mlua::Result<
 
         sender
             .send(Event::LuaCallback(Box::new(move |lua| {
-                let response =
-                    create_response_table(lua, success, status, body, &headers, error)?;
+                let response = create_response_table(lua, success, status, body, &headers, error)?;
                 callback.call(response)
             })))
             .unwrap();
@@ -179,10 +194,7 @@ fn delete_fn(lua: &Lua, (url, callback): (String, LuaFunction)) -> mlua::Result<
 }
 
 /// PATCH request
-fn patch_fn(
-    lua: &Lua,
-    (url, body, callback): (String, String, LuaFunction),
-) -> mlua::Result<()> {
+fn patch_fn(lua: &Lua, (url, body, callback): (String, String, LuaFunction)) -> mlua::Result<()> {
     let sender = plugin::clone_sender(lua)?;
 
     spawn_local(async move {
@@ -216,7 +228,9 @@ fn request_fn(lua: &Lua, (opts, callback): (LuaTable, LuaFunction)) -> mlua::Res
             if let (LuaValue::String(name), LuaValue::String(value)) = (name, value) {
                 let name_str: String = name.to_str()?.to_owned();
                 let value_str: String = value.to_str()?.to_owned();
-                if let Ok(header_name) = reqwest::header::HeaderName::from_bytes(name_str.as_bytes()) {
+                if let Ok(header_name) =
+                    reqwest::header::HeaderName::from_bytes(name_str.as_bytes())
+                {
                     if let Ok(header_value) = reqwest::header::HeaderValue::from_str(&value_str) {
                         headers.insert(header_name, header_value);
                     }
@@ -246,14 +260,8 @@ fn request_fn(lua: &Lua, (opts, callback): (LuaTable, LuaFunction)) -> mlua::Res
 
         sender
             .send(Event::LuaCallback(Box::new(move |lua| {
-                let response = create_response_table(
-                    lua,
-                    success,
-                    status,
-                    resp_body,
-                    &resp_headers,
-                    error,
-                )?;
+                let response =
+                    create_response_table(lua, success, status, resp_body, &resp_headers, error)?;
                 callback.call(response)
             })))
             .unwrap();

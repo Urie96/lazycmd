@@ -7,7 +7,7 @@ fn decode(lua: &Lua, encoded: String) -> mlua::Result<LuaString> {
     let decoded = general_purpose::STANDARD
         .decode(&encoded)
         .map_err(|e| LuaError::RuntimeError(format!("Base64 decode error: {}", e)))?;
-    
+
     // Convert bytes to Lua string
     lua.create_string(&decoded)
 }

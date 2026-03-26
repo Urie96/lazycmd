@@ -31,22 +31,14 @@ impl StatefulWidget for FooterWidget {
         // Render the counter on the right side
         let spans = vec![
             // Left powerline symbol with blue foreground
-            Span::styled(
-                "",
-                Style::default().fg(Color::Blue),
-            ),
+            Span::styled("", Style::default().fg(Color::Blue)),
             // Counter text with blue background and white foreground
             Span::styled(
                 format!(" {} ", counter_text),
-                Style::default()
-                    .fg(Color::White)
-                    .bg(Color::Blue),
+                Style::default().fg(Color::White).bg(Color::Blue),
             ),
             // Right powerline symbol with blue foreground
-            Span::styled(
-                "",
-                Style::default().fg(Color::Blue),
-            ),
+            Span::styled("", Style::default().fg(Color::Blue)),
         ];
 
         let text = Text::from(Line::from(spans));

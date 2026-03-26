@@ -8,15 +8,16 @@ mod http;
 mod json;
 mod keymap;
 mod path;
+mod socket;
 mod style;
 mod system;
 mod time;
 mod yaml;
 
-use ::base64::engine::general_purpose;
-use ::base64::Engine;
 use crate::widgets::{LuaLine, LuaSpan};
 use crate::{plugin, Event};
+use ::base64::engine::general_purpose;
+use ::base64::Engine;
 use mlua::prelude::*;
 use ratatui::text::Line;
 use std::io::{self, Write};
@@ -62,6 +63,7 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
     let fs = fs::new_table(lua)?.into_lua(lua)?;
     let http = http::new_table(lua)?.into_lua(lua)?;
     let path = path::new_table(lua)?.into_lua(lua)?;
+    let socket = socket::new_table(lua)?.into_lua(lua)?;
     let time = time::new_table(lua)?.into_lua(lua)?;
     let json = json::new_table(lua)?.into_lua(lua)?;
     let yaml = yaml::new_table(lua)?.into_lua(lua)?;
@@ -157,7 +159,9 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
         .into_lua(lua)?;
 
     let notify_fn = lua
-        .create_function(|lua, message: crate::widgets::LuaText| plugin::send_event(lua, Event::Notify(message.0)))?
+        .create_function(|lua, message: crate::widgets::LuaText| {
+            plugin::send_event(lua, Event::Notify(message.0))
+        })?
         .into_lua(lua)?;
 
     // lc.confirm: show a confirmation dialog
@@ -292,6 +296,7 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
         ("cmd", cmd),
         ("split", split),
         ("system", mlua::Value::Table(system_tbl)),
+        ("socket", socket),
         ("path", path),
         ("time", time),
         ("json", json),
@@ -305,37 +310,36 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
         // lc.input: show an input dialog
         (
             "input",
-            mlua::Value::Function(lua.create_function(|lua, opts: LuaTable| -> mlua::Result<()> {
-                let prompt: String = opts.get("prompt").unwrap_or_else(|_| "".to_string());
-                let placeholder: String = opts
-                    .get("placeholder")
-                    .unwrap_or_else(|_| "".to_string());
-                let value: String = opts.get("value").unwrap_or_else(|_| "".to_string());
-                let on_submit: LuaFunction = opts.get("on_submit")?;
+            mlua::Value::Function(lua.create_function(
+                |lua, opts: LuaTable| -> mlua::Result<()> {
+                    let prompt: String = opts.get("prompt").unwrap_or_else(|_| "".to_string());
+                    let placeholder: String =
+                        opts.get("placeholder").unwrap_or_else(|_| "".to_string());
+                    let value: String = opts.get("value").unwrap_or_else(|_| "".to_string());
+                    let on_submit: LuaFunction = opts.get("on_submit")?;
 
-                // Default callbacks that do nothing
-                let on_cancel: LuaFunction = opts.get("on_cancel").unwrap_or_else(|_| {
-                    lua.create_function(|_, ()| Ok(()))
-                        .unwrap()
-                });
-                let on_change: LuaFunction = opts.get("on_change").unwrap_or_else(|_| {
-                    lua.create_function(|_, ()| Ok(()))
-                        .unwrap()
-                });
+                    // Default callbacks that do nothing
+                    let on_cancel: LuaFunction = opts
+                        .get("on_cancel")
+                        .unwrap_or_else(|_| lua.create_function(|_, ()| Ok(())).unwrap());
+                    let on_change: LuaFunction = opts
+                        .get("on_change")
+                        .unwrap_or_else(|_| lua.create_function(|_, ()| Ok(())).unwrap());
 
-                plugin::send_event(
-                    lua,
-                    Event::ShowInput {
-                        prompt,
-                        placeholder,
-                        value,
-                        on_submit,
-                        on_cancel,
-                        on_change,
-                    },
-                )?;
-                Ok(())
-            })?),
+                    plugin::send_event(
+                        lua,
+                        Event::ShowInput {
+                            prompt,
+                            placeholder,
+                            value,
+                            on_submit,
+                            on_cancel,
+                            on_change,
+                        },
+                    )?;
+                    Ok(())
+                },
+            )?),
         ),
         ("style", mlua::Value::Table(style_tbl)),
     ])?;
