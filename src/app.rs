@@ -284,6 +284,7 @@ impl App {
             Event::ShowInput {
                 prompt,
                 placeholder,
+                value,
                 on_submit,
                 on_cancel,
                 on_change,
@@ -291,6 +292,7 @@ impl App {
                 self.state.input_dialog = Some(crate::InputDialog::new(
                     prompt,
                     placeholder,
+                    value,
                     on_submit,
                     on_cancel,
                     on_change,

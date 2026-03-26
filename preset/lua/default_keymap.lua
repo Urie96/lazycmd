@@ -13,6 +13,7 @@ map('main', '/', function()
   lc.input {
     prompt = 'Filter:',
     placeholder = '输入筛选内容...',
+    value = lc.api.get_filter(),
     on_change = function(input) lc.api.set_filter(input) end,
     on_submit = function(input) lc.api.set_filter(input) end,
     on_cancel = function() lc.api.set_filter '' end,

@@ -52,6 +52,7 @@ pub enum Event {
     ShowInput {
         prompt: String,
         placeholder: String,
+        value: String,
         on_submit: LuaFunction,
         on_cancel: LuaFunction,
         on_change: LuaFunction,

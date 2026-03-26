@@ -103,7 +103,8 @@ impl InputDialogState {
 
 #[cfg(test)]
 mod tests {
-    use super::InputDialogState;
+    use super::{InputDialogState, InputDialogWidget};
+    use ratatui::{buffer::Buffer, layout::Rect, widgets::StatefulWidget};
 
     #[test]
     fn input_dialog_state_backspace_handles_utf8() {
@@ -115,6 +116,31 @@ mod tests {
         assert_eq!(state.text, "搜");
         assert_eq!(state.cursor_position, '搜'.len_utf8());
     }
+
+    #[test]
+    fn visible_window_keeps_cursor_at_right_edge_when_input_overflows() {
+        let text = "abcdef";
+        let (_, visible, cursor_offset) = InputDialogWidget::visible_window(text, text.len(), 3);
+
+        assert_eq!(visible, "ef");
+        assert_eq!(cursor_offset, 2);
+    }
+
+    #[test]
+    fn input_dialog_render_scrolls_text_horizontally() {
+        let mut state = InputDialogState::new("Search", "keyword");
+        state.text = "abcdef".to_string();
+        state.cursor_position = state.text.len();
+
+        let area = Rect::new(0, 0, 8, 3);
+        let mut buf = Buffer::empty(area);
+        InputDialogWidget::new().render(area, &mut buf, &mut state);
+
+        assert_eq!(state.cursor_x, 6);
+        assert_eq!(buf[(4, 1)].symbol(), "e");
+        assert_eq!(buf[(5, 1)].symbol(), "f");
+        assert_eq!(buf[(6, 1)].symbol(), " ");
+    }
 }
 
 /// Widget for rendering an input dialog with customizable prompt and title
@@ -123,6 +149,67 @@ pub struct InputDialogWidget;
 impl InputDialogWidget {
     pub fn new() -> Self {
         Self
+    }
+
+    fn char_width(c: char) -> u16 {
+        c.width().unwrap_or(0) as u16
+    }
+
+    fn display_width(text: &str) -> u16 {
+        text.chars().map(Self::char_width).sum()
+    }
+
+    fn visible_window(text: &str, cursor_position: usize, max_width: u16) -> (usize, String, u16) {
+        if text.is_empty() || max_width == 0 {
+            return (0, String::new(), 0);
+        }
+
+        let cursor_position = cursor_position.min(text.len());
+        let total_width_before_cursor = Self::display_width(&text[..cursor_position]);
+        let max_width_before_cursor = if total_width_before_cursor >= max_width {
+            max_width.saturating_sub(1)
+        } else {
+            max_width
+        };
+
+        let chars: Vec<(usize, char)> = text.char_indices().collect();
+        let char_count = chars.len();
+        let cursor_char_idx = chars
+            .iter()
+            .position(|(idx, _)| *idx >= cursor_position)
+            .unwrap_or(char_count);
+
+        let mut start_char_idx = 0usize;
+        let mut width_before_cursor = 0u16;
+        for idx in (0..cursor_char_idx).rev() {
+            let next_width = width_before_cursor.saturating_add(Self::char_width(chars[idx].1));
+            if next_width > max_width_before_cursor {
+                start_char_idx = idx + 1;
+                break;
+            }
+            width_before_cursor = next_width;
+        }
+
+        let start_byte = chars
+            .get(start_char_idx)
+            .map(|(idx, _)| *idx)
+            .unwrap_or(text.len());
+
+        let mut end_byte = text.len();
+        let mut visible_width = 0u16;
+        for idx in start_char_idx..char_count {
+            let ch_width = Self::char_width(chars[idx].1);
+            if visible_width.saturating_add(ch_width) > max_width {
+                end_byte = chars[idx].0;
+                break;
+            }
+            visible_width = visible_width.saturating_add(ch_width);
+        }
+
+        let visible_text = text[start_byte..end_byte].to_string();
+        let cursor_offset = Self::display_width(&text[start_byte..cursor_position]);
+
+        (start_byte, visible_text, cursor_offset.min(max_width_before_cursor))
     }
 }
 
@@ -142,11 +229,23 @@ impl StatefulWidget for InputDialogWidget {
         // Arrow prefix " " for inside the input box (like select component)
         let arrow = " ";
         
+        let inner_width = area.width.saturating_sub(2);
+        let arrow_width = arrow.width() as u16;
+        let text_max_width = inner_width.saturating_sub(arrow_width);
+
         // Determine the text to display: actual text or placeholder
-        let display_text = if state.text.is_empty() {
-            &state.placeholder
+        let (display_text, cursor_char_width) = if state.text.is_empty() {
+            let placeholder = if text_max_width == 0 {
+                String::new()
+            } else {
+                let (_, text, _) = Self::visible_window(&state.placeholder, 0, text_max_width);
+                text
+            };
+            (placeholder, 0)
         } else {
-            state.text.as_str()
+            let (_, text, cursor_offset) =
+                Self::visible_window(&state.text, state.cursor_position, text_max_width);
+            (text, cursor_offset)
         };
 
         // Determine text color: gray for placeholder, white for actual input
@@ -187,14 +286,8 @@ impl StatefulWidget for InputDialogWidget {
         paragraph.render(area, buf);
 
         // Calculate cursor position (arrow + cursor position in text)
-        let arrow_width = arrow.width() as u16;
-        let cursor_char_width: u16 = state
-            .text
-            .chars()
-            .take(state.cursor_position)
-            .map(|c| c.width().unwrap_or(0) as u16)
-            .sum();
-        let cursor_x = area.x + 1 + arrow_width + cursor_char_width;
+        let cursor_x = (area.x + 1 + arrow_width + cursor_char_width)
+            .min(area.x + area.width.saturating_sub(2));
         let cursor_y = area.y + 1; // Inside the bordered area
 
         // Store cursor position for use by app.rs

@@ -82,6 +82,7 @@ scope(lua, state, sender, || {
 | `get_current_path()` | 获取当前路径 |
 | `get_hovered_path()` | 获取悬停项路径 |
 | `argv()` | 获取命令行参数 |
+| `get_filter()` | 获取当前过滤条件 |
 | `enter_filter_mode()` | 进入过滤模式 |
 | `exit_filter_mode()` | 退出过滤模式 |
 | `accept_filter()` | 应用过滤 |

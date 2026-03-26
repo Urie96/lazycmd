@@ -51,6 +51,7 @@ lc.api.go_to(path)                -- 导航到路径
 lc.api.get_current_path()         -- 获取当前路径
 lc.api.get_hovered_path()         -- 获取悬停项完整路径
 lc.api.argv()                     -- 获取命令行参数
+lc.api.get_filter()               -- 获取当前过滤字符串
 lc.api.append_hook_pre_reload(cb) -- 添加重载前钩子
 ```
 

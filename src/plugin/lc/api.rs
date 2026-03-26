@@ -79,6 +79,18 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
         })?
         .into_lua(lua)?;
 
+    let get_filter = lua
+        .create_function(|lua, ()| {
+            plugin::borrow_scope_state(lua, |state| {
+                Ok(state
+                    .current_page
+                    .as_ref()
+                    .map(|page| page.list_filter.clone())
+                    .unwrap_or_default())
+            })
+        })?
+        .into_lua(lua)?;
+
     let append_hook_pre_reload = lua
         .create_function(|lua, cb: LuaFunction| {
             plugin::mut_scope_state(lua, |state| {
@@ -106,6 +118,7 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
         ("get_hovered_path", get_hovered_path),
         ("argv", argv),
         ("set_filter", set_filter),
+        ("get_filter", get_filter),
         ("append_hook_pre_reload", append_hook_pre_reload),
         ("append_hook_pre_quit", append_hook_pre_quit),
     ])

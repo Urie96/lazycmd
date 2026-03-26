@@ -37,6 +37,7 @@ function lc.notify(message) return _lc.notify(message) end
 ---@class InputOptions
 ---@field prompt? string Optional prompt text to display before input (defaults to "")
 ---@field placeholder? string Optional placeholder text shown when input is empty (defaults to "")
+---@field value? string Optional initial input text (defaults to "")
 ---@field on_submit fun(input: string) Callback function when user presses Enter
 ---  - Called with the user's input text
 ---@field on_cancel? fun() Callback function when user presses Escape

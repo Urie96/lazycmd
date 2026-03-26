@@ -48,6 +48,10 @@ function api.append_hook_pre_quit(callback) _lc.api.append_hook_pre_quit(callbac
 ---@param filter string The filter string to apply
 function api.set_filter(filter) _lc.api.set_filter(filter) end
 
+---Get the current filter string for the current page
+---@return string filter The current filter string, or empty string if none
+function api.get_filter() return _lc.api.get_filter() end
+
 lc.api = api
 
 ---Send an internal command to Rust

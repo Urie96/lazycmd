@@ -289,15 +289,17 @@ impl InputDialog {
     pub fn new(
         prompt: String,
         placeholder: String,
+        value: String,
         on_submit: LuaFunction,
         on_cancel: LuaFunction,
         on_change: LuaFunction,
     ) -> Self {
+        let cursor_position = value.len();
         Self {
             prompt,
             placeholder,
-            text: String::new(),
-            cursor_position: 0,
+            text: value,
+            cursor_position,
             cursor_x: 0,
             cursor_y: 0,
             on_submit,
@@ -367,6 +369,7 @@ mod tests {
         InputDialog::new(
             "Search".to_string(),
             "keyword".to_string(),
+            String::new(),
             on_submit,
             on_cancel,
             on_change,
@@ -386,6 +389,26 @@ mod tests {
         dialog.backspace();
         assert_eq!(dialog.text, "");
         assert_eq!(dialog.cursor_position, 0);
+    }
+
+    #[test]
+    fn input_dialog_initial_value_places_cursor_at_end() {
+        let lua = Lua::new();
+        let on_submit = lua.create_function(|_, ()| Ok(())).unwrap().to_owned();
+        let on_cancel = lua.create_function(|_, ()| Ok(())).unwrap().to_owned();
+        let on_change = lua.create_function(|_, ()| Ok(())).unwrap().to_owned();
+
+        let dialog = InputDialog::new(
+            "Search".to_string(),
+            "keyword".to_string(),
+            "abc".to_string(),
+            on_submit,
+            on_cancel,
+            on_change,
+        );
+
+        assert_eq!(dialog.text, "abc");
+        assert_eq!(dialog.cursor_position, 3);
     }
 }
 
@@ -611,6 +634,7 @@ impl State {
         &mut self,
         prompt: String,
         placeholder: String,
+        value: String,
         on_submit: LuaFunction,
         on_cancel: LuaFunction,
         on_change: LuaFunction,
@@ -618,6 +642,7 @@ impl State {
         self.input_dialog = Some(InputDialog::new(
             prompt,
             placeholder,
+            value,
             on_submit,
             on_cancel,
             on_change,

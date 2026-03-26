@@ -310,6 +310,7 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
                 let placeholder: String = opts
                     .get("placeholder")
                     .unwrap_or_else(|_| "".to_string());
+                let value: String = opts.get("value").unwrap_or_else(|_| "".to_string());
                 let on_submit: LuaFunction = opts.get("on_submit")?;
 
                 // Default callbacks that do nothing
@@ -327,6 +328,7 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
                     Event::ShowInput {
                         prompt,
                         placeholder,
+                        value,
                         on_submit,
                         on_cancel,
                         on_change,

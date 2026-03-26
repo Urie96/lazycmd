@@ -153,6 +153,7 @@ lazycmd 自带多个示例插件：
 | `himalaya` | 邮件客户端       |
 | `systemd`  | systemd 服务管理 |
 | `docker`   | Docker 容器管理  |
+| `aria2`    | aria2 下载管理   |
 
 ## 键盘快捷键
 
