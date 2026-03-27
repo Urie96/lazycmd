@@ -85,6 +85,7 @@ scope(lua, state, sender, || {
 | `get_hovered_path()` | 获取悬停项路径 |
 | `argv()` | 获取命令行参数 |
 | `get_filter()` | 获取当前过滤条件 |
+| `get_available_keymaps()` | 获取当前上下文可用快捷键 |
 | `enter_filter_mode()` | 进入过滤模式 |
 | `exit_filter_mode()` | 退出过滤模式 |
 | `accept_filter()` | 应用过滤 |
@@ -156,12 +157,13 @@ end
 
 | 函数 | 说明 |
 |------|------|
-| `lc.keymap.set(mode, key, callback)` | 设置键盘映射 |
+| `lc.keymap.set(mode, key, callback[, opt])` | 设置键盘映射 |
 
 ```lua
 lc.keymap.set('main', 'q', function() lc.cmd('quit') end)
 lc.keymap.set('main', 'j', 'scroll_by 1')
 lc.keymap.set('main', '<C-x>', function() ... end)
+lc.keymap.set('main', '?', function() ... end, { desc = 'help' })
 ```
 
 `lc.config` 还支持 `keymap` 字段来覆盖内置主模式键位，例如：
@@ -184,15 +186,25 @@ lc.config {
 {
   key = "container-1",
   keymap = {
-    ["d"] = function() delete_container("container-1") end,
+    ["d"] = { callback = function() delete_container("container-1") end, desc = "delete" },
     ["gg"] = function() open_logs("container-1") end,
   },
 }
 ```
 
 - `entry.keymap` 会通过 Lua 表访问，支持由元表 `__index` 提供
-- key 是按键序列字符串，value 必须是 Lua 函数
+- key 是按键序列字符串，value 可以是 Lua 函数，或 `{ callback = fn, desc = "..." }`
 - 只要 `entry.keymap` 对当前按键缓冲区存在前缀匹配，就优先于全局 `lc.keymap.set`
+- `opt.desc` 可为全局 keymap 提供帮助面板中的描述文本
+
+`lc.api` 额外提供当前上下文可用快捷键查询：
+
+```lua
+local items = lc.api.get_available_keymaps()
+for _, item in ipairs(items) do
+  print(item.key, item.desc, item.source)
+end
+```
 
 页面 entry 也可以定义局部 preview：
 

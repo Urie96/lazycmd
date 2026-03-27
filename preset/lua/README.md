@@ -159,6 +159,7 @@ lc.http.request(opts, callback)
 | `Ctrl+r` | 刷新 |
 | `q` | 退出 |
 | `/` | 进入过滤模式 |
+| `?` | 打开快捷键帮助 |
 | `Esc` | 清除过滤 |
 | `←` | 返回上级 |
 | `→` / `Enter` | 进入目录 |
@@ -198,10 +199,15 @@ lc.json.decode(str)     -- JSON 字符串转 Lua 值
 设置键盘快捷键：
 
 ```lua
-lc.keymap.set(mode, key, callback)
+lc.keymap.set(mode, key, callback[, opt])
 -- mode: "main" 或 "input"
 -- key: 键序列（如 "j", "<C-d>", "<down>"）
 -- callback: 命令字符串或回调函数
+-- opt.desc: 可选描述，用于帮助面板
+```
+
+```lua
+lc.keymap.set('main', '?', function() end, { desc = 'help' })
 ```
 
 `lc.config` 支持通过 `keymap` 字段覆盖内置主模式快捷键：
@@ -224,12 +230,15 @@ lc.config {
 {
   key = "item",
   keymap = {
-    ["x"] = function() print("entry local action") end,
+    ["x"] = { callback = function() print("entry local action") end, desc = "run action" },
   },
 }
 ```
 
 当光标停在该 entry 上且 `entry.keymap` 对当前按键序列有前缀匹配时，会优先于全局 `lc.keymap.set`。
+`entry.keymap` 的值也可以写成 `{ callback = fn, desc = "..." }`，供帮助面板展示描述。
+
+可以通过 `lc.api.get_available_keymaps()` 获取当前上下文下可用的 entry/global 快捷键列表。
 
 页面 entry 还可以定义 `preview` 字段：
 

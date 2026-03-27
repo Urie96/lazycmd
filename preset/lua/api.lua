@@ -4,7 +4,7 @@ local api = {}
 ---@class PageEntry
 ---@field key string The unique key for the entry
 ---@field display? string|Span The display text or Span widget
----@field keymap? table<string, fun()> Entry-local keymap table, resolved from the entry/metatable and preferred over global keymaps when matched
+---@field keymap? table<string, fun()|{callback: fun(), desc?: string}> Entry-local keymap table, resolved from the entry/metatable and preferred over global keymaps when matched
 ---@field preview? fun(self: PageEntry, cb: fun(widget: string|Span|Text|Line)) Entry-local preview callback, preferred over plugin.preview when present
 ---@field [string] any Additional custom fields
 
@@ -57,6 +57,17 @@ function api.set_filter(filter) _lc.api.set_filter(filter) end
 ---Get the current filter string for the current page
 ---@return string filter The current filter string, or empty string if none
 function api.get_filter() return _lc.api.get_filter() end
+
+---@class AvailableKeymap
+---@field key string
+---@field desc? string
+---@field callback fun()
+---@field source "entry"|"global"
+
+---Get all currently available keymaps in the current context
+---Entry-local keymaps are returned before global keymaps
+---@return AvailableKeymap[]
+function api.get_available_keymaps() return _lc.api.get_available_keymaps() end
 
 lc.api = api
 

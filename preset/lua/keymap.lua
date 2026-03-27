@@ -3,6 +3,9 @@
 ---@class lc.keymap
 local keymap = {}
 
+---@class KeymapOptions
+---@field desc? string Human readable description for help panels
+
 ---@class lc.ConfigKeymap
 ---@field up? string
 ---@field down? string
@@ -23,7 +26,8 @@ local keymap = {}
 ---@param mode Mode The mode (e.g., "main", "input")
 ---@param key string The key sequence (e.g., "ctrl-d", "down", "j")
 ---@param callback string|fun() The command string or callback function
-function keymap.set(mode, key, callback) return _lc.keymap.set(mode, key, callback) end
+---@param opt? KeymapOptions Optional keymap metadata
+function keymap.set(mode, key, callback, opt) return _lc.keymap.set(mode, key, callback, opt) end
 
 ---@alias EntryKeymap table<string, fun()>
 

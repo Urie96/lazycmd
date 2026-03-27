@@ -5,8 +5,10 @@ use crate::Mode;
 
 pub struct Keymap {
     pub mode: Mode,
+    pub raw_key: String,
     pub key_sequence: KeySequence,
     pub callback: LuaFunction,
+    pub desc: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

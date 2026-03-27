@@ -48,6 +48,50 @@ pub struct SelectDialog {
     pub on_selection: LuaFunction,
 }
 
+#[derive(Clone)]
+pub struct AvailableKeymap {
+    pub key: String,
+    pub desc: Option<String>,
+    pub callback: LuaFunction,
+    pub source: &'static str,
+}
+
+fn resolve_entry_keymap_value(
+    hovered_key: &str,
+    key: &str,
+    value: LuaValue,
+) -> anyhow::Result<(LuaFunction, Option<String>)> {
+    match value {
+        LuaValue::Function(f) => Ok((f, None)),
+        LuaValue::Table(tbl) => {
+            let callback = match tbl
+                .get::<LuaValue>("callback")
+                .map_err(anyhow::Error::from)?
+            {
+                LuaValue::Function(f) => f,
+                other => {
+                    return Err(anyhow::anyhow!(
+                        "entry '{}' keymap callback for '{}' must be a function, got {}",
+                        hovered_key,
+                        key,
+                        other.type_name()
+                    ));
+                }
+            };
+            let desc = tbl
+                .get::<Option<String>>("desc")
+                .map_err(anyhow::Error::from)?;
+            Ok((callback, desc))
+        }
+        other => Err(anyhow::anyhow!(
+            "entry '{}' keymap callback for '{}' must be a function or table, got {}",
+            hovered_key,
+            key,
+            other.type_name()
+        )),
+    }
+}
+
 impl SelectDialog {
     pub fn new(
         prompt: Option<String>,
@@ -437,6 +481,28 @@ mod tests {
         }
     }
 
+    fn make_entry_with_desc(
+        lua: &Lua,
+        key: &str,
+        callback: mlua::Function,
+        desc: &str,
+    ) -> PageEntry {
+        let entry = lua.create_table().unwrap();
+        entry.set("key", "item").unwrap();
+
+        let entry_keymap = lua.create_table().unwrap();
+        let keymap_item = lua.create_table().unwrap();
+        keymap_item.set("callback", callback).unwrap();
+        keymap_item.set("desc", desc).unwrap();
+        entry_keymap.set(key, keymap_item).unwrap();
+        entry.set("keymap", entry_keymap).unwrap();
+
+        PageEntry {
+            key: "item".to_string(),
+            tbl: entry,
+        }
+    }
+
     #[test]
     fn entry_keymap_overrides_global_keymap() {
         let lua = Lua::new();
@@ -447,8 +513,10 @@ mod tests {
         )]);
         state.add_keymap(Keymap {
             mode: crate::Mode::Main,
+            raw_key: "x".to_string(),
             key_sequence: KeySequence::from("x"),
             callback: make_callback(&lua, "global"),
+            desc: None,
         });
 
         let cb = state
@@ -470,8 +538,10 @@ mod tests {
         )]);
         state.add_keymap(Keymap {
             mode: crate::Mode::Main,
+            raw_key: "x".to_string(),
             key_sequence: KeySequence::from("x"),
             callback: make_callback(&lua, "global"),
+            desc: None,
         });
 
         let cb = state
@@ -493,8 +563,10 @@ mod tests {
         )]);
         state.add_keymap(Keymap {
             mode: crate::Mode::Main,
+            raw_key: "g".to_string(),
             key_sequence: KeySequence::from("g"),
             callback: make_callback(&lua, "global"),
+            desc: None,
         });
 
         let first = state
@@ -530,6 +602,35 @@ mod tests {
 
         state.scroll_by(1);
         assert!(state.last_key_event_buffer.is_empty());
+    }
+
+    #[test]
+    fn available_keymaps_include_entry_and_global_desc() {
+        let lua = Lua::new();
+        let mut state = State::new();
+        state.set_current_page_entries(vec![make_entry_with_desc(
+            &lua,
+            "x",
+            make_callback(&lua, "entry"),
+            "play song",
+        )]);
+        state.add_keymap(Keymap {
+            mode: crate::Mode::Main,
+            raw_key: "q".to_string(),
+            key_sequence: KeySequence::from("q"),
+            callback: make_callback(&lua, "global"),
+            desc: Some("quit".to_string()),
+        });
+
+        let keymaps = state.available_keymaps().unwrap();
+
+        assert_eq!(keymaps.len(), 2);
+        assert_eq!(keymaps[0].source, "entry");
+        assert_eq!(keymaps[0].key, "x");
+        assert_eq!(keymaps[0].desc.as_deref(), Some("play song"));
+        assert_eq!(keymaps[1].source, "global");
+        assert_eq!(keymaps[1].key, "q");
+        assert_eq!(keymaps[1].desc.as_deref(), Some("quit"));
     }
 }
 
@@ -673,17 +774,7 @@ impl State {
             let (key, value) = pair.map_err(anyhow::Error::from).with_context(|| {
                 format!("Invalid keymap entry on hovered entry '{}'", hovered.key)
             })?;
-            let callback = match value {
-                LuaValue::Function(f) => f,
-                other => {
-                    return Err(anyhow::anyhow!(
-                        "entry '{}' keymap callback for '{}' must be a function, got {}",
-                        hovered.key,
-                        key,
-                        other.type_name()
-                    ));
-                }
-            };
+            let (callback, _) = resolve_entry_keymap_value(&hovered.key, &key, value)?;
 
             let key_sequence = KeySequence::from(key.as_str());
             if key_sequence.prefix_match(&self.last_key_event_buffer) {
@@ -695,6 +786,58 @@ impl State {
         }
 
         Ok(cands)
+    }
+
+    pub fn available_keymaps(&self) -> anyhow::Result<Vec<AvailableKeymap>> {
+        let mut keymaps = Vec::new();
+
+        if let Some(hovered) = self.hovered() {
+            if let Some(keymap_table) = hovered
+                .keymap_table()
+                .map_err(anyhow::Error::from)
+                .with_context(|| format!("Failed to read keymap for entry '{}'", hovered.key))?
+            {
+                for pair in keymap_table.pairs::<String, LuaValue>() {
+                    let (key, value) = pair.map_err(anyhow::Error::from).with_context(|| {
+                        format!("Invalid keymap entry on hovered entry '{}'", hovered.key)
+                    })?;
+                    let (callback, desc) = resolve_entry_keymap_value(&hovered.key, &key, value)?;
+
+                    keymaps.push(AvailableKeymap {
+                        key,
+                        desc,
+                        callback,
+                        source: "entry",
+                    });
+                }
+            }
+        }
+
+        keymaps.extend(
+            self.keymap_config
+                .iter()
+                .filter(|keymap| keymap.mode == self.current_mode)
+                .map(|keymap| AvailableKeymap {
+                    key: keymap.raw_key.clone(),
+                    desc: keymap.desc.clone(),
+                    callback: keymap.callback.clone(),
+                    source: "global",
+                }),
+        );
+
+        keymaps.sort_by(|a, b| {
+            let source_order = |source: &str| match source {
+                "entry" => 0,
+                _ => 1,
+            };
+
+            source_order(a.source)
+                .cmp(&source_order(b.source))
+                .then_with(|| a.key.cmp(&b.key))
+                .then_with(|| a.desc.cmp(&b.desc))
+        });
+
+        Ok(keymaps)
     }
 
     fn global_keymap_candidates(&self) -> Vec<ResolvedKeymap> {

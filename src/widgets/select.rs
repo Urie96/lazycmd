@@ -6,6 +6,69 @@ use crate::SelectDialog;
 /// Widget for rendering a select dialog
 pub struct SelectWidget;
 
+impl SelectWidget {
+    fn char_width(c: char) -> u16 {
+        c.width().unwrap_or(0) as u16
+    }
+
+    fn display_width(text: &str) -> u16 {
+        text.chars().map(Self::char_width).sum()
+    }
+
+    fn visible_window(text: &str, cursor_position: usize, max_width: u16) -> (String, u16) {
+        if text.is_empty() || max_width == 0 {
+            return (String::new(), 0);
+        }
+
+        let cursor_position = cursor_position.min(text.len());
+        let total_width_before_cursor = Self::display_width(&text[..cursor_position]);
+        let max_width_before_cursor = if total_width_before_cursor >= max_width {
+            max_width.saturating_sub(1)
+        } else {
+            max_width
+        };
+
+        let chars: Vec<(usize, char)> = text.char_indices().collect();
+        let char_count = chars.len();
+        let cursor_char_idx = chars
+            .iter()
+            .position(|(idx, _)| *idx >= cursor_position)
+            .unwrap_or(char_count);
+
+        let mut start_char_idx = 0usize;
+        let mut width_before_cursor = 0u16;
+        for idx in (0..cursor_char_idx).rev() {
+            let next_width = width_before_cursor.saturating_add(Self::char_width(chars[idx].1));
+            if next_width > max_width_before_cursor {
+                start_char_idx = idx + 1;
+                break;
+            }
+            width_before_cursor = next_width;
+        }
+
+        let start_byte = chars
+            .get(start_char_idx)
+            .map(|(idx, _)| *idx)
+            .unwrap_or(text.len());
+
+        let mut end_byte = text.len();
+        let mut visible_width = 0u16;
+        for idx in start_char_idx..char_count {
+            let ch_width = Self::char_width(chars[idx].1);
+            if visible_width.saturating_add(ch_width) > max_width {
+                end_byte = chars[idx].0;
+                break;
+            }
+            visible_width = visible_width.saturating_add(ch_width);
+        }
+
+        let visible_text = text[start_byte..end_byte].to_string();
+        let cursor_offset = Self::display_width(&text[start_byte..cursor_position]);
+
+        (visible_text, cursor_offset.min(max_width_before_cursor))
+    }
+}
+
 impl StatefulWidget for SelectWidget {
     type State = SelectDialog;
 
@@ -48,27 +111,49 @@ impl StatefulWidget for SelectWidget {
         let [input_area, divider_area, list_area] =
             Layout::vertical([Length(input_height), Length(divider_height), Min(0)]).areas(inner);
 
-        // Render filter input
+        let options = state.get_filtered_options();
         let prompt = " ";
+        let prompt_width = prompt.width() as u16;
+        let filtered_count = options.len();
+        let total_count = state.options.len();
+        let count_text = format!("{}/{}", filtered_count, total_count);
+        let count_width = count_text.width() as u16;
+        let gap_width = if inner.width > count_width { 1 } else { 0 };
+        let left_width = input_area
+            .width
+            .saturating_sub(count_width.saturating_add(gap_width));
+
+        let input_text_width = left_width.saturating_sub(prompt_width);
+        let (visible_filter_input, cursor_offset) =
+            Self::visible_window(&state.filter_input, state.cursor_position, input_text_width);
+
+        // Render filter input on the left side
         let filter_text = Text::from(Line::from(vec![
             Span::styled(prompt, Style::default().fg(Color::Cyan)),
-            Span::styled(
-                state.filter_input.as_str(),
-                Style::default().fg(Color::White),
-            ),
+            Span::styled(visible_filter_input, Style::default().fg(Color::White)),
         ]));
-        Paragraph::new(filter_text).render(input_area, buf);
+        let left_input_area = Rect {
+            x: input_area.x,
+            y: input_area.y,
+            width: left_width,
+            height: input_area.height,
+        };
+        Paragraph::new(filter_text).render(left_input_area, buf);
+
+        // Render count on the right side
+        let count_area = Rect {
+            x: input_area.right().saturating_sub(count_width),
+            y: input_area.y,
+            width: count_width,
+            height: input_area.height,
+        };
+        Paragraph::new(count_text)
+            .style(Style::default().fg(Color::DarkGray))
+            .alignment(Alignment::Right)
+            .render(count_area, buf);
 
         // Calculate and store cursor position
-        // Use unicode width for proper cursor positioning with Unicode characters
-        let prompt_width = prompt.width() as u16;
-        let cursor_char_width: u16 = state
-            .filter_input
-            .chars()
-            .take(state.cursor_position)
-            .map(|c| c.width().unwrap_or(0) as u16)
-            .sum();
-        let cursor_x = input_area.x + prompt_width + cursor_char_width;
+        let cursor_x = input_area.x + prompt_width + cursor_offset;
         let cursor_y = input_area.y;
         state.cursor_x = cursor_x;
         state.cursor_y = cursor_y;
@@ -79,9 +164,6 @@ impl StatefulWidget for SelectWidget {
                 .set_symbol(symbols::line::HORIZONTAL)
                 .set_style(Style::default().fg(Color::Cyan));
         }
-
-        // Render options list with custom styling
-        let options = state.get_filtered_options();
 
         // Adjust offset based on scrolloff (keep selected item away from edges)
         if let Some(selected) = state.selected_index {
@@ -176,5 +258,46 @@ impl StatefulWidget for SelectWidget {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SelectWidget;
+    use crate::{SelectDialog, SelectOption};
+    use mlua::Lua;
+    use ratatui::{buffer::Buffer, layout::Rect, text::Line, widgets::StatefulWidget};
+
+    #[test]
+    fn select_dialog_renders_filtered_count_in_input_row() {
+        let lua = Lua::new();
+        let on_selection = lua.create_function(|_, ()| Ok(())).unwrap().to_owned();
+        let options = vec![
+            SelectOption {
+                value: mlua::Value::Nil,
+                display: Line::from("alpha"),
+            },
+            SelectOption {
+                value: mlua::Value::Nil,
+                display: Line::from("beta"),
+            },
+            SelectOption {
+                value: mlua::Value::Nil,
+                display: Line::from("gamma"),
+            },
+        ];
+        let mut dialog = SelectDialog::new(Some("Select".to_string()), options, on_selection);
+        dialog.filter_input = "a".to_string();
+        dialog.cursor_position = 1;
+        dialog.update_filtered_options();
+
+        let area = Rect::new(0, 0, 30, 8);
+        let mut buf = Buffer::empty(area);
+        SelectWidget.render(area, &mut buf, &mut dialog);
+        let row = (0..area.width)
+            .map(|x| buf[(x, 1)].symbol())
+            .collect::<String>();
+
+        assert!(row.contains("3/3"));
     }
 }

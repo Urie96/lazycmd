@@ -124,6 +124,23 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
         })?
         .into_lua(lua)?;
 
+    let get_available_keymaps = lua
+        .create_function(|lua, ()| {
+            plugin::borrow_scope_state(lua, |state| {
+                let mut keymaps = Vec::new();
+                for item in state.available_keymaps().map_err(LuaError::external)? {
+                    let tbl = lua.create_table()?;
+                    tbl.set("key", item.key)?;
+                    tbl.set("desc", item.desc)?;
+                    tbl.set("callback", item.callback)?;
+                    tbl.set("source", item.source)?;
+                    keymaps.push(tbl);
+                }
+                lua.create_sequence_from(keymaps)
+            })
+        })?
+        .into_lua(lua)?;
+
     lua.create_table_from([
         ("page_set_entries", page_set_entries),
         ("page_get_entries", page_get_entries),
@@ -135,6 +152,7 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
         ("argv", argv),
         ("set_filter", set_filter),
         ("get_filter", get_filter),
+        ("get_available_keymaps", get_available_keymaps),
         ("append_hook_pre_reload", append_hook_pre_reload),
         ("append_hook_pre_quit", append_hook_pre_quit),
     ])

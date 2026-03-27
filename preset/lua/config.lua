@@ -16,6 +16,7 @@ local cfg = {
     back = '<left>',
     open = '<right>',
     enter = '<enter>',
+    help = '?',
   },
 }
 
@@ -64,16 +65,16 @@ local function guarded_preview_callback(hovered_path)
 end
 
 local function apply_configured_keymap()
-  local map = function(key, cb) lc.keymap.set('main', key, cb) end
-  map(cfg.keymap.up, 'scroll_by -1')
-  map(cfg.keymap.down, 'scroll_by 1')
-  map(cfg.keymap.top, 'scroll_by -9999')
-  map(cfg.keymap.bottom, 'scroll_by 9999')
-  map(cfg.keymap.preview_up, 'scroll_preview_by -30')
-  map(cfg.keymap.preview_down, 'scroll_preview_by 30')
-  map(cfg.keymap.reload, 'reload')
-  map(cfg.keymap.quit, 'quit')
-  map(cfg.keymap.force_quit, 'quit')
+  local map = function(key, cb, desc) lc.keymap.set('main', key, cb, { desc = desc }) end
+  map(cfg.keymap.up, 'scroll_by -1', 'move up')
+  map(cfg.keymap.down, 'scroll_by 1', 'move down')
+  map(cfg.keymap.top, 'scroll_by -9999', 'go to top')
+  map(cfg.keymap.bottom, 'scroll_by 9999', 'go to bottom')
+  map(cfg.keymap.preview_up, 'scroll_preview_by -30', 'scroll preview up')
+  map(cfg.keymap.preview_down, 'scroll_preview_by 30', 'scroll preview down')
+  map(cfg.keymap.reload, 'reload', 'reload')
+  map(cfg.keymap.quit, 'quit', 'quit')
+  map(cfg.keymap.force_quit, 'quit', 'force quit')
   map(cfg.keymap.filter, function()
     lc.input {
       prompt = 'Filter:',
@@ -83,11 +84,38 @@ local function apply_configured_keymap()
       on_submit = function(input) lc.api.set_filter(input) end,
       on_cancel = function() lc.api.set_filter '' end,
     }
-  end)
-  map(cfg.keymap.clear_filter, function() lc.api.set_filter '' end)
-  map(cfg.keymap.back, 'back')
-  map(cfg.keymap.open, 'enter')
-  map(cfg.keymap.enter, 'enter')
+  end, 'filter')
+  map(cfg.keymap.clear_filter, function() lc.api.set_filter '' end, 'clear filter')
+  map(cfg.keymap.back, 'back', 'back')
+  map(cfg.keymap.open, 'enter', 'open')
+  map(cfg.keymap.enter, 'enter', 'enter')
+  map(cfg.keymap.help, function()
+    local options = {}
+    local lines = {}
+
+    for _, item in ipairs(lc.api.get_available_keymaps()) do
+      local source = item.source == 'entry' and '[entry]' or '[global]'
+      local desc = item.desc or 'no description'
+      local line = lc.style.line {
+        lc.style.span(item.key):fg('yellow'),
+        '  ',
+        lc.style.span(source):fg(item.source == 'entry' and 'cyan' or 'blue'),
+        '  ',
+        lc.style.span(desc):fg('white'),
+      }
+      table.insert(lines, line)
+      table.insert(options, {
+        value = item,
+        display = line,
+      })
+    end
+
+    lc.style.align_columns(lines)
+
+    lc.select({ prompt = 'Available Keymaps', options = options }, function(choice)
+      if choice and choice.callback then choice.callback() end
+    end)
+  end, 'help')
 end
 
 local config = {}
