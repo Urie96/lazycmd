@@ -11,7 +11,7 @@
 - 🔌 **Lua 插件系统** - 使用 Lua 5.4 脚本语言扩展功能
 - 🎨 **语法高亮** - 内置 180+ 种编程语言语法高亮支持
 - 🖥️ **现代化 UI** - 使用 ratatui 构建的美观终端界面
-- ⌨️ **Vim 风格导航** - 支持 `j`/`k` 上下移动、`gg`/`G` 跳转、`/` 过滤等
+- ⌨️ **可配置键位导航** - 默认支持方向键、`gg`/`G`、`/` 等，并可通过 `lc.config.keymap` 覆盖
 - 💾 **页面缓存** - 目录导航时保持状态和滚动位置
 
 ## 预览
@@ -185,6 +185,11 @@ lazycmd 自带多个示例插件：
 
 ```lua
 lc.config {
+  keymap = {
+    enter = '<enter>',
+    filter = '/',
+    quit = 'q',
+  },
   plugins = {
     -- 远程插件字符串语法
     'owner/process.lazycmd',
@@ -240,6 +245,8 @@ lc.config {
   },
 }
 ```
+
+`keymap` 用于覆盖内置主模式快捷键。支持的字段有 `up`、`down`、`top`、`bottom`、`preview_up`、`preview_down`、`reload`、`quit`、`force_quit`、`filter`、`clear_filter`、`back`、`open`、`enter`。每次调用 `lc.config` 都会按当前 `keymap` 配置重新执行一遍 `lc.keymap.set(...)`。
 
 **语法说明**：
 

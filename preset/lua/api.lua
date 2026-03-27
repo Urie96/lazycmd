@@ -16,6 +16,10 @@ function api.page_set_entries(entries) return _lc.api.page_set_entries(entries) 
 ---@return PageEntry? entry The hovered entry or nil
 function api.page_get_hovered() return _lc.api.page_get_hovered() end
 
+---Get the full entry list for the current page before filtering
+---@return PageEntry[] entries The current page entries
+function api.page_get_entries() return _lc.api.page_get_entries() end
+
 ---Set the preview panel content
 ---@param widget string|Span|Text|Line The widget to display in the preview panel
 function api.page_set_preview(widget) return _lc.api.page_set_preview(widget) end

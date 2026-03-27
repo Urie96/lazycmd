@@ -11,6 +11,7 @@ preset/lua/
 ├── cache.lua         # 缓存 API 封装
 ├── clipboard.lua     # 系统剪贴板访问
 ├── component.lua     # UI 组件（对话框、通知）
+├── copy_from_neovim.lua # 从 Neovim 复用的表工具函数
 ├── fs.lua            # 文件系统 API 封装
 ├── http.lua          # HTTP API 封装
 ├── init.lua          # 初始化脚本（默认配置和键盘映射）
@@ -46,6 +47,7 @@ preset/lua 目录中的脚本是 Rust 后端 API 的 Lua 封装层。它们：
 
 ```lua
 lc.api.page_set_entries(entries)  -- 设置页面条目
+lc.api.page_get_entries()         -- 获取当前页面完整条目
 lc.api.page_get_hovered()         -- 获取当前悬停项
 lc.api.page_set_preview(widget)    -- 设置预览内容
 lc.api.go_to(path)                -- 导航到路径
@@ -119,9 +121,30 @@ lc.http.request(opts, callback)
 - 读取命令行参数确定默认插件
 - 根据 `plugins` 配置把本地 `dir` 和远程安装目录加入 `package.path`
 - 直接启动插件时，自动执行该插件在配置中的 `config/setup`
-- 设置默认键盘映射
+- 根据 `cfg.keymap` 注册默认主模式键盘映射
 - 加载用户配置（通过 `require 'init'`）
 - 实现 `lc._list()` 和 `lc._preview()` 入口函数
+
+默认配置中的 `keymap` 字段：
+
+```lua
+{
+  up = '<up>',
+  down = '<down>',
+  top = 'gg',
+  bottom = 'G',
+  preview_up = '<pageup>',
+  preview_down = '<pagedown>',
+  reload = '<C-r>',
+  quit = 'q',
+  force_quit = '<C-q>',
+  filter = '/',
+  clear_filter = '<esc>',
+  back = '<left>',
+  open = '<right>',
+  enter = '<enter>',
+}
+```
 
 默认键盘映射：
 
@@ -181,6 +204,20 @@ lc.keymap.set(mode, key, callback)
 -- callback: 命令字符串或回调函数
 ```
 
+`lc.config` 支持通过 `keymap` 字段覆盖内置主模式快捷键：
+
+```lua
+lc.config {
+  keymap = {
+    enter = '<enter>',
+    filter = '/',
+    quit = 'q',
+  },
+}
+```
+
+支持的字段有：`up`、`down`、`top`、`bottom`、`preview_up`、`preview_down`、`reload`、`quit`、`force_quit`、`filter`、`clear_filter`、`back`、`open`、`enter`。每次调用 `lc.config` 都会根据当前 `keymap` 重新调用一遍 `lc.keymap.set`。
+
 页面 entry 还可以定义 `keymap` 字段：
 
 ```lua
@@ -208,6 +245,19 @@ lc.keymap.set(mode, key, callback)
 ```
 
 当光标停在该 entry 上且 `entry.preview` 存在时，会优先于插件级 `preview(entry, cb)`。如果回调执行时 hovered entry 已经变化，这次预览更新会被自动忽略。
+
+`entry.preview` 既可以异步调用 `cb(preview)`，也可以直接 `return preview` 返回同步结果：
+
+```lua
+{
+  key = "item",
+  preview = function(self)
+    return lc.style.text {
+      lc.style.line { "Immediate preview for " .. self.key },
+    }
+  end,
+}
+```
 
 ### string.lua - 字符串扩展
 
@@ -274,11 +324,22 @@ lc.time.format(1704067200, "compact")  -- 紧凑格式
 通用工具函数：
 
 ```lua
-lc.tbl_map(func, t)       -- 表值映射
-lc.tbl_extend(target, ...) -- 深度扩展表
-lc.list_extend(dst, src)   -- 列表追加
-lc.equals(o1, o2)          -- 深度比较
 lc.osc52_copy(text)        -- 复制到剪贴板
+```
+
+### copy_from_neovim.lua - 表工具函数
+
+从 Neovim 代码中整理出的通用表操作函数：
+
+```lua
+lc.tbl_isempty(t)                     -- 判断表是否为空
+lc.islist(t)                          -- 判断是否为连续数组
+lc.tbl_extend('force', a, b, ...)     -- 浅合并多个表
+lc.tbl_deep_extend('force', a, b, ...) -- 深合并多个表
+lc.deep_equal(a, b)                   -- 深度比较
+lc.tbl_map(func, t)                   -- 表值映射
+lc.tbl_filter(func, t)                -- 过滤列表
+lc.list_extend(dst, src)              -- 列表追加
 ```
 
 ### plugin_manager.lua - 插件管理核心
@@ -347,25 +408,27 @@ Lua 语言服务器类型声明文件，为 IDE 提供类型提示。
 预设文件按以下顺序加载（参见 `src/plugin/lua.rs`）：
 
 1. `system.lua`
-2. `component.lua`
-3. `api.lua`
-4. `style.lua`
-5. `interactive.lua`
-6. `string.lua`
-7. `inspect.lua`
-8. `json.lua`
-9. `time.lua`
-10. `keymap.lua`
-11. `http.lua`
-12. `cache.lua`
-13. `fs.lua`
-14. `util.lua`
-15. `base64.lua`
-16. `clipboard.lua`
-17. `yaml.lua`
-18. `plugin_manager.lua` ← 插件管理核心逻辑（提供 `lc._pm`）
-19. `manager.lua` ← 插件管理器 UI（提供 `lc._manager`）
-20. `init.lua` ← 最后加载，执行初始化逻辑
+2. `copy_from_neovim.lua`
+3. `socket.lua`
+4. `component.lua`
+5. `api.lua`
+6. `style.lua`
+7. `interactive.lua`
+8. `string.lua`
+9. `inspect.lua`
+10. `json.lua`
+11. `time.lua`
+12. `keymap.lua`
+13. `http.lua`
+14. `cache.lua`
+15. `fs.lua`
+16. `util.lua`
+17. `base64.lua`
+18. `clipboard.lua`
+19. `yaml.lua`
+20. `plugin_manager.lua` ← 插件管理核心逻辑（提供 `lc._pm`）
+21. `manager.lua` ← 插件管理器 UI（提供 `lc._manager`）
+22. `init.lua` ← 最后加载，执行初始化逻辑
 
 ## 使用示例
 

@@ -1,6 +1,22 @@
 local args = lc.api.argv()
 local cfg = {
   default_plugin = args[2],
+  keymap = {
+    up = '<up>',
+    down = '<down>',
+    top = 'gg',
+    bottom = 'G',
+    preview_up = '<pageup>',
+    preview_down = '<pagedown>',
+    reload = '<C-r>',
+    quit = 'q',
+    force_quit = '<C-q>',
+    filter = '/',
+    clear_filter = '<esc>',
+    back = '<left>',
+    open = '<right>',
+    enter = '<enter>',
+  },
 }
 
 local function append_package_path(paths, path, seen)
@@ -12,7 +28,7 @@ end
 
 local function add_config_base_path()
   local package = require 'package'
-  local base_dir = os.getenv('HOME') .. '/.config/lazycmd'
+  local base_dir = os.getenv 'HOME' .. '/.config/lazycmd'
 
   local paths = { package.path }
   local seen = {}
@@ -43,13 +59,45 @@ add_config_base_path()
 
 local function guarded_preview_callback(hovered_path)
   return function(preview)
-    if lc.equals(hovered_path, lc.api.get_hovered_path()) then lc.api.page_set_preview(preview) end
+    if lc.deep_equal(hovered_path, lc.api.get_hovered_path()) then lc.api.page_set_preview(preview) end
   end
 end
 
-function lc.config(opt)
-  cfg = lc.tbl_extend(cfg, opt or {})
+local function apply_configured_keymap()
+  local map = function(key, cb) lc.keymap.set('main', key, cb) end
+  map(cfg.keymap.up, 'scroll_by -1')
+  map(cfg.keymap.down, 'scroll_by 1')
+  map(cfg.keymap.top, 'scroll_by -9999')
+  map(cfg.keymap.bottom, 'scroll_by 9999')
+  map(cfg.keymap.preview_up, 'scroll_preview_by -30')
+  map(cfg.keymap.preview_down, 'scroll_preview_by 30')
+  map(cfg.keymap.reload, 'reload')
+  map(cfg.keymap.quit, 'quit')
+  map(cfg.keymap.force_quit, 'quit')
+  map(cfg.keymap.filter, function()
+    lc.input {
+      prompt = 'Filter:',
+      placeholder = '输入筛选内容...',
+      value = lc.api.get_filter(),
+      on_change = function(input) lc.api.set_filter(input) end,
+      on_submit = function(input) lc.api.set_filter(input) end,
+      on_cancel = function() lc.api.set_filter '' end,
+    }
+  end)
+  map(cfg.keymap.clear_filter, function() lc.api.set_filter '' end)
+  map(cfg.keymap.back, 'back')
+  map(cfg.keymap.open, 'enter')
+  map(cfg.keymap.enter, 'enter')
+end
+
+local config = {}
+
+function config.get() return cfg end
+
+function config.setup(opt)
+  cfg = lc.tbl_deep_extend('force', cfg, opt or {})
   add_plugin_paths(cfg.plugins)
+  apply_configured_keymap()
 
   local ok, plugin = pcall(require, cfg.default_plugin)
 
@@ -72,7 +120,7 @@ function lc.config(opt)
     local path = lc.api.get_current_path()
     if plugin.list then
       plugin.list(path, function(entries)
-        if lc.equals(path, lc.api.get_current_path()) then lc.api.page_set_entries(entries) end
+        if lc.deep_equal(path, lc.api.get_current_path()) then lc.api.page_set_entries(entries) end
       end)
     end
   end
@@ -84,14 +132,20 @@ function lc.config(opt)
 
     local cb = guarded_preview_callback(path)
     if type(entry.preview) == 'function' then
-      entry:preview(cb)
+      local preview_text = entry:preview(cb)
+      if preview_text then cb(preview_text) end
       return
     end
 
-    if plugin.preview then
-      plugin.preview(entry, cb)
-    end
+    if plugin.preview then plugin.preview(entry, cb) end
   end
 end
+
+lc.config = config
+
+-- Set metatable on lc.system to handle multiple argument formats
+setmetatable(lc.config, {
+  __call = function(self, opt) lc.config.setup(opt) end,
+})
 
 require 'init'

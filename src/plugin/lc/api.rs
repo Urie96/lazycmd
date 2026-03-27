@@ -58,6 +58,20 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
         })?
         .into_lua(lua)?;
 
+    let page_get_entries = lua
+        .create_function(|lua, ()| {
+            plugin::borrow_scope_state(lua, |state| {
+                let entries = state
+                    .current_page
+                    .as_ref()
+                    .map(|page| page.list.iter().map(|entry| entry.tbl.clone()))
+                    .into_iter()
+                    .flatten();
+                lua.create_sequence_from(entries)
+            })
+        })?
+        .into_lua(lua)?;
+
     let argv = lua
         .create_function(|lua, ()| lua.create_sequence_from(std::env::args()))?
         .into_lua(lua)?;
@@ -112,6 +126,7 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
 
     lua.create_table_from([
         ("page_set_entries", page_set_entries),
+        ("page_get_entries", page_get_entries),
         ("page_get_hovered", page_get_hovered),
         ("page_set_preview", page_set_preview),
         ("go_to", go_to),

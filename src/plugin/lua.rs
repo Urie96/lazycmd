@@ -39,6 +39,7 @@ pub fn init_lua(lua: &Lua) -> mlua::Result<()> {
     }
 
     load_preset!("system")?;
+    load_preset!("copy_from_neovim")?;
     load_preset!("socket")?;
     load_preset!("component")?;
     load_preset!("api")?;
@@ -58,7 +59,6 @@ pub fn init_lua(lua: &Lua) -> mlua::Result<()> {
     load_preset!("yaml")?;
     load_preset!("plugin_manager")?;
     load_preset!("manager")?;
-    load_preset!("default_keymap")?;
-    load_preset!("init")?;
+    load_preset!("config")?;
     Ok(())
 }

@@ -29,6 +29,7 @@ src/plugin/
 负责初始化 Lua 环境和加载预设文件：
 
 - `init_lua()` - 初始化 Lua 环境并设置配置基准目录
+- 预设加载顺序包含 `util.lua`、`copy_from_neovim.lua`、`init.lua` 等基础模块
 - `package.path` 由 `preset/lua/init.lua` 根据 `plugins` 配置动态追加
 
 **插件路径搜索顺序**（`package.path`）：
@@ -76,6 +77,7 @@ scope(lua, state, sender, || {
 | 函数 | 说明 |
 |------|------|
 | `page_set_entries(entries)` | 设置页面条目列表 |
+| `page_get_entries()` | 获取当前页面完整条目列表（过滤前） |
 | `page_get_hovered()` | 获取当前悬停条目 |
 | `page_set_preview(preview)` | 设置预览内容 |
 | `go_to(path)` | 导航到指定路径 |
@@ -162,6 +164,20 @@ lc.keymap.set('main', 'j', 'scroll_by 1')
 lc.keymap.set('main', '<C-x>', function() ... end)
 ```
 
+`lc.config` 还支持 `keymap` 字段来覆盖内置主模式键位，例如：
+
+```lua
+lc.config {
+  keymap = {
+    enter = '<enter>',
+    filter = '/',
+    quit = 'q',
+  },
+}
+```
+
+支持的键位名包括 `up`、`down`、`top`、`bottom`、`preview_up`、`preview_down`、`reload`、`quit`、`force_quit`、`filter`、`clear_filter`、`back`、`open`、`enter`。每次调用 `lc.config` 都会按这些配置重新执行一遍 `lc.keymap.set`。
+
 页面 entry 也可以定义局部 keymap：
 
 ```lua
@@ -192,6 +208,7 @@ lc.keymap.set('main', '<C-x>', function() ... end)
 ```
 
 - `entry.preview(cb)` 的优先级高于插件级 `plugin.preview(entry, cb)`
+- `entry.preview` 可以异步调用 `cb(preview)`，也可以直接返回一个 preview widget 作为同步结果
 - `entry.preview` 同样通过 Lua 表访问，支持由元表 `__index` 提供
 - 当异步回调返回时，如果当前 hovered entry 已经变化，这次 preview 更新会被丢弃
 
@@ -269,6 +286,12 @@ lc.keymap.set('main', '<C-x>', function() ... end)
 | `lc.split(s, sep)` | 分割字符串 |
 | `lc.log(level, msg, ...)` | 写入日志 |
 | `lc.osc52_copy(text)` | 通过 OSC 52 复制到剪贴板 |
+| `lc.tbl_extend(behavior, ...)` | 浅合并多个表 |
+| `lc.tbl_deep_extend(behavior, ...)` | 深合并多个表 |
+| `lc.deep_equal(a, b)` | 深度比较两个值 |
+| `lc.tbl_map(func, t)` | 映射表值 |
+| `lc.tbl_filter(func, t)` | 过滤列表 |
+| `lc.list_extend(dst, src)` | 追加列表内容 |
 | `lc.notify(msg)` | 显示通知 (支持 string、Span、Line 或 Text 类型) |
 | `lc.confirm(opts)` | 显示确认对话框 |
 | `lc.select(opts, callback)` | 显示选择对话框 |
