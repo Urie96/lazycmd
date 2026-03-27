@@ -292,7 +292,8 @@ lc.style.align_columns(lines)    -- 列对齐
 ```lua
 lc.system.exec({cmd = {"ls", "-la"}, callback = function(out) end})
 lc.system.exec({"ls", "-la"}, function(out) end)
-lc.system.spawn({"mpv", "--idle=yes"})
+local pid = lc.system.spawn({"mpv", "--idle=yes"})
+lc.system.kill(pid) -- 默认发送 SIGTERM
 lc.system.executable("rustc")  -- 检查命令是否存在
 lc.system.open("file.txt")       -- 用默认应用打开文件
 ```

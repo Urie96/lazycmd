@@ -3,7 +3,7 @@ use mlua::prelude::*;
 use std::process::Stdio;
 use tokio::process::Command;
 
-/// Create the lc.system table with executable, open, and _exec functions
+/// Create the lc.system table with executable, open, exec, spawn, and kill functions
 pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
     let system_tbl = lua.create_table()?;
 
@@ -133,7 +133,7 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
 
     system_tbl.set(
         "spawn",
-        lua.create_function(|_lua, args: LuaTable| -> mlua::Result<()> {
+        lua.create_function(|_lua, args: LuaTable| -> mlua::Result<u32> {
             let cmd: Vec<String> = args.get("cmd")?;
 
             if cmd.is_empty() {
@@ -153,15 +153,35 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
             cmd_builder.stderr(Stdio::null());
             cmd_builder.kill_on_drop(false);
 
-            cmd_builder.spawn().map_err(|e| {
+            let child = cmd_builder.spawn().map_err(|e| {
                 LuaError::RuntimeError(format!(
                     "Failed to spawn background command '{}': {}",
                     command, e
                 ))
             })?;
 
-            Ok(())
+            Ok(child.id().unwrap_or(0))
         })?
+        .into_lua(lua)?,
+    )?;
+
+    system_tbl.set(
+        "kill",
+        lua.create_function(
+            |_lua, (pid, signal): (u32, Option<i32>)| -> mlua::Result<()> {
+                let sig = signal.unwrap_or(libc::SIGTERM);
+                let rc = unsafe { libc::kill(pid as i32, sig) };
+                if rc == 0 {
+                    Ok(())
+                } else {
+                    Err(LuaError::RuntimeError(format!(
+                        "Failed to kill process {}: {}",
+                        pid,
+                        std::io::Error::last_os_error()
+                    )))
+                }
+            },
+        )?
         .into_lua(lua)?,
     )?;
 

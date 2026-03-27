@@ -237,9 +237,10 @@ lc.config {
 | 函数 | 说明 |
 |------|------|
 | `lc.system.executable(cmd)` | 检查命令是否可执行 |
+| `lc.system.spawn(cmd)` | 启动后台命令并返回 pid |
+| `lc.system.kill(pid[, signal])` | 向进程发送信号，默认 `SIGTERM` |
 | `lc.system.open(path)` | 用默认应用打开文件 |
 | `lc.system.exec(opts)` | 异步执行命令 |
-| `lc.system.spawn(cmd)` | 启动后台命令 |
 | `lc.system.interactive(opts)` | 执行交互式命令 |
 
 ### lc.socket - 长连接 Socket

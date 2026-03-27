@@ -57,7 +57,13 @@ function system.executable(cmd) return _lc.system.executable(cmd) end
 
 ---Spawn a detached background process without waiting for completion.
 ---@param cmd string[] The command and its arguments
+---@return integer pid Spawned process id
 function system.spawn(cmd) return _lc.system.spawn({ cmd = cmd }) end
+
+---Send a signal to a process.
+---@param pid integer Process id
+---@param signal integer? Signal number, defaults to SIGTERM
+function system.kill(pid, signal) return _lc.system.kill(pid, signal) end
 
 ---Open a file using the system's default application
 ---Cross-platform support: uses 'open' on macOS, 'xdg-open' on Linux, 'start' on Windows
