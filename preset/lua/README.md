@@ -118,9 +118,9 @@ lc.http.request(opts, callback)
 
 应用启动时执行的默认初始化：
 
-- 读取命令行参数确定默认插件
 - 根据 `plugins` 配置把本地 `dir` 和远程安装目录加入 `package.path`
-- 直接启动插件时，自动执行该插件在配置中的 `config/setup`
+- 根路径 `/` 固定展示所有已配置插件
+- 进入 `/plugin_name/...` 时懒加载该插件并执行其 `config/setup`
 - 根据 `cfg.keymap` 注册默认主模式键盘映射
 - 加载用户配置（通过 `require 'init'`）
 - 实现 `lc._list()` 和 `lc._preview()` 入口函数
@@ -400,7 +400,7 @@ lc._pm.write_lock(lock)
 
 ### manager.lua - 插件管理器 UI
 
-内置插件管理界面。当不带参数启动 lazycmd 时自动加载。提供以下函数：
+内置插件管理界面。启动 lazycmd 后自动加载。提供以下函数：
 
 ```lua
 local manager = lc._manager

@@ -100,7 +100,7 @@ lazycmd/
 使用 `just` 或 `cargo` 进行开发：
 
 ```bash
-cargo run -- <plugin_name>  # 运行指定插件（如 process, memos）
+cargo run                   # 运行 lazycmd
 cargo build                 # Debug 构建
 cargo run --release        # Release 构建
 cargo test                 # 运行测试
@@ -110,9 +110,10 @@ cargo test <test_name>     # 运行单个测试
 ### 运行插件
 
 ```bash
-cargo run -- process    # 进程管理器
-cargo run -- memos      # Memos 笔记
-cargo run -- docker     # Docker 管理
+cargo run                   # 启动 lazycmd，进入插件管理器
+
+# 构建后的二进制用法：
+lazycmd                     # 启动 lazycmd，进入插件管理器
 ```
 
 ## 代码质量
@@ -149,7 +150,7 @@ tail -f ~/.local/state/lazycmd/lua.log
 tmux new-session -d -s lazycmd-test -x 80 -y 24
 
 # 从源码启动 lazycmd
-tmux send-keys -t lazycmd-test "cargo run -- process" Enter
+tmux send-keys -t lazycmd-test "cargo run" Enter
 
 # 等待启动，然后捕获输出
 sleep 1 && tmux capture-pane -t lazycmd-test -p
@@ -191,7 +192,7 @@ tmux kill-session -t lazycmd-test
 
 1. 创建 `plugins/myplugin.lazycmd/myplugin/init.lua`（或在 `config/` 对应目录）
 2. 在 `config/init.lua` 中添加插件配置
-3. 运行 `cargo run -- myplugin`
+3. 运行 `cargo run` 后进入 `/myplugin`
 
 ## 文档更新
 

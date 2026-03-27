@@ -677,8 +677,6 @@ pub struct State {
     pub pre_reload_hooks: Vec<LuaFunction>,
     /// Hooks to call before quit command
     pub pre_quit_hooks: Vec<LuaFunction>,
-    /// Current plugin name
-    pub current_plugin: String,
     /// Confirm dialog state (shown on top of all UI)
     pub confirm_dialog: Option<ConfirmDialog>,
     /// Select dialog state (shown on top of all UI)

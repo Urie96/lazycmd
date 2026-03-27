@@ -1,6 +1,4 @@
-local args = lc.api.argv()
 local cfg = {
-  default_plugin = args[2],
   keymap = {
     up = '<up>',
     down = '<down>',
@@ -57,6 +55,72 @@ local function add_plugin_paths(plugins)
 end
 
 add_config_base_path()
+
+local runtime = {
+  explicit_plugin_specs = {},
+  plugin_specs_by_name = {},
+  loaded_plugins = {},
+}
+
+local function rebuild_plugin_index()
+  runtime.explicit_plugin_specs = {}
+  runtime.plugin_specs_by_name = {}
+  runtime.loaded_plugins = {}
+
+  for _, plugin_spec in ipairs(cfg.plugins or {}) do
+    local spec = lc._pm.parse_plugin_spec(plugin_spec)
+    if spec then
+      table.insert(runtime.explicit_plugin_specs, spec)
+      runtime.plugin_specs_by_name[spec.name] = spec
+    end
+  end
+end
+
+local function plugin_status(spec)
+  if spec.is_remote and not lc._pm.is_installed(spec) then return 'missing' end
+  return 'installed'
+end
+
+local function plugin_display(spec)
+  local color = plugin_status(spec) == 'missing' and 'yellow' or 'white'
+  return lc.style.line {
+    lc.style.span(spec.name):fg(color),
+  }
+end
+
+local function list_root_plugins(cb)
+  local entries = {}
+  for _, spec in ipairs(runtime.explicit_plugin_specs) do
+    table.insert(entries, {
+      key = spec.name,
+      repo = spec.repo,
+      url = spec.url,
+      dir = spec.dir,
+      is_remote = spec.is_remote,
+      is_dependency = false,
+      status = plugin_status(spec),
+      display = plugin_display(spec),
+      preview = function(self, preview_cb) lc._manager.preview(self, preview_cb) end,
+    })
+  end
+  cb(entries)
+end
+
+local function ensure_plugin(name)
+  if runtime.loaded_plugins[name] ~= nil then return runtime.loaded_plugins[name] end
+
+  local spec = runtime.plugin_specs_by_name[name]
+  if not spec then return nil, 'Unknown plugin: ' .. tostring(name) end
+
+  local ok, plugin = pcall(require, name)
+  if not ok then return nil, plugin end
+
+  local ok_config, config_err = pcall(spec.config)
+  if not ok_config then return nil, config_err end
+
+  runtime.loaded_plugins[name] = plugin or {}
+  return runtime.loaded_plugins[name]
+end
 
 local function guarded_preview_callback(hovered_path)
   return function(preview)
@@ -124,28 +188,28 @@ function config.get() return cfg end
 
 function config.setup(opt)
   cfg = lc.tbl_deep_extend('force', cfg, opt or {})
+  rebuild_plugin_index()
   add_plugin_paths(cfg.plugins)
   apply_configured_keymap()
-
-  local ok, plugin = pcall(require, cfg.default_plugin)
-
-  if not ok then
-    lc._manager.setup(cfg.plugins)
-    lc._pm.install_missing(cfg.plugins, function() lc.cmd 'reload' end)
-    plugin = lc._manager
-  else
-    -- When launching a plugin directly, still apply its configured setup.
-    for _, p in ipairs(cfg.plugins or {}) do
-      local spec = lc._pm.parse_plugin_spec(p)
-      if spec and spec.name == cfg.default_plugin then
-        spec.config()
-        break
-      end
-    end
-  end
+  lc._manager.setup(cfg.plugins)
+  lc._pm.install_missing(cfg.plugins, function() lc.cmd 'reload' end)
 
   function lc._list()
     local path = lc.api.get_current_path()
+    if #path == 0 then
+      list_root_plugins(function(entries)
+        if lc.deep_equal(path, lc.api.get_current_path()) then lc.api.page_set_entries(entries) end
+      end)
+      return
+    end
+
+    local plugin, err = ensure_plugin(path[1])
+    if not plugin then
+      lc.notify(tostring(err))
+      lc.api.page_set_entries {}
+      return
+    end
+
     if plugin.list then
       plugin.list(path, function(entries)
         if lc.deep_equal(path, lc.api.get_current_path()) then lc.api.page_set_entries(entries) end
@@ -165,7 +229,14 @@ function config.setup(opt)
       return
     end
 
-    if plugin.preview then plugin.preview(entry, cb) end
+    local current_path = lc.api.get_current_path()
+    if #current_path == 0 then
+      cb ''
+      return
+    end
+
+    local plugin = ensure_plugin(current_path[1])
+    if plugin and plugin.preview then plugin.preview(entry, cb) end
   end
 end
 

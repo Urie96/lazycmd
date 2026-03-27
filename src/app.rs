@@ -36,15 +36,8 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(
-        event_sender: mpsc::UnboundedSender<Event>,
-        term: Term,
-        plugin_name: Option<String>,
-    ) -> Self {
+    pub fn new(event_sender: mpsc::UnboundedSender<Event>, term: Term) -> Self {
         let mut state = State::new();
-        if let Some(name) = plugin_name {
-            state.current_plugin = name;
-        }
         let lua = Lua::new();
 
         plugin::scope(&lua, &mut state, &event_sender, || plugin::init_lua(&lua))

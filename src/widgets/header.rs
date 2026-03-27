@@ -21,34 +21,14 @@ impl StatefulWidget for HeaderWidget {
             .map(|p| p.list_filter.as_str())
             .unwrap_or("");
 
-        // Build styled spans
-        let text = if state.current_plugin.is_empty() {
-            // Just path in cyan, plus filter if active
-            let mut spans = vec![Span::styled(path_str, Style::default().fg(Color::Cyan))];
-            if !filter.is_empty() {
-                spans.push(Span::styled(
-                    format!(" [filter: {}]", filter),
-                    Style::default().fg(Color::Yellow),
-                ));
-            }
-            Text::from(Line::from(spans))
-        } else {
-            // Plugin name with colon (green) + path (cyan) + filter (yellow)
-            let mut spans = vec![
-                Span::styled(
-                    format!("{}:", state.current_plugin),
-                    Style::default().fg(Color::Green),
-                ),
-                Span::styled(path_str, Style::default().fg(Color::Cyan)),
-            ];
-            if !filter.is_empty() {
-                spans.push(Span::styled(
-                    format!(" [filter: {}]", filter),
-                    Style::default().fg(Color::Yellow),
-                ));
-            }
-            Text::from(Line::from(spans))
-        };
+        let mut spans = vec![Span::styled(path_str, Style::default().fg(Color::Cyan))];
+        if !filter.is_empty() {
+            spans.push(Span::styled(
+                format!(" [filter: {}]", filter),
+                Style::default().fg(Color::Yellow),
+            ));
+        }
+        let text = Text::from(Line::from(spans));
 
         Paragraph::new(text).render(area, buf);
     }

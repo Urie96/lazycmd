@@ -38,15 +38,7 @@ async fn main() -> anyhow::Result<()> {
 
             let events = events::Events::new();
 
-            // Get plugin name from command line argument
-            let args: Vec<String> = std::env::args().collect();
-            let plugin_name = if args.len() >= 2 {
-                Some(args[1].clone())
-            } else {
-                None
-            };
-
-            let mut app = App::new(events.sender(), term, plugin_name);
+            let mut app = App::new(events.sender(), term);
 
             if let Err(e) = app.run(events).await {
                 term::restore();

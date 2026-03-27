@@ -17,7 +17,7 @@
 ## 预览
 
 ```
-docker:/container
+/docker/container
 ╭────────────────────────────────┬───────────────────────────────╮
 │ intelligent_benz redis:alpine  │🆔 ID:         15eb56799f61    │
 │myalpine         alpine       │📊 State:      running         │
@@ -49,7 +49,7 @@ cd lazycmd
 cargo build --release
 
 # 运行
-cargo run --release -- <plugin_name>
+cargo run --release
 ```
 
 ## 项目结构
@@ -102,6 +102,7 @@ end
 
 -- 列出条目（必需）
 function M.list(path, cb)
+    -- path 为绝对路径，例如 {'docker', 'container'}
     -- 获取条目列表
     -- cb(entries) 回调传递结果
 end
@@ -263,11 +264,10 @@ lc.config {
 
 ### 插件管理器
 
-不带参数启动 lazycmd 时，会自动进入插件管理器界面：
+启动 lazycmd 后，会进入插件管理器界面：
 
 ```bash
 lazycmd          # 进入插件管理器
-lazycmd process  # 直接运行指定插件
 ````
 
 在插件管理器界面中：
