@@ -58,13 +58,15 @@ local function parse_plugin_spec(spec)
     name = source
   end
 
-  local branch, tag, commit, config_fn, dependencies
+  local branch, tag, commit, config_fn
   if type(spec) == 'table' then
     branch = spec.branch
     tag = spec.tag
     commit = spec.commit
     config_fn = spec.config
-    dependencies = spec.dependencies
+    if spec.dependencies ~= nil then
+      error("plugin spec no longer supports 'dependencies'; list all plugins directly in lc.config.plugins")
+    end
   end
 
   if not config_fn then
@@ -76,23 +78,12 @@ local function parse_plugin_spec(spec)
     end
   end
 
-  local parsed_deps = {}
-  if dependencies then
-    for _, dep in ipairs(dependencies) do
-      local dep_spec = parse_plugin_spec(dep)
-      if dep_spec then
-        parsed_deps[#parsed_deps + 1] = dep_spec
-      end
-    end
-  end
-
   local result = {
     name = name,
     branch = branch,
     tag = tag,
     commit = commit,
     config = config_fn,
-    dependencies = parsed_deps,
   }
 
   if dir then
@@ -114,21 +105,12 @@ local function flatten_plugins(plugins)
   local seen = {}
   local result = {}
 
-  local function add_plugin(spec)
-    if not spec then return end
-    if seen[spec.name] then return end
-    seen[spec.name] = true
-
-    for _, dep in ipairs(spec.dependencies or {}) do
-      add_plugin(dep)
-    end
-
-    result[#result + 1] = spec
-  end
-
   for _, p in ipairs(plugins or {}) do
     local spec = parse_plugin_spec(p)
-    add_plugin(spec)
+    if spec and not seen[spec.name] then
+      seen[spec.name] = true
+      result[#result + 1] = spec
+    end
   end
 
   return result
@@ -328,7 +310,7 @@ return { parse = parse_plugin_spec, flatten = flatten_plugins, remotes = get_rem
     }
 
     #[test]
-    fn test_parse_with_dependencies() -> mlua::Result<()> {
+    fn test_parse_with_dependencies_errors() -> mlua::Result<()> {
         let lua = Lua::new();
         let (parse, _, _) = load_test_module(&lua)?;
 
@@ -338,14 +320,8 @@ return { parse = parse_plugin_spec, flatten = flatten_plugins, remotes = get_rem
         deps.set(1, "owner/dep1.lazycmd")?;
         deps.set(2, "owner/dep2.lazycmd")?;
         spec.set("dependencies", deps)?;
-        let result: mlua::Table = parse.call(spec)?;
-
-        let deps: mlua::Table = result.get("dependencies")?;
-        assert_eq!(deps.len()?, 2);
-
-        let dep1: mlua::Table = deps.get(1)?;
-        let dep1_name: String = dep1.get("name")?;
-        assert_eq!(dep1_name, "dep1");
+        let err = parse.call::<mlua::Value>(spec).unwrap_err();
+        assert!(err.to_string().contains("no longer supports 'dependencies'"));
 
         Ok(())
     }
@@ -356,23 +332,16 @@ return { parse = parse_plugin_spec, flatten = flatten_plugins, remotes = get_rem
         let (_, flatten, _) = load_test_module(&lua)?;
 
         let plugins = lua.create_table()?;
-        let dep = lua.create_table()?;
-        dep.set(1, "owner/dep.lazycmd")?;
-        let main_spec = lua.create_table()?;
-        main_spec.set(1, "owner/main.lazycmd")?;
-        main_spec.set("dependencies", dep)?;
-        plugins.set(1, main_spec)?;
+        plugins.set(1, "owner/main.lazycmd")?;
         plugins.set(2, "owner/other.lazycmd")?;
 
         let result: Vec<mlua::Table> = flatten.call(plugins)?;
 
-        // Should have 3 plugins: dep (first due to dependency), main, other
-        assert_eq!(result.len(), 3);
-        // Dep should come before main
+        assert_eq!(result.len(), 2);
         let name0: String = result[0].get("name")?;
         let name1: String = result[1].get("name")?;
-        assert_eq!(name0, "dep");
-        assert_eq!(name1, "main");
+        assert_eq!(name0, "main");
+        assert_eq!(name1, "other");
 
         Ok(())
     }
@@ -384,61 +353,43 @@ return { parse = parse_plugin_spec, flatten = flatten_plugins, remotes = get_rem
 
         let plugins = lua.create_table()?;
 
-        let p1 = lua.create_table()?;
-        p1.set(1, "owner/p1.lazycmd")?;
-        let dep1 = lua.create_table()?;
-        dep1.set(1, "owner/shared.lazycmd")?;
-        p1.set("dependencies", dep1)?;
-        plugins.set(1, p1)?;
-
-        let p2 = lua.create_table()?;
-        p2.set(1, "owner/p2.lazycmd")?;
-        let dep2 = lua.create_table()?;
-        dep2.set(1, "owner/shared.lazycmd")?;
-        p2.set("dependencies", dep2)?;
-        plugins.set(2, p2)?;
+        plugins.set(1, "owner/shared.lazycmd")?;
+        plugins.set(2, "owner/p1.lazycmd")?;
+        plugins.set(3, "owner/shared.lazycmd")?;
+        plugins.set(4, "owner/p2.lazycmd")?;
 
         let result: Vec<mlua::Table> = flatten.call(plugins)?;
 
-        // Should have 3 unique plugins, not 5
+        // Should have 3 unique plugins, preserving first occurrence order
         assert_eq!(result.len(), 3);
 
-        // Count how many times "shared" appears
-        let mut shared_count = 0;
-        for spec in &result {
-            let name: String = spec.get("name")?;
-            if name == "shared" {
-                shared_count += 1;
-            }
-        }
-        assert_eq!(shared_count, 1);
+        let name0: String = result[0].get("name")?;
+        let name1: String = result[1].get("name")?;
+        let name2: String = result[2].get("name")?;
+        assert_eq!(name0, "shared");
+        assert_eq!(name1, "p1");
+        assert_eq!(name2, "p2");
 
         Ok(())
     }
 
     #[test]
-    fn test_get_remote_plugins_includes_dependencies() -> mlua::Result<()> {
+    fn test_get_remote_plugins_flattens_and_filters() -> mlua::Result<()> {
         let lua = Lua::new();
         let (_, _, remotes) = load_test_module(&lua)?;
 
         let plugins = lua.create_table()?;
-        let main = lua.create_table()?;
-        main.set(1, "owner/main.lazycmd")?;
-
-        let deps = lua.create_table()?;
-        deps.set(1, "owner/dep.lazycmd")?;
-        deps.set(2, "local-helper")?;
-        main.set("dependencies", deps)?;
-
-        plugins.set(1, main)?;
+        plugins.set(1, "owner/main.lazycmd")?;
+        plugins.set(2, "local-helper")?;
+        plugins.set(3, "owner/dep.lazycmd")?;
 
         let result: Vec<mlua::Table> = remotes.call(plugins)?;
         assert_eq!(result.len(), 2);
 
-        let dep_name: String = result[0].get("name")?;
-        let main_name: String = result[1].get("name")?;
-        assert_eq!(dep_name, "dep");
+        let main_name: String = result[0].get("name")?;
+        let dep_name: String = result[1].get("name")?;
         assert_eq!(main_name, "main");
+        assert_eq!(dep_name, "dep");
 
         Ok(())
     }

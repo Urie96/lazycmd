@@ -99,7 +99,6 @@ local function list_root_plugins(cb)
       url = spec.url,
       dir = spec.dir,
       is_remote = spec.is_remote,
-      is_dependency = false,
       status = plugin_status(spec),
       display = plugin_display(spec),
       preview = function(self, preview_cb) lc._manager.preview(self, preview_cb) end,
@@ -199,6 +198,7 @@ local function apply_configured_keymap()
   map(cfg.keymap.open, 'enter', 'open')
   map(cfg.keymap.enter, 'enter', 'enter')
   map(cfg.keymap.help, open_help, 'help')
+  map('gr', function() lc.api.go_to {} end, 'go to /')
 end
 
 local config = {}

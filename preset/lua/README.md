@@ -387,12 +387,12 @@ local local_spec = lc._pm.parse_plugin_spec({ dir = 'plugins/my-plugin.lazycmd' 
 -- local_spec.dir = '<config-base>/plugins/my-plugin.lazycmd'
 -- local_spec.is_remote = false
 
--- 展开插件列表，包含依赖（去重、拓扑排序）
+-- 展开插件列表（去重，保留首次出现顺序）
 local flat = lc._pm.flatten_plugins(plugins)
--- flat[1].name = 'dep1'  -- 依赖优先
--- flat[2].name = 'main'  -- 主插件
+-- flat[1].name = 'plugin-a'
+-- flat[2].name = 'plugin-b'
 
--- 安装缺失的插件（包含依赖，按依赖顺序）
+-- 安装缺失的插件
 lc._pm.install_missing(plugins, callback)
 
 -- 更新所有插件（遵循约束）

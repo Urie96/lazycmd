@@ -8,18 +8,7 @@ local pm -- will be set to lc._pm
 --- @param plugins table Array of plugin spec tables from user config
 function M.setup(plugins)
   pm = lc._pm
-  -- Flatten plugins to include dependencies
   M.plugins = pm.flatten_plugins(plugins or {})
-  -- Track which plugins were explicitly configured (not auto-added as dependencies)
-  local explicit_names = {}
-  for _, p in ipairs(plugins or {}) do
-    local spec = pm.parse_plugin_spec(p)
-    if spec then explicit_names[spec.name] = true end
-  end
-  -- Mark dependency-only plugins
-  for _, spec in ipairs(M.plugins) do
-    spec.is_dependency = not explicit_names[spec.name]
-  end
 
   M._update_status = {} -- Track per-plugin update check results
 
@@ -101,9 +90,9 @@ function M.setup(plugins)
 
     lc.notify(lc.style.line {
       lc.style.span('⟳ '):fg 'cyan',
-      lc.style.span('Installing ' .. spec.name .. ' and dependencies...'),
+      lc.style.span('Installing ' .. spec.name .. '...'),
     })
-    pm.install_with_dependencies(spec, function(success)
+    pm.install(spec, function(success)
       if success then
         lc.notify(lc.style.line {
           lc.style.span('✓ '):fg 'green',
@@ -156,10 +145,6 @@ function M.list(path, cb)
       source_label = ' (local)'
     end
 
-    -- Dependency indicator
-    local dep_label = ''
-    if spec.is_dependency then dep_label = ' [dep]' end
-
     -- Lock info
     local lock_info = ''
     local lock_entry = lock[spec.name]
@@ -174,13 +159,11 @@ function M.list(path, cb)
       status = status,
       repo = spec.repo,
       is_remote = spec.is_remote,
-      is_dependency = spec.is_dependency,
       display = lc.style.line {
         lc.style.span(status_icon .. ' '):fg(icon_color),
-        lc.style.span(spec.name):fg(spec.is_dependency and 'darkgray' or 'white'),
+        lc.style.span(spec.name):fg 'white',
         lc.style.span(source_label):fg 'gray',
         lc.style.span(constraint):fg 'yellow',
-        lc.style.span(dep_label):fg 'magenta',
         lc.style.span(lock_info):fg 'cyan',
       },
     })
@@ -270,30 +253,6 @@ function M.preview(entry, cb)
         lc.style.line {
           lc.style.span('Commit: '):fg 'cyan',
           lc.style.span(spec.commit):fg 'yellow',
-        }
-      )
-    end
-
-    -- Show dependency info
-    if spec.is_dependency then
-      table.insert(
-        lines,
-        lc.style.line {
-          lc.style.span('Dependency: '):fg 'cyan',
-          lc.style.span('auto-installed'):fg 'magenta',
-        }
-      )
-    end
-    if #spec.dependencies > 0 then
-      local dep_names = {}
-      for _, dep in ipairs(spec.dependencies) do
-        dep_names[#dep_names + 1] = dep.name
-      end
-      table.insert(
-        lines,
-        lc.style.line {
-          lc.style.span('Depends: '):fg 'cyan',
-          lc.style.span(table.concat(dep_names, ', ')):fg 'magenta',
         }
       )
     end

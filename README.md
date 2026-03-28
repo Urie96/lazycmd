@@ -240,10 +240,11 @@ lc.config {
       config = function() end,
     },
 
-    -- 带依赖
+    -- 需要多个插件时，直接平铺列在 plugins 里
+    'owner/dep1.lazycmd',
+    'owner/dep2.lazycmd',
     {
       'owner/my-plugin.lazycmd',
-      dependencies = { 'owner/dep1.lazycmd', 'owner/dep2.lazycmd' },
       config = function() require('my-plugin').setup() end,
     },
   },
@@ -261,7 +262,7 @@ lc.config {
 - `dir` 只能是相对路径或绝对路径；相对路径基于配置目录解析
 - Lua 会根据 `plugins` 配置动态把本地 `dir` 和远程插件安装目录加入 `package.path`
 - 无 `config` 字段时，自动生成 `config = function() require('plugin').setup() end`
-- `dependencies` 字段支持数组形式的字符串列表，会自动按拓扑序解析并去重
+- 不再支持 `dependencies` 字段；需要的插件请直接平铺写在 `plugins` 数组里
 
 ````
 

@@ -37,9 +37,9 @@ end
 ---   1. String: 'owner/plugin.lazycmd' or 'local-plugin'
 ---   2. Table with single string: { 'owner/plugin.lazycmd' }
 ---   3. Local dir: { dir='plugins/my-plugin.lazycmd' }
----   4. Full table: { 'owner/plugin.lazycmd', branch='main', config=fn, dependencies={...} }
+---   4. Full table: { 'owner/plugin.lazycmd', branch='main', config=fn }
 --- @param spec string|table Plugin declaration
---- @return table|nil Parsed spec with fields: name, repo, branch, tag, commit, config, dependencies, url, install_path, is_remote, dir
+--- @return table|nil Parsed spec with fields: name, repo, branch, tag, commit, config, url, install_path, is_remote, dir
 function pm.parse_plugin_spec(spec)
   local source
   local dir
@@ -65,13 +65,15 @@ function pm.parse_plugin_spec(spec)
     name = source
   end
 
-  local branch, tag, commit, config_fn, dependencies
+  local branch, tag, commit, config_fn
   if type(spec) == 'table' then
     branch = spec.branch
     tag = spec.tag
     commit = spec.commit
     config_fn = spec.config
-    dependencies = spec.dependencies
+    if spec.dependencies ~= nil then
+      error("plugin spec no longer supports 'dependencies'; list all plugins directly in lc.config.plugins")
+    end
   end
 
   if not config_fn then
@@ -83,23 +85,12 @@ function pm.parse_plugin_spec(spec)
     end
   end
 
-  local parsed_deps = {}
-  if dependencies then
-    for _, dep in ipairs(dependencies) do
-      local dep_spec = pm.parse_plugin_spec(dep)
-      if dep_spec then
-        parsed_deps[#parsed_deps + 1] = dep_spec
-      end
-    end
-  end
-
   local result = {
     name = name,
     branch = branch,
     tag = tag,
     commit = commit,
     config = config_fn,
-    dependencies = parsed_deps,
   }
 
   if dir then
@@ -117,29 +108,19 @@ function pm.parse_plugin_spec(spec)
   return result
 end
 
---- Flatten a plugin list with all dependencies resolved (no duplicates).
+--- Flatten a plugin list into parsed specs (no duplicates, preserves first occurrence order).
 --- @param plugins table Array of plugin specs (raw, before parsing)
---- @return table Array of parsed specs with dependencies in topological order
+--- @return table Array of parsed specs
 function pm.flatten_plugins(plugins)
   local seen = {}
   local result = {}
 
-  local function add_plugin(spec)
-    if not spec then return end
-    if seen[spec.name] then return end
-    seen[spec.name] = true
-
-    -- Add dependencies first
-    for _, dep in ipairs(spec.dependencies or {}) do
-      add_plugin(dep)
-    end
-
-    result[#result + 1] = spec
-  end
-
   for _, p in ipairs(plugins) do
     local spec = pm.parse_plugin_spec(p)
-    add_plugin(spec)
+    if spec and not seen[spec.name] then
+      seen[spec.name] = true
+      result[#result + 1] = spec
+    end
   end
 
   return result
@@ -466,7 +447,7 @@ end
 
 --- Get the list of remote plugins from a plugins config list.
 --- @param plugins table Array of plugin specs
---- @return table Array of parsed remote plugin specs, including dependency plugins
+--- @return table Array of parsed remote plugin specs
 function pm.get_remote_plugins(plugins)
   local result = {}
   for _, spec in ipairs(pm.flatten_plugins(plugins or {})) do
@@ -518,13 +499,6 @@ function pm.install_specs(specs, callback)
   end
 
   install_next()
-end
-
---- Install a plugin together with its dependency tree.
---- @param spec table Parsed plugin spec
---- @param callback function|nil Called with (boolean success)
-function pm.install_with_dependencies(spec, callback)
-  pm.install_specs(pm.flatten_plugins({ spec }), callback)
 end
 
 --- Install all missing remote plugins (sequentially).
