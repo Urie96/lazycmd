@@ -4,8 +4,9 @@
 local pm = {}
 
 -- Plugin data directory and lock file path
+pm.config_dir = os.getenv('HOME') .. '/.config/lazycmd'
 pm.data_dir = os.getenv('HOME') .. '/.local/share/lazycmd/plugins'
-pm.lock_file = os.getenv('HOME') .. '/.local/share/lazycmd/plugins.lock'
+pm.lock_file = pm.config_dir .. '/plugins.lock'
 
 local function is_absolute_path(path)
   return path:match '^/' or path:match '^%a:[/\\]'
@@ -143,7 +144,7 @@ end
 --- Write lock data to the lock file.
 --- @param lock_data table Lock data to write
 function pm.write_lock(lock_data)
-  lc.fs.mkdir(pm.data_dir)
+  lc.fs.mkdir(pm.config_dir)
   local content = lc.json.encode(lock_data)
   lc.fs.write_file_sync(pm.lock_file, content)
 end
@@ -176,6 +177,49 @@ function pm.update_lock_for_plugin(spec, callback)
     end
     if callback then callback() end
   end)
+end
+
+--- Update lock entries for multiple plugins and write the lock file once.
+--- @param specs table Array of parsed plugin specs
+--- @param callback function|nil Called when done
+function pm.update_lock_for_plugins(specs, callback)
+  local pending = {}
+  for _, spec in ipairs(specs or {}) do
+    if spec and spec.is_remote and spec.install_path then
+      pending[#pending + 1] = spec
+    end
+  end
+
+  if #pending == 0 then
+    if callback then callback() end
+    return
+  end
+
+  local lock = pm.read_lock()
+  local remaining = #pending
+
+  local function finish_one()
+    remaining = remaining - 1
+    if remaining == 0 then
+      pm.write_lock(lock)
+      if callback then callback() end
+    end
+  end
+
+  for _, spec in ipairs(pending) do
+    lc.system({ 'git', '-C', spec.install_path, 'rev-parse', 'HEAD' }, function(out)
+      if out.code == 0 then
+        lock[spec.name] = {
+          repo = spec.repo,
+          commit = out.stdout:trim(),
+          branch = spec.branch,
+          tag = spec.tag,
+          url = spec.url,
+        }
+      end
+      finish_one()
+    end)
+  end
 end
 
 --- Install a single plugin via git clone.
@@ -232,15 +276,11 @@ function pm.install(spec, callback)
           if out2.code ~= 0 then
             lc.log('error', 'Failed to checkout commit {} for {}: {}', spec.commit, spec.name, out2.stderr:trim())
           end
-          pm.update_lock_for_plugin(spec, function()
-            if callback then callback(out2.code == 0) end
-          end)
+          if callback then callback(out2.code == 0) end
         end)
       end)
     else
-      pm.update_lock_for_plugin(spec, function()
-        if callback then callback(true) end
-      end)
+      if callback then callback(true) end
     end
   end)
 end
@@ -291,13 +331,9 @@ function pm.update(spec, callback)
           lc.style.span('✗ '):fg('red'),
           lc.style.span('Failed to update ' .. spec.name),
         }))
-        pm.update_lock_for_plugin(spec, function()
-          if callback then callback(false) end
-        end)
+        if callback then callback(false) end
       else
-        pm.update_lock_for_plugin(spec, function()
-          if callback then callback(true) end
-        end)
+        if callback then callback(true) end
       end
     end
 
@@ -458,7 +494,7 @@ function pm.get_remote_plugins(plugins)
   return result
 end
 
---- Install a list of parsed plugin specs, skipping ones already present.
+--- Install a list of parsed plugin specs concurrently, skipping ones already present.
 --- @param specs table Array of parsed plugin specs
 --- @param callback function|nil Called with (boolean success)
 function pm.install_specs(specs, callback)
@@ -474,41 +510,47 @@ function pm.install_specs(specs, callback)
     return
   end
 
-  local idx = 0
   local all_ok = true
-  local function install_next()
-    idx = idx + 1
-    if idx > #missing then
-      lc.notify(lc.style.line({
-        lc.style.span('✓ '):fg('green'),
-        lc.style.span('Installed ' .. #missing .. ' plugin(s)'),
-      }))
-      if callback then callback(all_ok) end
-      return
-    end
+  local completed = 0
+  local total = #missing
+  local successful = {}
 
-    local spec = missing[idx]
-    lc.notify(lc.style.line({
-      lc.style.span('⟳ '):fg('cyan'),
-      lc.style.span('Installing ' .. spec.name .. ' (' .. idx .. '/' .. #missing .. ')...'),
-    }))
-    pm.install(spec, function(success)
-      all_ok = all_ok and success
-      install_next()
-    end)
+  lc.notify(lc.style.line({
+    lc.style.span('⟳ '):fg('cyan'),
+    lc.style.span('Installing ' .. total .. ' plugin(s) in parallel...'),
+  }))
+
+  local function on_one_done(spec, success)
+    completed = completed + 1
+    all_ok = all_ok and success
+    if success then successful[#successful + 1] = spec end
+
+    if completed >= total then
+      pm.update_lock_for_plugins(successful, function()
+        lc.notify(lc.style.line({
+          lc.style.span('✓ '):fg('green'),
+          lc.style.span('Installed ' .. total .. ' plugin(s)'),
+        }))
+        if callback then callback(all_ok) end
+      end)
+    end
   end
 
-  install_next()
+  for _, spec in ipairs(missing) do
+    pm.install(spec, function(success)
+      on_one_done(spec, success)
+    end)
+  end
 end
 
---- Install all missing remote plugins (sequentially).
+--- Install all missing remote plugins concurrently.
 --- @param plugins table Array of plugin spec tables
 --- @param callback function|nil Called with (boolean success) when all done
 function pm.install_missing(plugins, callback)
   pm.install_specs(pm.get_remote_plugins(plugins), callback)
 end
 
---- Update all remote plugins (sequentially).
+--- Update all remote plugins concurrently.
 --- @param plugins table Array of plugin spec tables
 --- @param callback function|nil Called when all done
 function pm.update_all(plugins, callback)
@@ -518,31 +560,37 @@ function pm.update_all(plugins, callback)
     return
   end
 
-  local idx = 0
   local updated = 0
-  local function update_next()
-    idx = idx + 1
-    if idx > #remote then
-      lc.notify(lc.style.line({
-        lc.style.span('✓ '):fg('green'),
-        lc.style.span('Updated ' .. updated .. '/' .. #remote .. ' plugin(s)'),
-      }))
-      if callback then callback() end
-      return
-    end
+  local completed = 0
+  local total = #remote
+  local successful = {}
 
-    local spec = remote[idx]
-    lc.notify(lc.style.line({
-      lc.style.span('⟳ '):fg('cyan'),
-      lc.style.span('Updating ' .. spec.name .. ' (' .. idx .. '/' .. #remote .. ')...'),
-    }))
-    pm.update(spec, function(success)
-      if success then updated = updated + 1 end
-      update_next()
-    end)
+  lc.notify(lc.style.line({
+    lc.style.span('⟳ '):fg('cyan'),
+    lc.style.span('Updating ' .. total .. ' plugin(s) in parallel...'),
+  }))
+
+  local function on_one_done(spec, success)
+    completed = completed + 1
+    if success then updated = updated + 1 end
+    if success then successful[#successful + 1] = spec end
+
+    if completed >= total then
+      pm.update_lock_for_plugins(successful, function()
+        lc.notify(lc.style.line({
+          lc.style.span('✓ '):fg('green'),
+          lc.style.span('Updated ' .. updated .. '/' .. total .. ' plugin(s)'),
+        }))
+        if callback then callback() end
+      end)
+    end
   end
 
-  update_next()
+  for _, spec in ipairs(remote) do
+    pm.update(spec, function(success)
+      on_one_done(spec, success)
+    end)
+  end
 end
 
 --- Restore all remote plugins from the lock file (sequentially).

@@ -392,10 +392,10 @@ local flat = lc._pm.flatten_plugins(plugins)
 -- flat[1].name = 'plugin-a'
 -- flat[2].name = 'plugin-b'
 
--- 安装缺失的插件
+-- 并行安装缺失的插件
 lc._pm.install_missing(plugins, callback)
 
--- 更新所有插件（遵循约束）
+-- 并行更新所有插件（遵循约束）
 lc._pm.update_all(plugins, callback)
 
 -- 根据锁文件恢复插件

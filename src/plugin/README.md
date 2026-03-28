@@ -46,7 +46,7 @@ src/plugin/
 └── owner-plugin.lazycmd/
     └── owner-plugin/
         └── init.lua       # 插件入口
-~/.local/share/lazycmd/plugins.lock   # 插件版本锁文件
+~/.config/lazycmd/plugins.lock        # 插件版本锁文件
 ```
 
 加载预设文件（debug 模式从文件读取，release 模式从嵌入的二进制读取）：

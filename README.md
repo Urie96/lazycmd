@@ -295,7 +295,7 @@ lazycmd /docker/container   # 启动后直接进入指定页面
 **数据目录**：
 
 - 插件安装目录：`~/.local/share/lazycmd/plugins/`
-- 锁文件：`~/.local/share/lazycmd/plugins.lock`
+- 锁文件：`~/.config/lazycmd/plugins.lock`
 
 锁文件记录了每个插件安装时的具体 commit，下次可以通过 `S` 恢复。
 
