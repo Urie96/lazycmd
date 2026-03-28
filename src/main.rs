@@ -1,3 +1,5 @@
+use std::ffi::OsString;
+
 pub use app::App;
 pub use events::Event;
 pub use keymap::*;
@@ -24,10 +26,39 @@ mod state;
 mod term;
 mod widgets;
 
+fn parse_initial_path(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<Vec<String>> {
+    let mut args = args.into_iter();
+    let _program = args.next();
+
+    let Some(raw_path) = args.next() else {
+        return Ok(Vec::new());
+    };
+
+    if args.next().is_some() {
+        anyhow::bail!("Usage: lazycmd [initial-path]");
+    }
+
+    let raw_path = raw_path
+        .into_string()
+        .map_err(|_| anyhow::anyhow!("initial path must be valid UTF-8"))?;
+    let trimmed = raw_path.trim_matches('/');
+
+    if trimmed.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    Ok(trimmed
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .map(str::to_owned)
+        .collect())
+}
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
     log::Logs::start()?;
     errors::install_hooks();
+    let initial_path = parse_initial_path(std::env::args_os())?;
     let local = task::LocalSet::new();
 
     // Run the local task set.
@@ -38,7 +69,7 @@ async fn main() -> anyhow::Result<()> {
 
             let events = events::Events::new();
 
-            let mut app = App::new(events.sender(), term);
+            let mut app = App::new(events.sender(), term, initial_path);
 
             if let Err(e) = app.run(events).await {
                 term::restore();
@@ -62,4 +93,43 @@ async fn main() -> anyhow::Result<()> {
     // term::restore()?;
     // sleep(Duration::from_millis(3000)).await;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_initial_path;
+    use std::ffi::OsString;
+
+    fn os_args(args: &[&str]) -> Vec<OsString> {
+        args.iter().map(OsString::from).collect()
+    }
+
+    #[test]
+    fn parse_initial_path_defaults_to_root() {
+        assert_eq!(
+            parse_initial_path(os_args(&["lazycmd"])).unwrap(),
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
+    fn parse_initial_path_splits_segments() {
+        assert_eq!(
+            parse_initial_path(os_args(&["lazycmd", "/docker/container"])).unwrap(),
+            vec!["docker".to_string(), "container".to_string()]
+        );
+    }
+
+    #[test]
+    fn parse_initial_path_normalizes_repeated_slashes() {
+        assert_eq!(
+            parse_initial_path(os_args(&["lazycmd", "docker//container/"])).unwrap(),
+            vec!["docker".to_string(), "container".to_string()]
+        );
+    }
+
+    #[test]
+    fn parse_initial_path_rejects_extra_args() {
+        assert!(parse_initial_path(os_args(&["lazycmd", "/docker", "/extra"])).is_err());
+    }
 }

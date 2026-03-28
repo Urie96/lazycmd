@@ -50,6 +50,9 @@ cargo build --release
 
 # 运行
 cargo run --release
+
+# 运行并直接进入指定页面
+cargo run --release -- /docker/container
 ```
 
 ## 项目结构
@@ -268,6 +271,7 @@ lc.config {
 
 ```bash
 lazycmd          # 进入插件管理器
+lazycmd /docker/container   # 启动后直接进入指定页面
 ````
 
 在插件管理器界面中：

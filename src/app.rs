@@ -33,10 +33,15 @@ pub struct App {
     quitting: bool,
     dirty: bool,
     lua: Lua,
+    initial_path: Vec<String>,
 }
 
 impl App {
-    pub fn new(event_sender: mpsc::UnboundedSender<Event>, term: Term) -> Self {
+    pub fn new(
+        event_sender: mpsc::UnboundedSender<Event>,
+        term: Term,
+        initial_path: Vec<String>,
+    ) -> Self {
         let mut state = State::new();
         let lua = Lua::new();
 
@@ -50,6 +55,7 @@ impl App {
             term,
             dirty: false,
             quitting: false,
+            initial_path,
         }
     }
 
@@ -84,7 +90,9 @@ impl App {
 
     /// Runs the main loop of the application, handling events and actions
     pub async fn run(&mut self, mut events: Events) -> Result<()> {
-        self.event_sender.send(Event::Enter(Vec::new())).unwrap();
+        self.event_sender
+            .send(Event::Enter(self.initial_path.clone()))
+            .unwrap();
 
         // Initially hide cursor (Main mode)
         execute!(self.term.backend_mut(), Hide)?;
@@ -145,7 +153,9 @@ impl App {
         let current_path = self.state.current_path.clone();
         let payload = plugin::scope(&self.lua, &mut self.state, &self.event_sender, || {
             let payload = self.lua.create_table()?;
-            let path = self.lua.create_sequence_from(current_path.iter().cloned())?;
+            let path = self
+                .lua
+                .create_sequence_from(current_path.iter().cloned())?;
             payload.set("path", path)?;
             Ok::<LuaTable, mlua::Error>(payload)
         })?;

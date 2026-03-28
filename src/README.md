@@ -89,9 +89,10 @@ main.rs
 Logs::start()           # 初始化日志
 errors::install_hooks()  # 安装 panic 钩子
 term::init()            # 初始化终端
+parse_initial_path()    # 解析可选命令行初始路径
     │
     ▼
-App::new()
+App::new(initial_path)
     │
     ├─ 创建 State
     ├─ 初始化 Lua
