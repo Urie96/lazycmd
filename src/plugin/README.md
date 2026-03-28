@@ -90,7 +90,7 @@ scope(lua, state, sender, || {
 | `exit_filter_mode()` | 退出过滤模式 |
 | `accept_filter()` | 应用过滤 |
 | `append_hook_pre_reload(cb)` | 添加重载前钩子 |
-| `append_hook_pre_quit(cb)` | 添加退出前钩子 |
+| `append_hook_pre_quit(cb)` | 添加退出前钩子（Lua 侧封装为 `lc.hook.pre_quit`） |
 
 ### lc.cache - 缓存系统
 

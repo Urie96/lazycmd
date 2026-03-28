@@ -28,6 +28,10 @@ function api.page_set_preview(widget) return _lc.api.page_set_preview(widget) en
 ---@param path string[] The path as an array of strings
 function api.go_to(path) return _lc.api.go_to(path) end
 
+---Clear the cached page for a specific path so the next navigation reloads it
+---@param path string[] The path as an array of strings
+function api.clear_page_cache(path) return _lc.api.clear_page_cache(path) end
+
 ---Get the current navigation path
 ---@return string[] path The current path
 function api.get_current_path() return _lc.api.get_current_path() end
@@ -43,10 +47,6 @@ function api.argv() return _lc.api.argv() end
 ---Append a hook callback to be called before reload command
 ---@param callback fun() The callback function to execute before reload
 function api.append_hook_pre_reload(callback) _lc.api.append_hook_pre_reload(callback) end
-
----Append a hook callback to be called before quit command
----@param callback fun() The callback function to execute before quit
-function api.append_hook_pre_quit(callback) _lc.api.append_hook_pre_quit(callback) end
 
 ---Set the filter string for the current page
 ---The page entries will be filtered based on this string
@@ -70,6 +70,15 @@ function api.get_filter() return _lc.api.get_filter() end
 function api.get_available_keymaps() return _lc.api.get_available_keymaps() end
 
 lc.api = api
+lc.hook = lc.hook or {}
+
+---Append a hook callback to be called before quit command
+---@param callback fun() The callback function to execute before quit
+function lc.hook.pre_quit(callback) _lc.api.append_hook_pre_quit(callback) end
+
+---Append a hook callback to be called after entering a page
+---@param callback fun(ctx: {path: string[]}) The callback function to execute
+function lc.hook.post_page_enter(callback) _lc.api.append_hook_post_page_enter(callback) end
 
 ---Send an internal command to Rust
 ---@param command string The command string (e.g., "quit", "reload", "scroll_by 1")

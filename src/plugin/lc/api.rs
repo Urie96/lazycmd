@@ -115,10 +115,28 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
         })?
         .into_lua(lua)?;
 
+    let clear_page_cache = lua
+        .create_function(|lua, path: Vec<String>| {
+            plugin::mut_scope_state(lua, |state| {
+                state.clear_cache_for_path(&path);
+                Ok(())
+            })
+        })?
+        .into_lua(lua)?;
+
     let append_hook_pre_quit = lua
         .create_function(|lua, cb: LuaFunction| {
             plugin::mut_scope_state(lua, |state| {
                 state.pre_quit_hooks.push(cb);
+                Ok(())
+            })
+        })?
+        .into_lua(lua)?;
+
+    let append_hook_post_page_enter = lua
+        .create_function(|lua, cb: LuaFunction| {
+            plugin::mut_scope_state(lua, |state| {
+                state.post_page_enter_hooks.push(cb);
                 Ok(())
             })
         })?
@@ -153,7 +171,9 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
         ("set_filter", set_filter),
         ("get_filter", get_filter),
         ("get_available_keymaps", get_available_keymaps),
+        ("clear_page_cache", clear_page_cache),
         ("append_hook_pre_reload", append_hook_pre_reload),
         ("append_hook_pre_quit", append_hook_pre_quit),
+        ("append_hook_post_page_enter", append_hook_post_page_enter),
     ])
 }

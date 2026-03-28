@@ -141,6 +141,25 @@ impl App {
         )
     }
 
+    fn run_post_page_enter_hooks(&mut self) -> Result<()> {
+        let current_path = self.state.current_path.clone();
+        let payload = plugin::scope(&self.lua, &mut self.state, &self.event_sender, || {
+            let payload = self.lua.create_table()?;
+            let path = self.lua.create_sequence_from(current_path.iter().cloned())?;
+            payload.set("path", path)?;
+            Ok::<LuaTable, mlua::Error>(payload)
+        })?;
+
+        for hook in self.state.post_page_enter_hooks.clone() {
+            let payload = payload.clone();
+            plugin::scope(&self.lua, &mut self.state, &self.event_sender, || {
+                hook.call::<()>(payload.clone())
+            })?;
+        }
+
+        Ok(())
+    }
+
     fn handle_event(&mut self, e: Event) -> Result<()> {
         match e {
             Event::Quit => {
@@ -217,6 +236,7 @@ impl App {
                     // Restore preview for cached page
                     self.call_preview()?;
                 }
+                self.run_post_page_enter_hooks()?;
                 self.dirty = true;
             }
             Event::LuaCallback(cb) => {
@@ -449,6 +469,7 @@ impl App {
                         // Restore preview for cached page
                         self.call_preview()?;
                     }
+                    self.run_post_page_enter_hooks()?;
                     self.dirty = true;
                 }
             }
@@ -463,6 +484,7 @@ impl App {
                         // Restore preview for cached page
                         self.call_preview()?;
                     }
+                    self.run_post_page_enter_hooks()?;
                     self.dirty = true;
                 }
             }

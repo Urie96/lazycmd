@@ -60,12 +60,14 @@ local runtime = {
   explicit_plugin_specs = {},
   plugin_specs_by_name = {},
   loaded_plugins = {},
+  configured_plugins = {},
 }
 
 local function rebuild_plugin_index()
   runtime.explicit_plugin_specs = {}
   runtime.plugin_specs_by_name = {}
   runtime.loaded_plugins = {}
+  runtime.configured_plugins = {}
 
   for _, plugin_spec in ipairs(cfg.plugins or {}) do
     local spec = lc._pm.parse_plugin_spec(plugin_spec)
@@ -106,20 +108,35 @@ local function list_root_plugins(cb)
   cb(entries)
 end
 
-local function ensure_plugin(name)
-  if runtime.loaded_plugins[name] ~= nil then return runtime.loaded_plugins[name] end
-
+local function load_plugin(name)
   local spec = runtime.plugin_specs_by_name[name]
   if not spec then return nil, 'Unknown plugin: ' .. tostring(name) end
 
-  local ok, plugin = pcall(require, name)
-  if not ok then return nil, plugin end
+  if runtime.loaded_plugins[name] == nil then
+    local ok, plugin = pcall(require, name)
+    if not ok then return nil, plugin end
+    runtime.loaded_plugins[name] = plugin or {}
+  end
 
-  local ok_config, config_err = pcall(spec.config)
-  if not ok_config then return nil, config_err end
+  return runtime.loaded_plugins[name], spec
+end
 
-  runtime.loaded_plugins[name] = plugin or {}
+local function ensure_plugin(name)
+  local plugin, spec_or_err = load_plugin(name)
+  if not plugin then return nil, spec_or_err end
+  local spec = spec_or_err
+
+  if not runtime.configured_plugins[name] then
+    local ok_config, config_err = pcall(spec.config)
+    if not ok_config then return nil, config_err end
+    runtime.configured_plugins[name] = true
+  end
+
   return runtime.loaded_plugins[name]
+end
+
+local function setup_plugin(name)
+  return ensure_plugin(name)
 end
 
 local function guarded_preview_callback(hovered_path)
@@ -241,6 +258,9 @@ function config.setup(opt)
 end
 
 lc.config = config
+lc.plugin = lc.plugin or {}
+
+function lc.plugin.load(name) return setup_plugin(name) end
 
 -- Set metatable on lc.system to handle multiple argument formats
 setmetatable(lc.config, {

@@ -677,6 +677,8 @@ pub struct State {
     pub pre_reload_hooks: Vec<LuaFunction>,
     /// Hooks to call before quit command
     pub pre_quit_hooks: Vec<LuaFunction>,
+    /// Hooks to call after entering a page
+    pub post_page_enter_hooks: Vec<LuaFunction>,
     /// Confirm dialog state (shown on top of all UI)
     pub confirm_dialog: Option<ConfirmDialog>,
     /// Select dialog state (shown on top of all UI)
@@ -896,6 +898,11 @@ impl State {
     /// Clear cache for current path (used by reload command)
     pub fn clear_current_cache(&mut self) {
         self.page_cache.remove(&self.current_path);
+    }
+
+    /// Clear cache for a specific path.
+    pub fn clear_cache_for_path(&mut self, path: &[String]) {
+        self.page_cache.remove(path);
     }
 
     pub fn scroll_by(&mut self, amount: i16) {

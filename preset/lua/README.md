@@ -240,6 +240,23 @@ lc.config {
 
 可以通过 `lc.api.get_available_keymaps()` 获取当前上下文下可用的 entry/global 快捷键列表。
 
+### plugin setup helper
+
+可以主动触发某个已声明插件的 `setup/config`：
+
+```lua
+lc.plugin.load('mpv')
+```
+
+这会按 `lc.config.plugins` 里对应插件的配置执行一次 setup，适合一个插件依赖另一个插件的初始化结果时使用。
+
+### hook helpers
+
+```lua
+lc.hook.pre_quit(function() ... end)
+lc.hook.post_page_enter(function(ctx) print(vim.inspect(ctx.path)) end)
+```
+
 页面 entry 还可以定义 `preview` 字段：
 
 ```lua
