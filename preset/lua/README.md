@@ -95,6 +95,8 @@ lc.log(level, format, ...)   -- 写入日志
 
 ```lua
 lc.fs.read_dir_sync(path)     -- 读取目录
+lc.fs.read_file(path, callback)  -- 异步读取文件
+lc.fs.read_file(path, { max_chars = 20000 }, callback)  -- 限制最多读取字符数
 lc.fs.read_file_sync(path)    -- 读取文件
 lc.fs.write_file_sync(path, content)  -- 写入文件
 lc.fs.stat(path)              -- 获取文件状态
@@ -204,10 +206,12 @@ lc.keymap.set(mode, key, callback[, opt])
 -- key: 键序列（如 "j", "<C-d>", "<down>"）
 -- callback: 命令字符串或回调函数
 -- opt.desc: 可选描述，用于帮助面板
+-- opt.once: 可选布尔值，触发一次后自动删除
 ```
 
 ```lua
 lc.keymap.set('main', '?', function() end, { desc = 'help' })
+lc.keymap.set('main', 'p', function() end, { once = true, desc = 'paste once' })
 ```
 
 `lc.config` 支持通过 `keymap` 字段覆盖内置主模式快捷键：
@@ -235,10 +239,11 @@ lc.config {
 }
 ```
 
-当光标停在该 entry 上且 `entry.keymap` 对当前按键序列有前缀匹配时，会优先于全局 `lc.keymap.set`。
+优先级顺序是：`entry.keymap` > 一次性 keymap（`opt.once = true`）> 普通全局 keymap。
+一次性 keymap 在完整触发一次后会自动删除；如果之前有相同按键的普通全局 keymap，删除后会恢复到普通全局 keymap。
 `entry.keymap` 的值也可以写成 `{ callback = fn, desc = "..." }`，供帮助面板展示描述。
 
-可以通过 `lc.api.get_available_keymaps()` 获取当前上下文下可用的 entry/global 快捷键列表。
+可以通过 `lc.api.get_available_keymaps()` 获取当前上下文下可用的 entry/once/global 快捷键列表。
 
 ### plugin setup helper
 

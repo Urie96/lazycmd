@@ -22,7 +22,15 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
                         )))
                     }
                 };
-                let desc = opt.and_then(|opt| opt.get::<Option<String>>("desc").ok().flatten());
+                let (desc, once) = opt
+                    .map(|opt| {
+                        Ok::<_, LuaError>((
+                            opt.get::<Option<String>>("desc")?,
+                            opt.get::<Option<bool>>("once")?.unwrap_or(false),
+                        ))
+                    })
+                    .transpose()?
+                    .unwrap_or((None, false));
 
                 plugin::mut_scope_state(lua, |state| {
                     state.add_keymap(Keymap {
@@ -31,6 +39,7 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
                         key_sequence: key.as_str().into(),
                         callback,
                         desc,
+                        once,
                     });
                     Ok(())
                 })

@@ -9,6 +9,7 @@ pub struct Keymap {
     pub key_sequence: KeySequence,
     pub callback: LuaFunction,
     pub desc: Option<String>,
+    pub once: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]

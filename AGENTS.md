@@ -53,6 +53,8 @@ lazycmd/
 └── plugins -> ~/.local/share/lazycmd/plugins/  # 插件目录（软链接）
 ```
 
+> 项目中的 `./plugins` 和 `./config` 目录具有写权限，可以直接调用工具（write、edit）创建或修改文件，无需请求提权。
+
 ## 任务处理
 
 首次对话建立基本认知后，根据用户任务类型采取不同处理方式：
@@ -91,6 +93,7 @@ lazycmd/
 3. 检查交叉引用是否准确
 
 **重要原则**：
+
 - 遇到不熟悉的模块，先读该模块的 README 再读源码
 - 不要删除看起来是故意添加的代码或功能
 - 修改后同步更新相关文档
@@ -126,6 +129,7 @@ lazycmd                     # 启动 lazycmd，进入插件管理器
 ### Rust 单元测试
 
 各模块内置单元测试：
+
 - `src/keymap.rs` - 键盘映射解析测试
 - `src/plugin/lc/highlighter.rs` - 语法高亮测试
 - `src/plugin/lc/style.rs` - 样式对齐测试
@@ -197,6 +201,7 @@ tmux kill-session -t lazycmd-test
 ## 文档更新
 
 更新代码后，确保同步更新相关 README：
+
 - `src/README.md` - 核心架构变更
 - `src/plugin/README.md` - API 变更
 - `src/widgets/README.md` - 组件变更

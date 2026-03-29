@@ -14,6 +14,12 @@
 ---@class lc.fs
 local fs = {}
 
+---@class ReadFileOptions
+---@field max_chars integer? Read at most this many characters
+
+---@class ReadFileMeta
+---@field truncated boolean Whether the returned content was truncated
+
 ---Read directory synchronously
 ---@param path string The directory path to read
 ---@return table[] entries List of directory entries
@@ -25,6 +31,15 @@ function fs.read_dir_sync(path) return _lc.fs.read_dir_sync(path) end
 ---@return string content The file content
 ---@return string|nil error Error message if failed
 function fs.read_file_sync(path) return _lc.fs.read_file_sync(path) end
+
+---Read file content asynchronously
+---@param path string The file path to read
+---@param opts ReadFileOptions|fun(content: string, error: string|nil, meta: ReadFileMeta|nil)
+---@param callback fun(content: string, error: string|nil, meta: ReadFileMeta|nil)?
+function fs.read_file(path, opts, callback)
+  if type(opts) == 'function' then return _lc.fs.read_file(path, nil, opts) end
+  return _lc.fs.read_file(path, opts, callback)
+end
 
 ---Write content to file synchronously
 ---@param path string The file path to write

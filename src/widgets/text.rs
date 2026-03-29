@@ -11,6 +11,22 @@ pub struct LuaLine(pub Line<'static>);
 
 pub struct LuaSpan(pub Span<'static>);
 
+fn into_line(value: LuaValue) -> mlua::Result<Line<'static>> {
+    match value {
+        LuaValue::String(s) => Ok(Line::raw(s.to_str()?.to_string())),
+        LuaValue::UserData(ud) => {
+            if let Ok(line) = ud.take::<LuaLine>() {
+                Ok(line.0)
+            } else if let Ok(span) = ud.take::<LuaSpan>() {
+                Ok(Line::from(span.0))
+            } else {
+                Err(mlua::Error::runtime("expected Line, Span, or String for append"))
+            }
+        }
+        _ => Err(mlua::Error::runtime("expected Line, Span, or String for append")),
+    }
+}
+
 impl LuaUserData for LuaSpan {
     fn add_methods<M: LuaUserDataMethods<Self>>(methods: &mut M) {
         methods.add_function_mut("fg", |lua, (ud, color): (AnyUserData, String)| {
@@ -93,7 +109,14 @@ impl LuaUserData for LuaLine {
     }
 }
 
-impl LuaUserData for LuaText {}
+impl LuaUserData for LuaText {
+    fn add_methods<M: LuaUserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method_mut("append", |_lua, this, value: LuaValue| {
+            this.0.lines.push(into_line(value)?);
+            Ok(())
+        });
+    }
+}
 
 impl FromLua for LuaText {
     fn from_lua(value: LuaValue, _lua: &Lua) -> mlua::Result<Self> {
@@ -148,6 +171,35 @@ impl FromLua for LuaSpan {
             _ => Err(mlua::Error::FromLuaConversionError {
                 from: value.type_name(),
                 to: "LuaSpan".to_string(),
+                message: Some("expected UserData or String".to_string()),
+            }),
+        }
+    }
+}
+
+impl FromLua for LuaLine {
+    fn from_lua(value: LuaValue, _lua: &Lua) -> mlua::Result<Self> {
+        match value {
+            LuaValue::UserData(ud) => {
+                if let Ok(line) = ud.take::<LuaLine>() {
+                    Ok(line)
+                } else if let Ok(span) = ud.take::<LuaSpan>() {
+                    Ok(LuaLine(Line::from(span.0)))
+                } else {
+                    Err(mlua::Error::FromLuaConversionError {
+                        from: "UserData",
+                        to: "LuaLine".to_string(),
+                        message: Some("UserData is not a LuaLine or LuaSpan".to_string()),
+                    })
+                }
+            }
+            LuaValue::String(s) => {
+                let s = s.to_str()?.to_string();
+                Ok(LuaLine(Line::raw(s)))
+            }
+            _ => Err(mlua::Error::FromLuaConversionError {
+                from: value.type_name(),
+                to: "LuaLine".to_string(),
                 message: Some("expected UserData or String".to_string()),
             }),
         }

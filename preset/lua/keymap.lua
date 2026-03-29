@@ -5,6 +5,7 @@ local keymap = {}
 
 ---@class KeymapOptions
 ---@field desc? string Human readable description for help panels
+---@field once? boolean Remove this global keymap after it is triggered once
 
 ---@class lc.ConfigKeymap
 ---@field up? string

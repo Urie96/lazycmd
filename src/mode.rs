@@ -1,6 +1,6 @@
 use mlua::{ExternalError, FromLua};
 
-#[derive(PartialEq, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
 pub enum Mode {
     #[default]
     Main,

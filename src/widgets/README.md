@@ -119,6 +119,9 @@ local text = lc.style.text({line})
 -- 设置预览
 lc.api.page_set_preview(text)
 
+-- 给已有 Text 追加一行
+text:append(lc.style.line { "tail line" })
+
 -- 字符串颜色扩展
 local colored = "hello".fg("blue")
 lc.api.page_set_preview(colored)

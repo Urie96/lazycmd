@@ -30,7 +30,7 @@ src/plugin/
 
 - `init_lua()` - 初始化 Lua 环境并设置配置基准目录
 - 预设加载顺序包含 `util.lua`、`copy_from_neovim.lua`、`init.lua` 等基础模块
-- `package.path` 由 `preset/lua/init.lua` 根据 `plugins` 配置动态追加
+- `package.path` 由 `preset/lua/config.lua` 根据 `plugins` 配置动态追加
 
 **插件路径搜索顺序**（`package.path`）：
 
@@ -111,11 +111,12 @@ local data = lc.cache.get("user_data")
 
 ### lc.fs - 文件系统
 
-同步文件系统操作：
+文件系统操作：
 
 | 函数 | 说明 |
 |------|------|
 | `fs.read_dir_sync(path)` | 读取目录（返回数组） |
+| `fs.read_file(path, [opts], callback)` | 异步读取文件内容，可限制最大字符数 |
 | `fs.read_file_sync(path)` | 读取文件内容 |
 | `fs.write_file_sync(path, content)` | 写入文件 |
 | `fs.stat(path)` | 获取文件状态 |
@@ -164,6 +165,7 @@ lc.keymap.set('main', 'q', function() lc.cmd('quit') end)
 lc.keymap.set('main', 'j', 'scroll_by 1')
 lc.keymap.set('main', '<C-x>', function() ... end)
 lc.keymap.set('main', '?', function() ... end, { desc = 'help' })
+lc.keymap.set('main', 'p', function() paste() end, { once = true, desc = 'paste once' })
 ```
 
 `lc.config` 还支持 `keymap` 字段来覆盖内置主模式键位，例如：
@@ -194,7 +196,8 @@ lc.config {
 
 - `entry.keymap` 会通过 Lua 表访问，支持由元表 `__index` 提供
 - key 是按键序列字符串，value 可以是 Lua 函数，或 `{ callback = fn, desc = "..." }`
-- 只要 `entry.keymap` 对当前按键缓冲区存在前缀匹配，就优先于全局 `lc.keymap.set`
+- 优先级为：`entry.keymap` > `opt.once = true` 的一次性 keymap > 普通全局 keymap
+- `opt.once = true` 时，该全局 keymap 完整触发一次后会自动删除；如果存在相同按键的普通全局 keymap，删除后会恢复到普通全局 keymap
 - `opt.desc` 可为全局 keymap 提供帮助面板中的描述文本
 
 `lc.api` 额外提供当前上下文可用快捷键查询：

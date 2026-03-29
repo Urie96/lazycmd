@@ -8,6 +8,37 @@ pm.config_dir = os.getenv('HOME') .. '/.config/lazycmd'
 pm.data_dir = os.getenv('HOME') .. '/.local/share/lazycmd/plugins'
 pm.lock_file = pm.config_dir .. '/plugins.lock'
 
+local git_env = {
+  GIT_TERMINAL_PROMPT = '0',
+  GCM_INTERACTIVE = 'never',
+}
+
+local function explain_git_error(stderr)
+  local err = (stderr or ''):trim()
+  if err == '' then return 'unknown git error' end
+
+  if err:find('terminal prompts disabled', 1, true)
+      or err:find("could not read Username", 1, true)
+      or err:find("could not read Password", 1, true)
+      or err:find("Username for 'https://github.com'", 1, true)
+      or err:find("Password for 'https://", 1, true) then
+    return err
+      .. ' (GitHub HTTPS clone failed: the repository may not exist, may be private/inaccessible, or local GitHub credentials are not configured; remote plugin install runs in non-interactive mode, so use the correct repo, configure credentials, switch to SSH, or install via local dir)'
+  end
+
+  if err:find('Repository not found', 1, true)
+      or err:find('repository not found', 1, true)
+      or err:find('not found', 1, true) then
+    return err .. ' (the repository does not exist or you do not have access)'
+  end
+
+  return err
+end
+
+local function git(cmd, callback)
+  lc.system(cmd, { env = git_env }, callback)
+end
+
 local function is_absolute_path(path)
   return path:match '^/' or path:match '^%a:[/\\]'
 end
@@ -163,7 +194,7 @@ end
 --- @param spec table Parsed plugin spec
 --- @param callback function|nil Called when done
 function pm.update_lock_for_plugin(spec, callback)
-  lc.system({ 'git', '-C', spec.install_path, 'rev-parse', 'HEAD' }, function(out)
+  git({ 'git', '-C', spec.install_path, 'rev-parse', 'HEAD' }, function(out)
     if out.code == 0 then
       local lock = pm.read_lock()
       lock[spec.name] = {
@@ -207,7 +238,7 @@ function pm.update_lock_for_plugins(specs, callback)
   end
 
   for _, spec in ipairs(pending) do
-    lc.system({ 'git', '-C', spec.install_path, 'rev-parse', 'HEAD' }, function(out)
+    git({ 'git', '-C', spec.install_path, 'rev-parse', 'HEAD' }, function(out)
       if out.code == 0 then
         lock[spec.name] = {
           repo = spec.repo,
@@ -258,12 +289,13 @@ function pm.install(spec, callback)
   table.insert(cmd, spec.url)
   table.insert(cmd, spec.install_path)
 
-  lc.system(cmd, function(out)
+  git(cmd, function(out)
     if out.code ~= 0 then
-      lc.log('error', 'Failed to install {}: {}', spec.name, out.stderr:trim())
+      local err = explain_git_error(out.stderr)
+      lc.log('error', 'Failed to install {}: {}', spec.name, err)
       lc.notify(lc.style.line({
         lc.style.span('✗ '):fg('red'),
-        lc.style.span('Failed to install ' .. spec.name),
+        lc.style.span('Failed to install ' .. spec.name .. ': ' .. err),
       }))
       if callback then callback(false) end
       return
@@ -271,10 +303,10 @@ function pm.install(spec, callback)
 
     if spec.commit then
       -- Need full history to checkout a specific commit
-      lc.system({ 'git', '-C', spec.install_path, 'fetch', '--unshallow' }, function()
-        lc.system({ 'git', '-C', spec.install_path, 'checkout', spec.commit }, function(out2)
+      git({ 'git', '-C', spec.install_path, 'fetch', '--unshallow' }, function()
+        git({ 'git', '-C', spec.install_path, 'checkout', spec.commit }, function(out2)
           if out2.code ~= 0 then
-            lc.log('error', 'Failed to checkout commit {} for {}: {}', spec.commit, spec.name, out2.stderr:trim())
+            lc.log('error', 'Failed to checkout commit {} for {}: {}', spec.commit, spec.name, explain_git_error(out2.stderr))
           end
           if callback then callback(out2.code == 0) end
         end)
@@ -313,12 +345,13 @@ function pm.update(spec, callback)
   local install_path = spec.install_path
 
   -- git fetch
-  lc.system({ 'git', '-C', install_path, 'fetch', '--tags', '--force' }, function(out)
+  git({ 'git', '-C', install_path, 'fetch', '--tags', '--force' }, function(out)
     if out.code ~= 0 then
-      lc.log('error', 'Failed to fetch {}: {}', spec.name, out.stderr:trim())
+      local err = explain_git_error(out.stderr)
+      lc.log('error', 'Failed to fetch {}: {}', spec.name, err)
       lc.notify(lc.style.line({
         lc.style.span('✗ '):fg('red'),
-        lc.style.span('Failed to fetch ' .. spec.name),
+        lc.style.span('Failed to fetch ' .. spec.name .. ': ' .. err),
       }))
       if callback then callback(false) end
       return
@@ -326,10 +359,11 @@ function pm.update(spec, callback)
 
     local function on_done(out2)
       if out2.code ~= 0 then
-        lc.log('error', 'Failed to update {}: {}', spec.name, out2.stderr:trim())
+        local err = explain_git_error(out2.stderr)
+        lc.log('error', 'Failed to update {}: {}', spec.name, err)
         lc.notify(lc.style.line({
           lc.style.span('✗ '):fg('red'),
-          lc.style.span('Failed to update ' .. spec.name),
+          lc.style.span('Failed to update ' .. spec.name .. ': ' .. err),
         }))
         if callback then callback(false) end
       else
@@ -339,21 +373,21 @@ function pm.update(spec, callback)
 
     if spec.tag then
       -- Tag constraint: checkout the tag (tracks the exact commit the tag points to)
-      lc.system({ 'git', '-C', install_path, 'checkout', 'tags/' .. spec.tag }, on_done)
+      git({ 'git', '-C', install_path, 'checkout', 'tags/' .. spec.tag }, on_done)
     elseif spec.branch then
       -- Branch constraint: reset to the latest of that branch
-      lc.system({ 'git', '-C', install_path, 'reset', '--hard', 'origin/' .. spec.branch }, on_done)
+      git({ 'git', '-C', install_path, 'reset', '--hard', 'origin/' .. spec.branch }, on_done)
     else
       -- No constraint: reset to default remote branch
       -- First, determine the default remote branch
-      lc.system({ 'git', '-C', install_path, 'symbolic-ref', 'refs/remotes/origin/HEAD' }, function(ref_out)
+      git({ 'git', '-C', install_path, 'symbolic-ref', 'refs/remotes/origin/HEAD' }, function(ref_out)
         local default_ref = 'origin/HEAD'
         if ref_out.code == 0 then
           -- Extract branch name from refs/remotes/origin/main -> origin/main
           local ref = ref_out.stdout:trim()
           default_ref = ref:gsub('^refs/remotes/', '')
         end
-        lc.system({ 'git', '-C', install_path, 'reset', '--hard', default_ref }, on_done)
+        git({ 'git', '-C', install_path, 'reset', '--hard', default_ref }, on_done)
       end)
     end
   end)
@@ -383,22 +417,22 @@ function pm.restore(spec, lock_entry, callback)
 
   if not stat.exists then
     -- Clone then checkout to locked commit
-    lc.system({ 'git', 'clone', spec.url, install_path }, function(out)
+    git({ 'git', 'clone', spec.url, install_path }, function(out)
       if out.code == 0 then
-        lc.system({ 'git', '-C', install_path, 'checkout', lock_entry.commit }, function(out2)
+        git({ 'git', '-C', install_path, 'checkout', lock_entry.commit }, function(out2)
           if callback then callback(out2.code == 0) end
         end)
       else
-        lc.log('error', 'Failed to clone {} for restore: {}', spec.name, out.stderr:trim())
+        lc.log('error', 'Failed to clone {} for restore: {}', spec.name, explain_git_error(out.stderr))
         if callback then callback(false) end
       end
     end)
   else
     -- Fetch then checkout to locked commit
-    lc.system({ 'git', '-C', install_path, 'fetch' }, function()
-      lc.system({ 'git', '-C', install_path, 'checkout', lock_entry.commit }, function(out2)
+    git({ 'git', '-C', install_path, 'fetch' }, function()
+      git({ 'git', '-C', install_path, 'checkout', lock_entry.commit }, function(out2)
         if out2.code == 0 then
-          lc.system({ 'git', '-C', install_path, 'reset', '--hard', lock_entry.commit }, function(out3)
+          git({ 'git', '-C', install_path, 'reset', '--hard', lock_entry.commit }, function(out3)
             if callback then callback(out3.code == 0) end
           end)
         else
@@ -427,14 +461,14 @@ function pm.check_update(spec, callback)
   local install_path = spec.install_path
 
   -- Fetch latest
-  lc.system({ 'git', '-C', install_path, 'fetch', '--tags', '--force' }, function(fetch_out)
+  git({ 'git', '-C', install_path, 'fetch', '--tags', '--force' }, function(fetch_out)
     if fetch_out.code ~= 0 then
       callback(false, nil)
       return
     end
 
     -- Get local HEAD
-    lc.system({ 'git', '-C', install_path, 'rev-parse', 'HEAD' }, function(local_out)
+    git({ 'git', '-C', install_path, 'rev-parse', 'HEAD' }, function(local_out)
       if local_out.code ~= 0 then
         callback(false, nil)
         return
@@ -451,7 +485,7 @@ function pm.check_update(spec, callback)
         remote_ref = 'origin/HEAD'
       end
 
-      lc.system({ 'git', '-C', install_path, 'rev-parse', remote_ref }, function(remote_out)
+      git({ 'git', '-C', install_path, 'rev-parse', remote_ref }, function(remote_out)
         if remote_out.code ~= 0 then
           callback(false, nil)
           return
@@ -461,7 +495,7 @@ function pm.check_update(spec, callback)
 
         if has_update then
           -- Get log between local and remote
-          lc.system({
+          git({
             'git', '-C', install_path, 'log',
             '--oneline', '--no-decorate',
             local_commit .. '..' .. remote_commit,
@@ -527,9 +561,24 @@ function pm.install_specs(specs, callback)
 
     if completed >= total then
       pm.update_lock_for_plugins(successful, function()
+        local installed = #successful
+        local icon = '✓ '
+        local color = 'green'
+        local message = 'Installed ' .. installed .. '/' .. total .. ' plugin(s)'
+
+        if installed == 0 then
+          icon = '✗ '
+          color = 'red'
+          message = 'Failed to install all ' .. total .. ' plugin(s)'
+        elseif installed < total then
+          icon = '△ '
+          color = 'yellow'
+          message = 'Installed ' .. installed .. '/' .. total .. ' plugin(s)'
+        end
+
         lc.notify(lc.style.line({
-          lc.style.span('✓ '):fg('green'),
-          lc.style.span('Installed ' .. total .. ' plugin(s)'),
+          lc.style.span(icon):fg(color),
+          lc.style.span(message),
         }))
         if callback then callback(all_ok) end
       end)

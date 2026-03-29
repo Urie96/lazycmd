@@ -297,6 +297,12 @@ lazycmd /docker/container   # 启动后直接进入指定页面
 - 插件安装目录：`~/.local/share/lazycmd/plugins/`
 - 锁文件：`~/.config/lazycmd/plugins.lock`
 
+**远程插件认证**：
+
+- 远程插件安装/更新使用非交互式 `git` 调用，不会在 TUI 内请求输入 GitHub 用户名或密码
+- 私有仓库或需要认证的 HTTPS 仓库，请先在系统里配置好 Git 凭据，或改用 SSH / 本地 `dir` 插件
+- 若凭据缺失，插件管理器会直接报错而不是在预览区显示 `Username for 'https://github.com'`
+
 锁文件记录了每个插件安装时的具体 commit，下次可以通过 `S` 恢复。
 
 ## 文档

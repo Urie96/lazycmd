@@ -3,6 +3,7 @@ local style = {}
 
 ---@class Text
 ---A TUI Text widget
+---@field append fun(self: Text, line: Line|Span|string) Append a line to the text (modifies in place)
 
 ---@class Span
 ---A TUI Span widget

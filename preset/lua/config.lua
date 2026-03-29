@@ -15,6 +15,9 @@ local cfg = {
     open = '<right>',
     enter = '<enter>',
     help = '?',
+    delete = 'dd',
+    new = 'n',
+    append = 'a',
   },
 }
 

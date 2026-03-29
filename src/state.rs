@@ -517,6 +517,7 @@ mod tests {
             key_sequence: KeySequence::from("x"),
             callback: make_callback(&lua, "global"),
             desc: None,
+            once: false,
         });
 
         let cb = state
@@ -542,6 +543,7 @@ mod tests {
             key_sequence: KeySequence::from("x"),
             callback: make_callback(&lua, "global"),
             desc: None,
+            once: false,
         });
 
         let cb = state
@@ -567,6 +569,7 @@ mod tests {
             key_sequence: KeySequence::from("g"),
             callback: make_callback(&lua, "global"),
             desc: None,
+            once: false,
         });
 
         let first = state
@@ -620,6 +623,7 @@ mod tests {
             key_sequence: KeySequence::from("q"),
             callback: make_callback(&lua, "global"),
             desc: Some("quit".to_string()),
+            once: false,
         });
 
         let keymaps = state.available_keymaps().unwrap();
@@ -631,6 +635,105 @@ mod tests {
         assert_eq!(keymaps[1].source, "global");
         assert_eq!(keymaps[1].key, "q");
         assert_eq!(keymaps[1].desc.as_deref(), Some("quit"));
+    }
+
+    #[test]
+    fn once_keymap_overrides_global_keymap() {
+        let lua = Lua::new();
+        let mut state = State::new();
+        state.add_keymap(Keymap {
+            mode: crate::Mode::Main,
+            raw_key: "x".to_string(),
+            key_sequence: KeySequence::from("x"),
+            callback: make_callback(&lua, "global"),
+            desc: None,
+            once: false,
+        });
+        state.add_keymap(Keymap {
+            mode: crate::Mode::Main,
+            raw_key: "x".to_string(),
+            key_sequence: KeySequence::from("x"),
+            callback: make_callback(&lua, "once"),
+            desc: Some("paste".to_string()),
+            once: true,
+        });
+
+        let cb = state
+            .tap_key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::empty()))
+            .unwrap()
+            .unwrap();
+
+        cb.call::<()>(()).unwrap();
+        assert_eq!(lua.globals().get::<String>("hit").unwrap(), "once");
+    }
+
+    #[test]
+    fn once_keymap_is_removed_after_trigger_and_global_recovers() {
+        let lua = Lua::new();
+        let mut state = State::new();
+        state.add_keymap(Keymap {
+            mode: crate::Mode::Main,
+            raw_key: "x".to_string(),
+            key_sequence: KeySequence::from("x"),
+            callback: make_callback(&lua, "global"),
+            desc: None,
+            once: false,
+        });
+        state.add_keymap(Keymap {
+            mode: crate::Mode::Main,
+            raw_key: "x".to_string(),
+            key_sequence: KeySequence::from("x"),
+            callback: make_callback(&lua, "once"),
+            desc: None,
+            once: true,
+        });
+
+        let first = state
+            .tap_key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::empty()))
+            .unwrap()
+            .unwrap();
+        first.call::<()>(()).unwrap();
+        assert_eq!(lua.globals().get::<String>("hit").unwrap(), "once");
+
+        let second = state
+            .tap_key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::empty()))
+            .unwrap()
+            .unwrap();
+        second.call::<()>(()).unwrap();
+        assert_eq!(lua.globals().get::<String>("hit").unwrap(), "global");
+    }
+
+    #[test]
+    fn entry_keymap_still_overrides_once_keymap() {
+        let lua = Lua::new();
+        let mut state = State::new();
+        state.set_current_page_entries(vec![make_entry(
+            &lua,
+            &[("x", make_callback(&lua, "entry"))],
+        )]);
+        state.add_keymap(Keymap {
+            mode: crate::Mode::Main,
+            raw_key: "x".to_string(),
+            key_sequence: KeySequence::from("x"),
+            callback: make_callback(&lua, "once"),
+            desc: None,
+            once: true,
+        });
+
+        let keymaps = state.available_keymaps().unwrap();
+
+        assert_eq!(keymaps.len(), 2);
+        assert_eq!(keymaps[0].source, "entry");
+        assert_eq!(keymaps[0].key, "x");
+        assert_eq!(keymaps[1].source, "once");
+
+        let cb = state
+            .tap_key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::empty()))
+            .unwrap()
+            .unwrap();
+
+        cb.call::<()>(()).unwrap();
+        assert_eq!(lua.globals().get::<String>("hit").unwrap(), "entry");
     }
 }
 
@@ -735,8 +838,11 @@ impl State {
         }
     }
     pub fn add_keymap(&mut self, keymap: Keymap) {
-        self.keymap_config
-            .retain(|v| !(v.mode == keymap.mode && v.key_sequence == keymap.key_sequence));
+        self.keymap_config.retain(|v| {
+            !(v.mode == keymap.mode
+                && v.key_sequence == keymap.key_sequence
+                && v.once == keymap.once)
+        });
         self.keymap_config.push(keymap);
     }
 
@@ -745,6 +851,11 @@ impl State {
         let entry_cands = self.entry_keymap_candidates()?;
         if !entry_cands.is_empty() {
             return Ok(self.resolve_keymap_candidates(entry_cands));
+        }
+
+        let once_cands = self.once_keymap_candidates();
+        if !once_cands.is_empty() {
+            return Ok(self.resolve_keymap_candidates(once_cands));
         }
 
         let global_cands = self.global_keymap_candidates();
@@ -779,8 +890,10 @@ impl State {
             let key_sequence = KeySequence::from(key.as_str());
             if key_sequence.prefix_match(&self.last_key_event_buffer) {
                 cands.push(ResolvedKeymap {
+                    mode: self.current_mode,
                     key_sequence,
                     callback,
+                    once: false,
                 });
             }
         }
@@ -821,14 +934,15 @@ impl State {
                     key: keymap.raw_key.clone(),
                     desc: keymap.desc.clone(),
                     callback: keymap.callback.clone(),
-                    source: "global",
+                    source: if keymap.once { "once" } else { "global" },
                 }),
         );
 
         keymaps.sort_by(|a, b| {
             let source_order = |source: &str| match source {
                 "entry" => 0,
-                _ => 1,
+                "once" => 1,
+                _ => 2,
             };
 
             source_order(a.source)
@@ -841,17 +955,26 @@ impl State {
     }
 
     fn global_keymap_candidates(&self) -> Vec<ResolvedKeymap> {
+        self.keymap_candidates(false)
+    }
+
+    fn once_keymap_candidates(&self) -> Vec<ResolvedKeymap> {
+        self.keymap_candidates(true)
+    }
+
+    fn keymap_candidates(&self, once: bool) -> Vec<ResolvedKeymap> {
         self.keymap_config
             .iter()
             .filter(|keymap| {
                 keymap.mode == self.current_mode
-                    && keymap
-                        .key_sequence
-                        .prefix_match(&self.last_key_event_buffer)
+                    && keymap.once == once
+                    && keymap.key_sequence.prefix_match(&self.last_key_event_buffer)
             })
             .map(|keymap| ResolvedKeymap {
+                mode: keymap.mode,
                 key_sequence: keymap.key_sequence.clone(),
                 callback: keymap.callback.clone(),
+                once: keymap.once,
             })
             .collect()
     }
@@ -866,6 +989,13 @@ impl State {
                 let cand = cands.first().unwrap();
                 if cand.key_sequence.all_match(&self.last_key_event_buffer) {
                     let cb = cand.callback.clone();
+                    if cand.once {
+                        self.keymap_config.retain(|keymap| {
+                            !(keymap.mode == cand.mode
+                                && keymap.once
+                                && keymap.key_sequence == cand.key_sequence)
+                        });
+                    }
                     self.clear_key_buffer();
                     Some(cb)
                 } else {
@@ -1000,6 +1130,8 @@ impl State {
 }
 
 struct ResolvedKeymap {
+    mode: crate::Mode,
     key_sequence: KeySequence,
     callback: LuaFunction,
+    once: bool,
 }
