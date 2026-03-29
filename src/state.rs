@@ -303,6 +303,7 @@ impl ConfirmButton {
 /// State for the input dialog
 #[derive(Debug)]
 pub struct InputDialog {
+    pub previous_mode: Mode,
     pub prompt: String,
     pub placeholder: String,
     pub text: String,
@@ -332,6 +333,7 @@ impl InputDialog {
     }
 
     pub fn new(
+        previous_mode: Mode,
         prompt: String,
         placeholder: String,
         value: String,
@@ -341,6 +343,7 @@ impl InputDialog {
     ) -> Self {
         let cursor_position = value.len();
         Self {
+            previous_mode,
             prompt,
             placeholder,
             text: value,
@@ -398,6 +401,15 @@ impl InputDialog {
     pub fn cursor_to_end(&mut self) {
         self.cursor_position = self.text.len();
     }
+
+    pub fn clear_before_cursor(&mut self) -> bool {
+        let old_text = self.text.clone();
+        if self.cursor_position > 0 {
+            self.text = self.text[self.cursor_position..].to_string();
+            self.cursor_position = 0;
+        }
+        self.text != old_text
+    }
 }
 
 #[cfg(test)]
@@ -415,6 +427,7 @@ mod tests {
         let on_change = lua.create_function(|_, ()| Ok(())).unwrap().to_owned();
 
         InputDialog::new(
+            crate::Mode::Main,
             "Search".to_string(),
             "keyword".to_string(),
             String::new(),
@@ -447,6 +460,7 @@ mod tests {
         let on_change = lua.create_function(|_, ()| Ok(())).unwrap().to_owned();
 
         let dialog = InputDialog::new(
+            crate::Mode::Main,
             "Search".to_string(),
             "keyword".to_string(),
             "abc".to_string(),
@@ -463,6 +477,32 @@ mod tests {
         lua.create_function(move |lua, ()| lua.globals().set("hit", marker))
             .unwrap()
             .to_owned()
+    }
+
+    #[test]
+    fn show_and_close_input_dialog_switches_mode() {
+        let lua = Lua::new();
+        let on_submit = lua.create_function(|_, ()| Ok(())).unwrap().to_owned();
+        let on_cancel = lua.create_function(|_, ()| Ok(())).unwrap().to_owned();
+        let on_change = lua.create_function(|_, ()| Ok(())).unwrap().to_owned();
+
+        let mut state = State::new();
+        state.show_input_dialog(
+            "Search".to_string(),
+            "keyword".to_string(),
+            String::new(),
+            on_submit,
+            on_cancel,
+            on_change,
+        );
+
+        assert_eq!(state.current_mode, crate::Mode::Input);
+        assert!(state.input_dialog.is_some());
+
+        let dialog = state.close_input_dialog();
+        assert!(dialog.is_some());
+        assert_eq!(state.current_mode, crate::Mode::Main);
+        assert!(state.input_dialog.is_none());
     }
 
     fn make_entry(lua: &Lua, keymap: &[(&str, mlua::Function)]) -> PageEntry {
@@ -869,6 +909,9 @@ impl State {
     }
 
     fn entry_keymap_candidates(&self) -> anyhow::Result<Vec<ResolvedKeymap>> {
+        if self.current_mode != Mode::Main {
+            return Ok(Vec::new());
+        }
         let Some(hovered) = self.hovered() else {
             return Ok(Vec::new());
         };
@@ -904,24 +947,27 @@ impl State {
     pub fn available_keymaps(&self) -> anyhow::Result<Vec<AvailableKeymap>> {
         let mut keymaps = Vec::new();
 
-        if let Some(hovered) = self.hovered() {
-            if let Some(keymap_table) = hovered
-                .keymap_table()
-                .map_err(anyhow::Error::from)
-                .with_context(|| format!("Failed to read keymap for entry '{}'", hovered.key))?
-            {
-                for pair in keymap_table.pairs::<String, LuaValue>() {
-                    let (key, value) = pair.map_err(anyhow::Error::from).with_context(|| {
-                        format!("Invalid keymap entry on hovered entry '{}'", hovered.key)
-                    })?;
-                    let (callback, desc) = resolve_entry_keymap_value(&hovered.key, &key, value)?;
+        if self.current_mode == Mode::Main {
+            if let Some(hovered) = self.hovered() {
+                if let Some(keymap_table) = hovered
+                    .keymap_table()
+                    .map_err(anyhow::Error::from)
+                    .with_context(|| format!("Failed to read keymap for entry '{}'", hovered.key))?
+                {
+                    for pair in keymap_table.pairs::<String, LuaValue>() {
+                        let (key, value) = pair.map_err(anyhow::Error::from).with_context(|| {
+                            format!("Invalid keymap entry on hovered entry '{}'", hovered.key)
+                        })?;
+                        let (callback, desc) =
+                            resolve_entry_keymap_value(&hovered.key, &key, value)?;
 
-                    keymaps.push(AvailableKeymap {
-                        key,
-                        desc,
-                        callback,
-                        source: "entry",
-                    });
+                        keymaps.push(AvailableKeymap {
+                            key,
+                            desc,
+                            callback,
+                            source: "entry",
+                        });
+                    }
                 }
             }
         }
@@ -1101,7 +1147,11 @@ impl State {
         on_cancel: LuaFunction,
         on_change: LuaFunction,
     ) {
+        self.clear_key_buffer();
+        let previous_mode = self.current_mode;
+        self.current_mode = Mode::Input;
         self.input_dialog = Some(InputDialog::new(
+            previous_mode,
             prompt,
             placeholder,
             value,
@@ -1109,6 +1159,88 @@ impl State {
             on_cancel,
             on_change,
         ));
+    }
+
+    pub fn close_input_dialog(&mut self) -> Option<InputDialog> {
+        let dialog = self.input_dialog.take();
+        if let Some(dialog) = &dialog {
+            self.current_mode = dialog.previous_mode;
+        }
+        self.clear_key_buffer();
+        dialog
+    }
+
+    pub fn input_dialog_submit(&mut self) -> Option<(String, LuaFunction)> {
+        self.close_input_dialog()
+            .map(|dialog| (dialog.text, dialog.on_submit))
+    }
+
+    pub fn input_dialog_cancel(&mut self) -> Option<LuaFunction> {
+        self.close_input_dialog().map(|dialog| dialog.on_cancel)
+    }
+
+    pub fn input_dialog_insert_char(&mut self, c: char) -> Option<(String, LuaFunction)> {
+        let dialog = self.input_dialog.as_mut()?;
+        dialog.insert_char(c);
+        Some((dialog.text.clone(), dialog.on_change.clone()))
+    }
+
+    pub fn input_dialog_replace_text(
+        &mut self,
+        text: String,
+    ) -> Option<(String, LuaFunction, bool)> {
+        let dialog = self.input_dialog.as_mut()?;
+        let changed = dialog.text != text;
+        dialog.text = text;
+        dialog.cursor_position = dialog.text.len();
+        Some((dialog.text.clone(), dialog.on_change.clone(), changed))
+    }
+
+    pub fn input_dialog_backspace(&mut self) -> Option<(String, LuaFunction)> {
+        let dialog = self.input_dialog.as_mut()?;
+        dialog.backspace();
+        Some((dialog.text.clone(), dialog.on_change.clone()))
+    }
+
+    pub fn input_dialog_clear_before_cursor(&mut self) -> Option<(String, LuaFunction)> {
+        let dialog = self.input_dialog.as_mut()?;
+        if dialog.clear_before_cursor() {
+            Some((dialog.text.clone(), dialog.on_change.clone()))
+        } else {
+            None
+        }
+    }
+
+    pub fn input_dialog_cursor_left(&mut self) -> bool {
+        let Some(dialog) = self.input_dialog.as_mut() else {
+            return false;
+        };
+        dialog.cursor_left();
+        true
+    }
+
+    pub fn input_dialog_cursor_right(&mut self) -> bool {
+        let Some(dialog) = self.input_dialog.as_mut() else {
+            return false;
+        };
+        dialog.cursor_right();
+        true
+    }
+
+    pub fn input_dialog_cursor_to_start(&mut self) -> bool {
+        let Some(dialog) = self.input_dialog.as_mut() else {
+            return false;
+        };
+        dialog.cursor_to_start();
+        true
+    }
+
+    pub fn input_dialog_cursor_to_end(&mut self) -> bool {
+        let Some(dialog) = self.input_dialog.as_mut() else {
+            return false;
+        };
+        dialog.cursor_to_end();
+        true
     }
 
     /// Toggle selected button in confirm dialog

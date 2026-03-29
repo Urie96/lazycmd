@@ -163,10 +163,16 @@ end
 ```lua
 lc.keymap.set('main', 'q', function() lc.cmd('quit') end)
 lc.keymap.set('main', 'j', 'scroll_by 1')
+lc.keymap.set('input', '<C-k>', function() lc.notify('input keymap hit') end)
+lc.keymap.set('input', '<enter>', 'input_submit')
 lc.keymap.set('main', '<C-x>', function() ... end)
 lc.keymap.set('main', '?', function() ... end, { desc = 'help' })
 lc.keymap.set('main', 'p', function() paste() end, { once = true, desc = 'paste once' })
 ```
+
+- `mode` 支持 `main` / `m` 和 `input` / `i`
+- 输入框中 `Backspace`、`Left`、`Right`、`Ctrl-G` 为 Rust 内置键位；其中 `Ctrl-G` 会调用外部编辑器编辑当前输入内容，优先使用 `$VISUAL`，其次 `$EDITOR`，否则回退到 `vi`
+- 其余默认动作通过 `preset/lua/config.lua` 用 `lc.keymap.set('input', ...)` 注册到内部命令，例如 `input_submit`、`input_cancel`
 
 `lc.config` 还支持 `keymap` 字段来覆盖内置主模式键位，例如：
 
@@ -180,7 +186,7 @@ lc.config {
 }
 ```
 
-支持的键位名包括 `up`、`down`、`top`、`bottom`、`preview_up`、`preview_down`、`reload`、`quit`、`force_quit`、`filter`、`clear_filter`、`back`、`open`、`enter`。每次调用 `lc.config` 都会按这些配置重新执行一遍 `lc.keymap.set`。
+支持的键位名包括 `up`、`down`、`top`、`bottom`、`preview_up`、`preview_down`、`reload`、`quit`、`force_quit`、`filter`、`clear_filter`、`back`、`open`、`enter`，以及 `input_submit`、`input_cancel`、`input_clear_before_cursor`、`input_cursor_to_start`、`input_cursor_to_end`。每次调用 `lc.config` 都会按这些配置重新执行一遍 `lc.keymap.set`。
 
 页面 entry 也可以定义局部 keymap：
 
@@ -323,6 +329,11 @@ end
 | `scroll_preview_by [n]` | 滚动预览 n 行 |
 | `reload` | 刷新当前列表 |
 | `enter_filter_mode` | 进入过滤模式 |
+| `input_submit` | 提交输入框 |
+| `input_cancel` | 取消输入框 |
+| `input_clear_before_cursor` | 删除光标前所有文本 |
+| `input_cursor_to_start` | 输入框光标移动到开头 |
+| `input_cursor_to_end` | 输入框光标移动到结尾 |
 | `exit_filter_mode` | 退出过滤模式 |
 | `accept_filter` | 应用过滤 |
 | `filter_clear` | 清除过滤 |

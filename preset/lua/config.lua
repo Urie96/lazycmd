@@ -18,6 +18,11 @@ local cfg = {
     delete = 'dd',
     new = 'n',
     append = 'a',
+    input_submit = '<enter>',
+    input_cancel = '<esc>',
+    input_clear_before_cursor = '<C-u>',
+    input_cursor_to_start = '<C-a>',
+    input_cursor_to_end = '<C-e>',
   },
 }
 
@@ -186,6 +191,7 @@ end
 
 local function apply_configured_keymap()
   local map = function(key, cb, desc) lc.keymap.set('main', key, cb, { desc = desc }) end
+  local map_input = function(key, cb, desc) lc.keymap.set('input', key, cb, { desc = desc }) end
   map(cfg.keymap.up, 'scroll_by -1', 'move up')
   map(cfg.keymap.down, 'scroll_by 1', 'move down')
   map(cfg.keymap.top, 'scroll_by -9999', 'go to top')
@@ -202,6 +208,20 @@ local function apply_configured_keymap()
   map(cfg.keymap.enter, 'enter', 'enter')
   map(cfg.keymap.help, open_help, 'help')
   map('gr', function() lc.api.go_to {} end, 'go to /')
+
+  map_input(cfg.keymap.input_submit, 'input_submit', 'submit input')
+  map_input(cfg.keymap.input_cancel, 'input_cancel', 'cancel input')
+  map_input(
+    cfg.keymap.input_clear_before_cursor,
+    'input_clear_before_cursor',
+    'delete text before cursor'
+  )
+  map_input(
+    cfg.keymap.input_cursor_to_start,
+    'input_cursor_to_start',
+    'move cursor to start'
+  )
+  map_input(cfg.keymap.input_cursor_to_end, 'input_cursor_to_end', 'move cursor to end')
 end
 
 local config = {}

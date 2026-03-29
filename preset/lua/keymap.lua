@@ -22,6 +22,11 @@ local keymap = {}
 ---@field back? string
 ---@field open? string
 ---@field enter? string
+---@field input_submit? string
+---@field input_cancel? string
+---@field input_clear_before_cursor? string
+---@field input_cursor_to_start? string
+---@field input_cursor_to_end? string
 
 ---Set a key mapping for a specific mode
 ---@param mode Mode The mode (e.g., "main", "input")

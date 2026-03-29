@@ -1,5 +1,5 @@
 use anyhow::Result;
-use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
 
 use crate::{plugin, State};
 
@@ -16,112 +16,121 @@ pub fn handle_input_dialog_key(
         return Ok(false);
     }
 
-    let dialog = match &mut state.input_dialog {
-        Some(d) => d,
-        None => return Ok(false),
-    };
+    if state.input_dialog.is_none() {
+        return Ok(false);
+    }
+
+    if let Some(cb) = state.tap_key(key)? {
+        plugin::scope(lua, state, event_sender, || cb.call::<()>(()))?;
+        return Ok(true);
+    }
+
+    if !state.last_key_event_buffer.is_empty() {
+        return Ok(true);
+    }
 
     match key.code {
-        // Enter: submit the input
-        KeyCode::Enter => {
-            let text = dialog.text.clone();
-            let on_submit = dialog.on_submit.clone();
-            state.input_dialog.take();
-
-            // Call on_submit callback using plugin::scope
-            plugin::scope(lua, state, event_sender, || on_submit.call::<()>(text))?;
-
-            Ok(true)
-        }
-        // Escape: cancel the input
-        KeyCode::Esc => {
-            let on_cancel = dialog.on_cancel.clone();
-            state.input_dialog.take();
-
-            // Call on_cancel callback using plugin::scope
-            plugin::scope(lua, state, event_sender, || on_cancel.call::<()>(()))?;
-
-            Ok(true)
-        }
-        // Ctrl-A: move cursor to start
-        KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            dialog.cursor_to_start();
-            Ok(true)
-        }
-        // Ctrl-E: move cursor to end
-        KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            dialog.cursor_to_end();
-            Ok(true)
-        }
-        // Ctrl-U: delete all characters before cursor
-        KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            let old_text = dialog.text.clone();
-            if dialog.cursor_position > 0 {
-                dialog.text = dialog.text[dialog.cursor_position..].to_string();
-                dialog.cursor_position = 0;
-            }
-
-            // Always call on_change callback to update the filter
-            let text = dialog.text.clone();
-            let on_change = dialog.on_change.clone();
-            if text != old_text {
-                plugin::scope(lua, state, event_sender, || on_change.call::<()>(text))?;
-            }
-            Ok(true)
-        }
-        // For keys with modifiers (except SHIFT), let keymap handle them
-        _ if key.modifiers.contains(KeyModifiers::CONTROL)
-            || key.modifiers.contains(KeyModifiers::ALT) =>
-        {
-            Ok(false)
-        }
-        KeyCode::Char(c) => {
-            // Insert character at cursor position
-            dialog.insert_char(c);
-
-            // Call on_change callback using plugin::scope
-            let text = dialog.text.clone();
-            let on_change = dialog.on_change.clone();
-            plugin::scope(lua, state, event_sender, || on_change.call::<()>(text))?;
-
-            Ok(true)
-        }
         KeyCode::Backspace => {
-            dialog.backspace();
+            let Some((text, on_change)) = state.input_dialog_backspace() else {
+                return Ok(false);
+            };
 
-            // Call on_change callback using plugin::scope
-            let text = dialog.text.clone();
-            let on_change = dialog.on_change.clone();
             plugin::scope(lua, state, event_sender, || on_change.call::<()>(text))?;
-
             Ok(true)
         }
-        KeyCode::Delete => {
-            dialog.delete();
+        KeyCode::Left => Ok(state.input_dialog_cursor_left()),
+        KeyCode::Right => Ok(state.input_dialog_cursor_right()),
+        KeyCode::Char(c) => {
+            let Some((text, on_change)) = state.input_dialog_insert_char(c) else {
+                return Ok(false);
+            };
 
-            // Call on_change callback using plugin::scope
-            let text = dialog.text.clone();
-            let on_change = dialog.on_change.clone();
             plugin::scope(lua, state, event_sender, || on_change.call::<()>(text))?;
-
-            Ok(true)
-        }
-        KeyCode::Left => {
-            dialog.cursor_left();
-            Ok(true)
-        }
-        KeyCode::Right => {
-            dialog.cursor_right();
-            Ok(true)
-        }
-        KeyCode::Home => {
-            dialog.cursor_to_start();
-            Ok(true)
-        }
-        KeyCode::End => {
-            dialog.cursor_to_end();
             Ok(true)
         }
         _ => Ok(false),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::handle_input_dialog_key;
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    use mlua::Lua;
+
+    use crate::{Keymap, Mode, State};
+
+    fn make_noop(lua: &Lua) -> mlua::Function {
+        lua.create_function(|_, ()| Ok(())).unwrap().to_owned()
+    }
+
+    #[test]
+    fn input_keymap_can_override_builtin_shortcut() {
+        let lua = Lua::new();
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let mut state = State::new();
+
+        state.show_input_dialog(
+            "Search".to_string(),
+            "keyword".to_string(),
+            "abc".to_string(),
+            make_noop(&lua),
+            make_noop(&lua),
+            make_noop(&lua),
+        );
+
+        let callback = lua
+            .create_function(|lua, ()| lua.globals().set("hit", true))
+            .unwrap()
+            .to_owned();
+
+        state.add_keymap(Keymap {
+            mode: Mode::Input,
+            raw_key: "<C-a>".to_string(),
+            key_sequence: "<C-a>".into(),
+            callback,
+            desc: None,
+            once: false,
+        });
+
+        let handled = handle_input_dialog_key(
+            &lua,
+            &mut state,
+            &tx,
+            KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL),
+        )
+        .unwrap();
+
+        assert!(handled);
+        assert_eq!(lua.globals().get::<bool>("hit").unwrap(), true);
+        assert_eq!(state.input_dialog.as_ref().unwrap().cursor_position, 3);
+    }
+
+    #[test]
+    fn enter_is_not_builtin_without_input_keymap() {
+        let lua = Lua::new();
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let mut state = State::new();
+
+        state.show_input_dialog(
+            "Search".to_string(),
+            "keyword".to_string(),
+            "abc".to_string(),
+            make_noop(&lua),
+            make_noop(&lua),
+            make_noop(&lua),
+        );
+
+        let handled = handle_input_dialog_key(
+            &lua,
+            &mut state,
+            &tx,
+            KeyEvent::new(KeyCode::Enter, KeyModifiers::empty()),
+        )
+        .unwrap();
+
+        assert!(!handled);
+        assert!(state.input_dialog.is_some());
+        assert_eq!(state.input_dialog.as_ref().unwrap().text, "abc");
     }
 }

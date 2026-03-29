@@ -152,7 +152,7 @@ pub struct State {
 ```rust
 pub enum Mode {
     Main,   // 主模式 - 导航和操作
-    Input,  // 输入模式 - 过滤/搜索
+    Input,  // 输入模式 - 输入框 keymap / 编辑
 }
 ```
 

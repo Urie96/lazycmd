@@ -226,7 +226,20 @@ lc.config {
 }
 ```
 
-支持的字段有：`up`、`down`、`top`、`bottom`、`preview_up`、`preview_down`、`reload`、`quit`、`force_quit`、`filter`、`clear_filter`、`back`、`open`、`enter`。每次调用 `lc.config` 都会根据当前 `keymap` 重新调用一遍 `lc.keymap.set`。
+输入框默认键位也通过 `lc.config.keymap` 配置，而不是写死在 Rust 中，例如：
+
+```lua
+lc.config {
+  keymap = {
+    input_submit = '<enter>',
+    input_cancel = '<esc>',
+  },
+}
+```
+
+其中 `Backspace`、`Left`、`Right`、`Ctrl-G` 是 Rust 内置输入键位，不通过 `lc.config.keymap` 配置。`Ctrl-G` 会调用外部编辑器编辑当前输入内容，优先使用 `$VISUAL`，其次 `$EDITOR`，否则回退到 `vi`。
+
+支持的字段有：`up`、`down`、`top`、`bottom`、`preview_up`、`preview_down`、`reload`、`quit`、`force_quit`、`filter`、`clear_filter`、`back`、`open`、`enter`、`input_submit`、`input_cancel`、`input_clear_before_cursor`、`input_cursor_to_start`、`input_cursor_to_end`。每次调用 `lc.config` 都会根据当前 `keymap` 重新调用一遍 `lc.keymap.set`。
 
 页面 entry 还可以定义 `keymap` 字段：
 

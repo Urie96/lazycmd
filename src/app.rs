@@ -8,6 +8,7 @@ use ratatui::{
     prelude::*,
     widgets::{Block, BorderType, Paragraph},
 };
+use std::{fs, path::PathBuf};
 use std::time::Instant;
 use tokio::sync::mpsc;
 
@@ -216,6 +217,14 @@ impl App {
 
                 // If input dialog is shown, handle its keyboard input
                 if self.state.input_dialog.is_some() {
+                    if key.code == crossterm::event::KeyCode::Char('g')
+                        && key
+                            .modifiers
+                            .contains(crossterm::event::KeyModifiers::CONTROL)
+                    {
+                        self.edit_input_dialog_in_external_editor()?;
+                        return Ok(());
+                    }
                     if input_handler::handle_input_dialog_key(
                         &self.lua,
                         &mut self.state,
@@ -312,14 +321,14 @@ impl App {
                 on_cancel,
                 on_change,
             } => {
-                self.state.input_dialog = Some(crate::InputDialog::new(
+                self.state.show_input_dialog(
                     prompt,
                     placeholder,
                     value,
                     on_submit,
                     on_cancel,
                     on_change,
-                ));
+                );
                 self.dirty = true;
             }
         }
@@ -399,6 +408,74 @@ impl App {
 
         // Return the exit code
         Ok(exit_code)
+    }
+
+    fn external_editor_command(&self) -> Result<Vec<String>> {
+        let editor = std::env::var("VISUAL")
+            .ok()
+            .filter(|v| !v.trim().is_empty())
+            .or_else(|| std::env::var("EDITOR").ok().filter(|v| !v.trim().is_empty()))
+            .unwrap_or_else(|| "vi".to_string());
+        let cmd = shell_words::split(&editor)?;
+        if cmd.is_empty() {
+            bail!("Empty editor command");
+        }
+        Ok(cmd)
+    }
+
+    fn input_editor_tempfile_path() -> PathBuf {
+        let mut path = std::env::temp_dir();
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        path.push(format!("lazycmd-input-{}-{}.tmp", std::process::id(), nanos));
+        path
+    }
+
+    fn normalize_input_editor_output(mut text: String) -> String {
+        if text.ends_with('\n') {
+            text.pop();
+            if text.ends_with('\r') {
+                text.pop();
+            }
+        }
+        text
+    }
+
+    fn edit_input_dialog_in_external_editor(&mut self) -> Result<()> {
+        let Some(dialog) = self.state.input_dialog.as_ref() else {
+            return Ok(());
+        };
+
+        let path = Self::input_editor_tempfile_path();
+        fs::write(&path, &dialog.text)?;
+
+        let result = (|| -> Result<()> {
+            let mut cmd = self.external_editor_command()?;
+            cmd.push(path.to_string_lossy().to_string());
+            let exit_code = self.execute_interactive_command(cmd, None)?;
+            let updated = Self::normalize_input_editor_output(fs::read_to_string(&path)?);
+
+            if let Some((text, on_change, changed)) = self.state.input_dialog_replace_text(updated) {
+                if changed {
+                    plugin::scope(&self.lua, &mut self.state, &self.event_sender, || {
+                        on_change.call::<()>(text)
+                    })?;
+                }
+            }
+
+            if exit_code != 0 {
+                self.state
+                    .set_notification(format!("editor exited with code {exit_code}").into());
+            }
+
+            self.dirty = true;
+            Ok(())
+        })();
+
+        let _ = fs::remove_file(&path);
+        result
     }
 
     fn handle_command(&mut self, command: &str) -> Result<()> {
@@ -495,6 +572,40 @@ impl App {
                         self.call_preview()?;
                     }
                     self.run_post_page_enter_hooks()?;
+                    self.dirty = true;
+                }
+            }
+            "input_submit" => {
+                if let Some((text, on_submit)) = self.state.input_dialog_submit() {
+                    plugin::scope(&self.lua, &mut self.state, &self.event_sender, || {
+                        on_submit.call::<()>(text)
+                    })?;
+                    self.dirty = true;
+                }
+            }
+            "input_cancel" => {
+                if let Some(on_cancel) = self.state.input_dialog_cancel() {
+                    plugin::scope(&self.lua, &mut self.state, &self.event_sender, || {
+                        on_cancel.call::<()>(())
+                    })?;
+                    self.dirty = true;
+                }
+            }
+            "input_clear_before_cursor" => {
+                if let Some((text, on_change)) = self.state.input_dialog_clear_before_cursor() {
+                    plugin::scope(&self.lua, &mut self.state, &self.event_sender, || {
+                        on_change.call::<()>(text)
+                    })?;
+                    self.dirty = true;
+                }
+            }
+            "input_cursor_to_start" => {
+                if self.state.input_dialog_cursor_to_start() {
+                    self.dirty = true;
+                }
+            }
+            "input_cursor_to_end" => {
+                if self.state.input_dialog_cursor_to_end() {
                     self.dirty = true;
                 }
             }
@@ -687,5 +798,17 @@ impl StatefulWidget for AppWidget {
             dialog.cursor_x = input_state.cursor_x;
             dialog.cursor_y = input_state.cursor_y;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::App;
+
+    #[test]
+    fn normalize_input_editor_output_strips_single_trailing_newline() {
+        assert_eq!(App::normalize_input_editor_output("txt\n".to_string()), "txt");
+        assert_eq!(App::normalize_input_editor_output("txt\r\n".to_string()), "txt");
+        assert_eq!(App::normalize_input_editor_output("txt".to_string()), "txt");
     }
 }
