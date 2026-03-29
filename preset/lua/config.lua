@@ -178,6 +178,32 @@ local function open_help()
   end)
 end
 
+local function select_action()
+  local options = {}
+  local lines = {}
+
+  for _, item in ipairs(lc.api.get_available_keymaps()) do
+    if item.source == 'entry' and item.desc ~= 'Select action' then
+      local line = lc.style.line {
+        lc.style.span(item.key):fg 'yellow',
+        '  ',
+        lc.style.span(item.desc or 'no description'):fg 'white',
+      }
+      table.insert(lines, line)
+      table.insert(options, {
+        value = item,
+        display = line,
+      })
+    end
+  end
+
+  if #options == 0 then return end
+  lc.style.align_columns(lines)
+  lc.select({ prompt = 'Actions', options = options }, function(choice)
+    if choice and choice.callback then choice.callback() end
+  end)
+end
+
 local function open_filter()
   lc.input {
     prompt = 'Filter:',
@@ -205,22 +231,14 @@ local function apply_configured_keymap()
   map(cfg.keymap.clear_filter, function() lc.api.set_filter '' end, 'clear filter')
   map(cfg.keymap.back, 'back', 'back')
   map(cfg.keymap.open, 'enter', 'open')
-  map(cfg.keymap.enter, 'enter', 'enter')
   map(cfg.keymap.help, open_help, 'help')
+  map(cfg.keymap.enter, select_action, 'Select action')
   map('gr', function() lc.api.go_to {} end, 'go to /')
 
   map_input(cfg.keymap.input_submit, 'input_submit', 'submit input')
   map_input(cfg.keymap.input_cancel, 'input_cancel', 'cancel input')
-  map_input(
-    cfg.keymap.input_clear_before_cursor,
-    'input_clear_before_cursor',
-    'delete text before cursor'
-  )
-  map_input(
-    cfg.keymap.input_cursor_to_start,
-    'input_cursor_to_start',
-    'move cursor to start'
-  )
+  map_input(cfg.keymap.input_clear_before_cursor, 'input_clear_before_cursor', 'delete text before cursor')
+  map_input(cfg.keymap.input_cursor_to_start, 'input_cursor_to_start', 'move cursor to start')
   map_input(cfg.keymap.input_cursor_to_end, 'input_cursor_to_end', 'move cursor to end')
 end
 

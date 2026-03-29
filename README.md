@@ -72,9 +72,10 @@ lazycmd/
 │   └── widgets/           # UI 组件
 └── preset/                # 预设文件
     ├── lua/              # Lua 预设脚本
-    │   ├── init.lua       # 初始化脚本
+    │   ├── config.lua     # 初始化脚本
     │   ├── plugin_manager.lua  # 插件管理核心逻辑
     │   ├── manager.lua    # 插件管理器 UI
+    │   ├── promise.lua    # 内置 Promise
     │   └── ...           # 其他工具模块
     ├── syntaxes/         # 语法定义文件
     └── themes/           # 颜色主题
@@ -145,6 +146,8 @@ return M
 | `lc.keymap` | 键盘映射          |
 | `lc.json`   | JSON 编解码       |
 | `lc.cmd`    | 发送内部命令      |
+
+另外内置全局 `Promise`，正常使用时直接访问即可，不需要 `require`。
 
 ## 内置插件
 

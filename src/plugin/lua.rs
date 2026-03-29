@@ -48,6 +48,7 @@ pub fn init_lua(lua: &Lua) -> mlua::Result<()> {
     load_preset!("string")?;
     load_preset!("inspect")?;
     load_preset!("json")?;
+    load_preset!("promise")?;
     load_preset!("time")?;
     load_preset!("keymap")?;
     load_preset!("http")?;

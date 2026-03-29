@@ -19,6 +19,7 @@ preset/lua/
 ├── interactive.lua   # 交互式命令封装
 ├── json.lua          # JSON 编解码
 ├── keymap.lua        # 键盘映射 API 封装
+├── promise.lua       # 内置 Promise 实现与全局变量
 ├── socket.lua        # 长连接 socket 封装
 ├── string.lua        # 字符串扩展方法
 ├── style.lua         # 样式 API 封装
@@ -195,6 +196,16 @@ lc.interactive({"cmd"}, {wait_confirm = true}, callback)
 lc.json.encode(value)   -- Lua 值转 JSON 字符串
 lc.json.decode(str)     -- JSON 字符串转 Lua 值
 ```
+
+### promise.lua - Promise
+
+启动时会直接加载内置 `Promise`，推荐直接使用全局变量：
+
+```lua
+Promise                -- 全局变量
+```
+
+兼容旧代码时，`require('promise')` 也会返回同一个 Promise 表；正常情况下不需要 `require`，也不需要再把 `promise` 作为插件加入 `lc.config.plugins`。
 
 ### keymap.lua - 键盘映射
 

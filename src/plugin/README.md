@@ -29,8 +29,10 @@ src/plugin/
 负责初始化 Lua 环境和加载预设文件：
 
 - `init_lua()` - 初始化 Lua 环境并设置配置基准目录
-- 预设加载顺序包含 `util.lua`、`copy_from_neovim.lua`、`init.lua` 等基础模块
+- 预设加载顺序包含 `system.lua`、`json.lua`、`promise.lua`、`config.lua` 等基础模块
 - `package.path` 由 `preset/lua/config.lua` 根据 `plugins` 配置动态追加
+
+其中 `promise.lua` 属于内置预设，启动后会直接注册全局 `Promise`；`require('promise')` 仅作为兼容旧代码的别名。
 
 **插件路径搜索顺序**（`package.path`）：
 
