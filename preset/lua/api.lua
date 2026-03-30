@@ -16,6 +16,10 @@ function api.page_set_entries(entries) return _lc.api.page_set_entries(entries) 
 ---@return PageEntry? entry The hovered entry or nil
 function api.page_get_hovered() return _lc.api.page_get_hovered() end
 
+---Set hovered entry by full path
+---@param path string[] The full path including the entry key
+function api.page_set_hovered(path) return _lc.api.page_set_hovered(path) end
+
 ---Get the full entry list for the current page before filtering
 ---@return PageEntry[] entries The current page entries
 function api.page_get_entries() return _lc.api.page_get_entries() end

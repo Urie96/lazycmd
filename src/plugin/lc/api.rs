@@ -42,6 +42,18 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
         })?
         .into_lua(lua)?;
 
+    let page_set_hovered = lua
+        .create_function(|lua, path: Vec<String>| {
+            plugin::mut_scope_state(lua, |state| {
+                if state.set_hover_by_path(&path) {
+                    plugin::send_render_event(lua)?;
+                    plugin::send_event(lua, Event::RefreshPreview)?;
+                }
+                Ok(())
+            })
+        })?
+        .into_lua(lua)?;
+
     let page_set_preview = lua
         .create_function(|lua, preview: Box<dyn Renderable>| {
             plugin::mut_scope_state(lua, |state| {
@@ -163,6 +175,7 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
         ("page_set_entries", page_set_entries),
         ("page_get_entries", page_get_entries),
         ("page_get_hovered", page_get_hovered),
+        ("page_set_hovered", page_set_hovered),
         ("page_set_preview", page_set_preview),
         ("go_to", go_to),
         ("get_current_path", get_current_path),

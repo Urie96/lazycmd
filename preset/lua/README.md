@@ -50,6 +50,7 @@ preset/lua 目录中的脚本是 Rust 后端 API 的 Lua 封装层。它们：
 lc.api.page_set_entries(entries)  -- 设置页面条目
 lc.api.page_get_entries()         -- 获取当前页面完整条目
 lc.api.page_get_hovered()         -- 获取当前悬停项
+lc.api.page_set_hovered(path)     -- 按完整路径设置当前悬停项
 lc.api.page_set_preview(widget)    -- 设置预览内容
 lc.api.go_to(path)                -- 导航到路径
 lc.api.get_current_path()         -- 获取当前路径

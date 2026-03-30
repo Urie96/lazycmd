@@ -521,6 +521,16 @@ mod tests {
         }
     }
 
+    fn make_entry_with_key(lua: &Lua, key: &str) -> PageEntry {
+        let entry = lua.create_table().unwrap();
+        entry.set("key", key).unwrap();
+
+        PageEntry {
+            key: key.to_string(),
+            tbl: entry,
+        }
+    }
+
     fn make_entry_with_desc(
         lua: &Lua,
         key: &str,
@@ -775,6 +785,32 @@ mod tests {
         cb.call::<()>(()).unwrap();
         assert_eq!(lua.globals().get::<String>("hit").unwrap(), "entry");
     }
+
+    #[test]
+    fn set_hover_by_path_selects_matching_entry_on_current_page() {
+        let lua = Lua::new();
+        let mut state = State::new();
+        state.current_path = vec!["file".to_string(), "tmp".to_string()];
+        state.set_current_page_entries(vec![
+            make_entry_with_key(&lua, "a"),
+            make_entry_with_key(&lua, "b"),
+            make_entry_with_key(&lua, "c"),
+        ]);
+
+        assert!(state.set_hover_by_path(&["file".into(), "tmp".into(), "c".into()]));
+        assert_eq!(state.hovered().map(|entry| entry.key.as_str()), Some("c"));
+    }
+
+    #[test]
+    fn set_hover_by_path_ignores_other_pages() {
+        let lua = Lua::new();
+        let mut state = State::new();
+        state.current_path = vec!["file".to_string(), "tmp".to_string()];
+        state.set_current_page_entries(vec![make_entry_with_key(&lua, "a")]);
+
+        assert!(!state.set_hover_by_path(&["file".into(), "other".into(), "a".into()]));
+        assert_eq!(state.hovered().map(|entry| entry.key.as_str()), Some("a"));
+    }
 }
 
 /// State for the confirm dialog
@@ -876,6 +912,27 @@ impl State {
                 }
             }
         }
+    }
+
+    pub fn set_hover_by_path(&mut self, path: &[String]) -> bool {
+        self.clear_key_buffer();
+        let Some((key, parent_path)) = path.split_last() else {
+            return false;
+        };
+        if self.current_path != parent_path {
+            return false;
+        }
+
+        let Some(page) = &mut self.current_page else {
+            return false;
+        };
+
+        let Some(idx) = page.filtered_list.iter().position(|entry| entry.key == *key) else {
+            return false;
+        };
+
+        page.list_state.select(Some(idx));
+        true
     }
     pub fn add_keymap(&mut self, keymap: Keymap) {
         self.keymap_config.retain(|v| {

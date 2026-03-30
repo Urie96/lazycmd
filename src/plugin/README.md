@@ -81,6 +81,7 @@ scope(lua, state, sender, || {
 | `page_set_entries(entries)` | 设置页面条目列表 |
 | `page_get_entries()` | 获取当前页面完整条目列表（过滤前） |
 | `page_get_hovered()` | 获取当前悬停条目 |
+| `page_set_hovered(path)` | 按完整路径设置当前悬停条目 |
 | `page_set_preview(preview)` | 设置预览内容 |
 | `go_to(path)` | 导航到指定路径 |
 | `get_current_path()` | 获取当前路径 |
