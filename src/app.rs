@@ -8,8 +8,8 @@ use ratatui::{
     prelude::*,
     widgets::{Block, BorderType, Paragraph},
 };
-use std::{fs, path::PathBuf};
 use std::time::Instant;
+use std::{fs, path::PathBuf};
 use tokio::sync::mpsc;
 
 use libc::{sigaction, sigemptyset, SIGINT, SIG_IGN};
@@ -414,7 +414,11 @@ impl App {
         let editor = std::env::var("VISUAL")
             .ok()
             .filter(|v| !v.trim().is_empty())
-            .or_else(|| std::env::var("EDITOR").ok().filter(|v| !v.trim().is_empty()))
+            .or_else(|| {
+                std::env::var("EDITOR")
+                    .ok()
+                    .filter(|v| !v.trim().is_empty())
+            })
             .unwrap_or_else(|| "vi".to_string());
         let cmd = shell_words::split(&editor)?;
         if cmd.is_empty() {
@@ -429,7 +433,11 @@ impl App {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_nanos())
             .unwrap_or(0);
-        path.push(format!("lazycmd-input-{}-{}.tmp", std::process::id(), nanos));
+        path.push(format!(
+            "lazycmd-input-{}-{}.tmp",
+            std::process::id(),
+            nanos
+        ));
         path
     }
 
@@ -457,7 +465,8 @@ impl App {
             let exit_code = self.execute_interactive_command(cmd, None)?;
             let updated = Self::normalize_input_editor_output(fs::read_to_string(&path)?);
 
-            if let Some((text, on_change, changed)) = self.state.input_dialog_replace_text(updated) {
+            if let Some((text, on_change, changed)) = self.state.input_dialog_replace_text(updated)
+            {
                 if changed {
                     plugin::scope(&self.lua, &mut self.state, &self.event_sender, || {
                         on_change.call::<()>(text)
@@ -807,8 +816,14 @@ mod tests {
 
     #[test]
     fn normalize_input_editor_output_strips_single_trailing_newline() {
-        assert_eq!(App::normalize_input_editor_output("txt\n".to_string()), "txt");
-        assert_eq!(App::normalize_input_editor_output("txt\r\n".to_string()), "txt");
+        assert_eq!(
+            App::normalize_input_editor_output("txt\n".to_string()),
+            "txt"
+        );
+        assert_eq!(
+            App::normalize_input_editor_output("txt\r\n".to_string()),
+            "txt"
+        );
         assert_eq!(App::normalize_input_editor_output("txt".to_string()), "txt");
     }
 }

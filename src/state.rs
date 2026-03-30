@@ -927,7 +927,11 @@ impl State {
             return false;
         };
 
-        let Some(idx) = page.filtered_list.iter().position(|entry| entry.key == *key) else {
+        let Some(idx) = page
+            .filtered_list
+            .iter()
+            .position(|entry| entry.key == *key)
+        else {
             return false;
         };
 
@@ -1012,9 +1016,10 @@ impl State {
                     .with_context(|| format!("Failed to read keymap for entry '{}'", hovered.key))?
                 {
                     for pair in keymap_table.pairs::<String, LuaValue>() {
-                        let (key, value) = pair.map_err(anyhow::Error::from).with_context(|| {
-                            format!("Invalid keymap entry on hovered entry '{}'", hovered.key)
-                        })?;
+                        let (key, value) =
+                            pair.map_err(anyhow::Error::from).with_context(|| {
+                                format!("Invalid keymap entry on hovered entry '{}'", hovered.key)
+                            })?;
                         let (callback, desc) =
                             resolve_entry_keymap_value(&hovered.key, &key, value)?;
 
@@ -1071,7 +1076,9 @@ impl State {
             .filter(|keymap| {
                 keymap.mode == self.current_mode
                     && keymap.once == once
-                    && keymap.key_sequence.prefix_match(&self.last_key_event_buffer)
+                    && keymap
+                        .key_sequence
+                        .prefix_match(&self.last_key_event_buffer)
             })
             .map(|keymap| ResolvedKeymap {
                 mode: keymap.mode,

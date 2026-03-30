@@ -2,7 +2,10 @@ use mlua::prelude::*;
 use tokio::io::AsyncReadExt;
 use tokio::task::spawn_local;
 
-async fn read_file_limited(path: String, max_chars: Option<usize>) -> Result<(String, bool), String> {
+async fn read_file_limited(
+    path: String,
+    max_chars: Option<usize>,
+) -> Result<(String, bool), String> {
     let Some(limit) = max_chars else {
         return tokio::fs::read_to_string(&path)
             .await
@@ -20,10 +23,7 @@ async fn read_file_limited(path: String, max_chars: Option<usize>) -> Result<(St
     let mut buf = vec![0u8; 8192];
 
     loop {
-        let read = file
-            .read(&mut buf)
-            .await
-            .map_err(|err| err.to_string())?;
+        let read = file.read(&mut buf).await.map_err(|err| err.to_string())?;
         if read == 0 {
             if pending.is_empty() {
                 break;
@@ -93,10 +93,7 @@ async fn read_file_limited(path: String, max_chars: Option<usize>) -> Result<(St
 
         if truncated || char_count >= limit {
             let mut extra = [0u8; 1];
-            let has_more = file
-                .read(&mut extra)
-                .await
-                .map_err(|err| err.to_string())?;
+            let has_more = file.read(&mut extra).await.map_err(|err| err.to_string())?;
             truncated = truncated || has_more > 0 || !pending.is_empty();
             break;
         }
@@ -210,27 +207,35 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
         .into_lua(lua)?;
 
     let read_file = lua
-        .create_function(|lua, (path, opts, callback): (String, Option<LuaTable>, LuaFunction)| -> mlua::Result<()> {
-            let max_chars = opts
-                .as_ref()
-                .and_then(|tbl| tbl.get::<Option<usize>>("max_chars").ok())
-                .flatten();
-            let sender = crate::plugin::clone_sender(lua)?;
+        .create_function(
+            |lua,
+             (path, opts, callback): (String, Option<LuaTable>, LuaFunction)|
+             -> mlua::Result<()> {
+                let max_chars = opts
+                    .as_ref()
+                    .and_then(|tbl| tbl.get::<Option<usize>>("max_chars").ok())
+                    .flatten();
+                let sender = crate::plugin::clone_sender(lua)?;
 
-            spawn_local(async move {
-                let result = read_file_limited(path, max_chars).await;
-                let _ = sender.send(crate::Event::LuaCallback(Box::new(move |_lua| match result {
-                    Ok((content, truncated)) => {
-                        let meta = _lua.create_table()?;
-                        meta.set("truncated", truncated)?;
-                        callback.call::<()>((content, LuaNil, meta))
-                    }
-                    Err(err) => callback.call::<()>((String::new(), err.to_string(), LuaNil)),
-                })));
-            });
+                spawn_local(async move {
+                    let result = read_file_limited(path, max_chars).await;
+                    let _ = sender.send(crate::Event::LuaCallback(Box::new(
+                        move |_lua| match result {
+                            Ok((content, truncated)) => {
+                                let meta = _lua.create_table()?;
+                                meta.set("truncated", truncated)?;
+                                callback.call::<()>((content, LuaNil, meta))
+                            }
+                            Err(err) => {
+                                callback.call::<()>((String::new(), err.to_string(), LuaNil))
+                            }
+                        },
+                    )));
+                });
 
-            Ok(())
-        })?
+                Ok(())
+            },
+        )?
         .into_lua(lua)?;
 
     let write_file_sync = lua

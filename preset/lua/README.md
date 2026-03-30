@@ -65,10 +65,10 @@ lc.api.append_hook_pre_reload(cb) -- 添加重载前钩子
 持久化缓存的 Lua 封装：
 
 ```lua
-lc.cache.get(key)           -- 获取缓存
-lc.cache.set(key, value, opts)  -- 设置缓存（支持 TTL）
-lc.cache.delete(key)        -- 删除缓存
-lc.cache.clear()            -- 清空缓存
+lc.cache.get(namespace, key)           -- 获取缓存
+lc.cache.set(namespace, key, value, opts)  -- 设置缓存（支持 TTL）
+lc.cache.delete(namespace, key)        -- 删除缓存
+lc.cache.clear(namespace)              -- 清空指定 namespace 的缓存
 ```
 
 ### clipboard.lua - 系统剪贴板
@@ -527,8 +527,8 @@ lc.system.exec({"ls", "-la"}, function(out)
 end)
 
 -- 使用缓存
-lc.cache.set("api_result", {data = "something"}, {ttl = 300})
-local cached = lc.cache.get("api_result")
+lc.cache.set("demo", "api_result", {data = "something"}, {ttl = 300})
+local cached = lc.cache.get("demo", "api_result")
 
 -- 交互式确认
 lc.confirm({

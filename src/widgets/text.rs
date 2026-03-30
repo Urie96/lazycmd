@@ -20,10 +20,14 @@ fn into_line(value: LuaValue) -> mlua::Result<Line<'static>> {
             } else if let Ok(span) = ud.take::<LuaSpan>() {
                 Ok(Line::from(span.0))
             } else {
-                Err(mlua::Error::runtime("expected Line, Span, or String for append"))
+                Err(mlua::Error::runtime(
+                    "expected Line, Span, or String for append",
+                ))
             }
         }
-        _ => Err(mlua::Error::runtime("expected Line, Span, or String for append")),
+        _ => Err(mlua::Error::runtime(
+            "expected Line, Span, or String for append",
+        )),
     }
 }
 

@@ -97,19 +97,19 @@ scope(lua, state, sender, || {
 
 ### lc.cache - 缓存系统
 
-基于 JSON 文件的持久化缓存：
+基于 JSON 文件的持久化缓存。缓存按 namespace 分文件存储，避免不同插件 key 冲突，也避免所有缓存共用单个大文件反复读写：
 
 | 函数 | 说明 |
 |------|------|
-| `cache.get(key)` | 获取缓存值 |
-| `cache.set(key, value, opts)` | 设置缓存值（支持 TTL） |
-| `cache.delete(key)` | 删除缓存 |
-| `cache.clear()` | 清空所有缓存 |
+| `cache.get(namespace, key)` | 获取缓存值 |
+| `cache.set(namespace, key, value, opts)` | 设置缓存值（支持 TTL） |
+| `cache.delete(namespace, key)` | 删除缓存 |
+| `cache.clear(namespace)` | 清空指定 namespace 的缓存 |
 
 ```lua
 -- 使用示例
-lc.cache.set("user_data", {name = "test"}, {ttl = 3600})  -- TTL 为秒
-local data = lc.cache.get("user_data")
+lc.cache.set("github.releases", "user_data", {name = "test"}, {ttl = 3600})  -- TTL 为秒
+local data = lc.cache.get("github.releases", "user_data")
 ```
 
 ### lc.fs - 文件系统
@@ -297,10 +297,10 @@ end
 
 | 函数 | 说明 |
 |------|------|
-| `lc.cache.get(key)` | 获取缓存 |
-| `lc.cache.set(key, value, opts)` | 设置缓存 |
-| `lc.cache.delete(key)` | 删除缓存 |
-| `lc.cache.clear()` | 清空缓存 |
+| `lc.cache.get(namespace, key)` | 获取缓存 |
+| `lc.cache.set(namespace, key, value, opts)` | 设置缓存 |
+| `lc.cache.delete(namespace, key)` | 删除缓存 |
+| `lc.cache.clear(namespace)` | 清空指定 namespace 的缓存 |
 
 ### 其他函数
 
