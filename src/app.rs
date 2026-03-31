@@ -104,6 +104,7 @@ impl App {
                 self.handle_event(e)?;
             }
             if self.quitting {
+                plugin::flush_pending_cache()?;
                 break;
             }
 
@@ -249,12 +250,11 @@ impl App {
             Event::AddKeymap(keymap) => self.state.add_keymap(keymap),
             Event::Enter(path) => {
                 let from_cache = self.state.go_to(path);
-                if !from_cache {
-                    self.call_list()?;
-                } else {
+                if from_cache {
                     // Restore preview for cached page
                     self.call_preview()?;
                 }
+                self.call_list()?;
                 self.run_post_page_enter_hooks()?;
                 self.dirty = true;
             }
@@ -531,11 +531,6 @@ impl App {
                 }
                 // Save the selected entry key to restore later
                 let selected_key = self.state.hovered().map(|e| e.key.clone());
-                // Clear current page entries (but don't clear list_state selection)
-                if let Some(page) = &mut self.state.current_page {
-                    page.list.clear();
-                    page.filtered_list.clear();
-                }
                 self.state.clear_current_cache();
                 self.call_list()?;
                 // Restore selection by finding the entry with the same key

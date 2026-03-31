@@ -2,6 +2,11 @@ use mlua::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::{Mutex, OnceLock};
+use std::time::Duration;
+
+/// Persist dirty cache namespaces in the background at a low frequency.
+const FLUSH_INTERVAL: Duration = Duration::from_secs(10);
 
 /// Get the cache directory path.
 fn get_cache_dir() -> PathBuf {
@@ -39,8 +44,27 @@ struct CacheEntry {
     expires: Option<u64>, // Unix timestamp
 }
 
+#[derive(Debug, Default)]
+struct NamespaceCache {
+    entries: HashMap<String, CacheEntry>,
+    dirty: bool,
+}
+
+static CACHE_STORE: OnceLock<Mutex<HashMap<String, NamespaceCache>>> = OnceLock::new();
+static FLUSH_TASK_STARTED: OnceLock<()> = OnceLock::new();
+
+fn cache_store() -> &'static Mutex<HashMap<String, NamespaceCache>> {
+    CACHE_STORE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn lock_store() -> mlua::Result<std::sync::MutexGuard<'static, HashMap<String, NamespaceCache>>> {
+    cache_store()
+        .lock()
+        .map_err(|_| LuaError::RuntimeError("cache store mutex poisoned".to_string()))
+}
+
 /// Load cache for a namespace from disk.
-fn load_cache(namespace: &str) -> mlua::Result<HashMap<String, CacheEntry>> {
+fn load_cache_from_disk(namespace: &str) -> mlua::Result<HashMap<String, CacheEntry>> {
     let cache_path = get_cache_path(namespace)?;
 
     if !cache_path.exists() {
@@ -57,16 +81,14 @@ fn load_cache(namespace: &str) -> mlua::Result<HashMap<String, CacheEntry>> {
 }
 
 /// Save cache for a namespace to disk.
-fn save_cache(namespace: &str, cache: &HashMap<String, CacheEntry>) -> mlua::Result<()> {
+fn save_cache_to_disk(namespace: &str, cache: &HashMap<String, CacheEntry>) -> mlua::Result<()> {
     let cache_path = get_cache_path(namespace)?;
 
     // Ensure directory exists
     if let Some(parent) = cache_path.parent() {
-        std::fs::create_dir_all(parent)
-            .into_lua_err()
-            .map_err(|e| {
-                LuaError::RuntimeError(format!("Failed to create cache directory: {}", e))
-            })?;
+        std::fs::create_dir_all(parent).into_lua_err().map_err(|e| {
+            LuaError::RuntimeError(format!("Failed to create cache directory: {}", e))
+        })?;
     }
 
     // Remove expired entries before saving
@@ -79,16 +101,14 @@ fn save_cache(namespace: &str, cache: &HashMap<String, CacheEntry>) -> mlua::Res
 
     if cleaned.is_empty() {
         if cache_path.exists() {
-            std::fs::remove_file(&cache_path)
-                .into_lua_err()
-                .map_err(|e| {
-                    LuaError::RuntimeError(format!("Failed to delete cache file: {}", e))
-                })?;
+            std::fs::remove_file(&cache_path).into_lua_err().map_err(|e| {
+                LuaError::RuntimeError(format!("Failed to delete cache file: {}", e))
+            })?;
         }
         return Ok(());
     }
 
-    let json = serde_json::to_string_pretty(&cleaned)
+    let json = serde_json::to_string(&cleaned)
         .into_lua_err()
         .map_err(|e| LuaError::RuntimeError(format!("Failed to serialize cache: {}", e)))?;
 
@@ -97,6 +117,60 @@ fn save_cache(namespace: &str, cache: &HashMap<String, CacheEntry>) -> mlua::Res
         .map_err(|e| LuaError::RuntimeError(format!("Failed to write cache file: {}", e)))?;
 
     Ok(())
+}
+
+fn ensure_namespace_loaded<'a>(
+    store: &'a mut HashMap<String, NamespaceCache>,
+    namespace: &str,
+) -> mlua::Result<&'a mut NamespaceCache> {
+    if !store.contains_key(namespace) {
+        let entries = load_cache_from_disk(namespace)?;
+        store.insert(
+            namespace.to_string(),
+            NamespaceCache {
+                entries,
+                dirty: false,
+            },
+        );
+    }
+
+    Ok(store.get_mut(namespace).expect("namespace cache inserted"))
+}
+
+fn now_ts() -> u64 {
+    chrono::Utc::now().timestamp() as u64
+}
+
+fn flush_dirty_locked(store: &mut HashMap<String, NamespaceCache>) -> mlua::Result<()> {
+    for (namespace, cache) in store.iter_mut() {
+        if !cache.dirty {
+            continue;
+        }
+
+        cache.entries
+            .retain(|_, entry| entry.expires.map(|exp| exp > now_ts()).unwrap_or(true));
+        save_cache_to_disk(namespace, &cache.entries)?;
+        cache.dirty = false;
+    }
+
+    Ok(())
+}
+
+pub(crate) fn flush_dirty_namespaces() -> mlua::Result<()> {
+    let mut store = lock_store()?;
+    flush_dirty_locked(&mut store)
+}
+
+pub(crate) fn start_background_flush_task() {
+    FLUSH_TASK_STARTED.get_or_init(|| {
+        tokio::task::spawn_local(async {
+            let mut interval = tokio::time::interval(FLUSH_INTERVAL);
+            loop {
+                interval.tick().await;
+                let _ = flush_dirty_namespaces();
+            }
+        });
+    });
 }
 
 /// Convert Lua value to JSON value
@@ -110,12 +184,10 @@ fn lua_to_json(value: LuaValue) -> mlua::Result<serde_json::Value> {
         )),
         LuaValue::String(s) => Ok(serde_json::Value::String(s.to_string_lossy().to_string())),
         LuaValue::Table(t) => {
-            // Try to detect if it's an array or object
             let len = t.len()?;
             let is_array = (1..=len).all(|i| t.contains_key(i).unwrap_or(false));
 
             if is_array && len > 0 {
-                // Array
                 let mut arr = Vec::new();
                 for i in 1..=len {
                     let val = t.get(i)?;
@@ -123,7 +195,6 @@ fn lua_to_json(value: LuaValue) -> mlua::Result<serde_json::Value> {
                 }
                 Ok(serde_json::Value::Array(arr))
             } else {
-                // Object
                 let mut obj = serde_json::Map::new();
                 for pair in t.pairs::<String, LuaValue>() {
                     let (k, v) = pair?;
@@ -175,17 +246,14 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
     let get = lua
         .create_function(
             |lua, (namespace, key): (String, String)| -> mlua::Result<LuaValue> {
-                let mut cache = load_cache(&namespace)?;
+                let mut store = lock_store()?;
+                let cache = ensure_namespace_loaded(&mut store, &namespace)?;
 
-                let now = chrono::Utc::now().timestamp() as u64;
-
-                if let Some(entry) = cache.get(&key) {
-                    // Check if expired
+                if let Some(entry) = cache.entries.get(&key) {
                     if let Some(expires) = entry.expires {
-                        if expires <= now {
-                            // Remove expired entry
-                            cache.remove(&key);
-                            save_cache(&namespace, &cache)?;
+                        if expires <= now_ts() {
+                            cache.entries.remove(&key);
+                            cache.dirty = true;
                             return Ok(LuaValue::Nil);
                         }
                     }
@@ -200,55 +268,51 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
     let set = lua
         .create_function(
             |_lua, (namespace, key, value, opts): (String, String, LuaValue, Option<LuaTable>)| {
-                let mut cache = load_cache(&namespace)?;
-
+                let mut store = lock_store()?;
+                let cache = ensure_namespace_loaded(&mut store, &namespace)?;
                 let json_value = lua_to_json(value)?;
 
                 let expires = if let Some(opts) = opts {
                     let ttl: Option<u64> = opts.get("ttl").ok();
-                    ttl.map(|ttl| chrono::Utc::now().timestamp() as u64 + ttl)
+                    ttl.map(|ttl| now_ts() + ttl)
                 } else {
                     None
                 };
 
-                cache.insert(
+                cache.entries.insert(
                     key,
                     CacheEntry {
                         value: json_value,
                         expires,
                     },
                 );
-
-                save_cache(&namespace, &cache)?;
+                cache.dirty = true;
                 Ok(())
             },
         )?
         .into_lua(lua)?;
 
     let delete = lua
-        .create_function(
-            |_, (namespace, key): (String, String)| -> mlua::Result<()> {
-                let mut cache = load_cache(&namespace)?;
-                cache.remove(&key);
-                save_cache(&namespace, &cache)?;
-                Ok(())
-            },
-        )?
+        .create_function(|_, (namespace, key): (String, String)| -> mlua::Result<()> {
+            let mut store = lock_store()?;
+            let cache = ensure_namespace_loaded(&mut store, &namespace)?;
+            if cache.entries.remove(&key).is_some() {
+                cache.dirty = true;
+            }
+            Ok(())
+        })?
         .into_lua(lua)?;
 
     let clear = lua
         .create_function(|_lua, namespace: String| -> mlua::Result<()> {
-            let cache_path = get_cache_path(&namespace)?;
-
-            // If cache file exists, delete it
-            if cache_path.exists() {
-                std::fs::remove_file(&cache_path)
-                    .into_lua_err()
-                    .map_err(|e| {
-                        LuaError::RuntimeError(format!("Failed to delete cache file: {}", e))
-                    })?;
+            let mut store = lock_store()?;
+            let cache = ensure_namespace_loaded(&mut store, &namespace)?;
+            if !cache.entries.is_empty() {
+                cache.entries.clear();
+                cache.dirty = true;
+            } else if get_cache_path(&namespace)?.exists() {
+                cache.dirty = true;
             }
-
             Ok(())
         })?
         .into_lua(lua)?;

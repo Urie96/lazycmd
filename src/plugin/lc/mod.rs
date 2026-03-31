@@ -55,7 +55,13 @@ fn write_log(level: &str, message: &str) {
         .and_then(|mut file| file.write_all(log_entry.as_bytes()));
 }
 
+pub(crate) fn flush_pending_cache() -> mlua::Result<()> {
+    cache::flush_dirty_namespaces()
+}
+
 pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
+    cache::start_background_flush_task();
+
     let keymap = keymap::new_table(lua)?.into_lua(lua)?;
     let api = api::new_table(lua)?.into_lua(lua)?;
     let cache = cache::new_table(lua)?.into_lua(lua)?;
