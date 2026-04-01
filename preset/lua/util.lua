@@ -1,3 +1,4 @@
+table.unpack = table.unpack or unpack
 unpack = unpack or table.unpack
 
 ---Copy text to system clipboard using OSC 52 escape sequence

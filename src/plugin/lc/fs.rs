@@ -240,8 +240,8 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
 
     let write_file_sync = lua
         .create_function(
-            |_, (path, content): (String, String)| -> mlua::Result<(bool, Option<String>)> {
-                match std::fs::write(&path, content) {
+            |_, (path, content): (String, LuaString)| -> mlua::Result<(bool, Option<String>)> {
+                match std::fs::write(&path, content.as_bytes()) {
                     Ok(_) => Ok((true, None)),
                     Err(e) => Ok((false, Some(e.to_string()))),
                 }

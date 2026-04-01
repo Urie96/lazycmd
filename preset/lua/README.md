@@ -20,11 +20,13 @@ preset/lua/
 ├── json.lua          # JSON 编解码
 ├── keymap.lua        # 键盘映射 API 封装
 ├── promise.lua       # 内置 Promise 实现与全局变量
+├── secrets.lua       # secrets API 封装
 ├── socket.lua        # 长连接 socket 封装
 ├── string.lua        # 字符串扩展方法
 ├── style.lua         # 样式 API 封装
 ├── system.lua        # 系统命令 API 封装
 ├── time.lua          # 时间 API 封装
+├── url.lua           # URL 编解码
 ├── util.lua          # 工具函数
 ├── yaml.lua          # YAML 编解码
 └── global.d.lua      # 类型声明文件
@@ -80,6 +82,16 @@ lc.clipboard.get()         -- 获取剪贴板内容
 lc.clipboard.set(text)     -- 设置剪贴板内容
 ```
 
+### base64.lua - Base64 编解码
+
+Base64 相关封装：
+
+```lua
+lc.base64.encode("hello")                  -- 编码
+lc.base64.decode("aGVsbG8=")               -- 解码为 Lua 字符串
+lc.fs.write_file_sync("/tmp/a.bin", lc.base64.decode("...")) -- 解码后写入文件
+```
+
 ### component.lua - UI 组件
 
 对话框和通知组件：
@@ -100,9 +112,19 @@ lc.fs.read_dir_sync(path)     -- 读取目录
 lc.fs.read_file(path, callback)  -- 异步读取文件
 lc.fs.read_file(path, { max_chars = 20000 }, callback)  -- 限制最多读取字符数
 lc.fs.read_file_sync(path)    -- 读取文件
-lc.fs.write_file_sync(path, content)  -- 写入文件
+lc.fs.write_file_sync(path, content)  -- 写入文件（支持二进制内容）
 lc.fs.stat(path)              -- 获取文件状态
 lc.fs.mkdir(path)             -- 创建目录
+```
+
+### secrets.lua - Secrets 存储
+
+敏感字符串持久化封装：
+
+```lua
+lc.secrets.get(namespace, key)    -- 获取 secret
+lc.secrets.set(namespace, key, value) -- 保存 secret
+lc.secrets.delete(namespace, key) -- 删除 secret
 ```
 
 ### http.lua - HTTP 客户端
@@ -116,6 +138,15 @@ lc.http.put(url, body, callback)
 lc.http.delete(url, callback)
 lc.http.patch(url, body, callback)
 lc.http.request(opts, callback)
+```
+
+### url.lua - URL 编解码
+
+URL 百分号编码封装：
+
+```lua
+lc.url.encode("hello world")  -- "hello%20world"
+lc.url.decode("hello%20world") -- "hello world"
 ```
 
 ### init.lua - 初始化脚本
@@ -481,11 +512,12 @@ Lua 语言服务器类型声明文件，为 IDE 提供类型提示。
 15. `fs.lua`
 16. `util.lua`
 17. `base64.lua`
-18. `clipboard.lua`
-19. `yaml.lua`
-20. `plugin_manager.lua` ← 插件管理核心逻辑（提供 `lc._pm`）
-21. `manager.lua` ← 插件管理器 UI（提供 `lc._manager`）
-22. `init.lua` ← 最后加载，执行初始化逻辑
+18. `url.lua`
+19. `clipboard.lua`
+20. `yaml.lua`
+21. `plugin_manager.lua` ← 插件管理核心逻辑（提供 `lc._pm`）
+22. `manager.lua` ← 插件管理器 UI（提供 `lc._manager`）
+23. `init.lua` ← 最后加载，执行初始化逻辑
 
 ## 使用示例
 

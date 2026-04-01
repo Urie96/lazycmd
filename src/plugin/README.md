@@ -17,9 +17,11 @@ src/plugin/
     ├── http.rs         # HTTP 客户端
     ├── keymap.rs       # 键盘映射
     ├── path.rs         # 路径操作
+    ├── secrets.rs      # secrets 读写
     ├── style.rs        # UI 样式
     ├── system.rs       # 系统命令执行
-    └── time.rs         # 时间解析和格式化
+    ├── time.rs         # 时间解析和格式化
+    └── url.rs          # URL 编解码
 ```
 
 ## 核心组件
@@ -121,7 +123,7 @@ local data = lc.cache.get("github.releases", "user_data")
 | `fs.read_dir_sync(path)` | 读取目录（返回数组） |
 | `fs.read_file(path, [opts], callback)` | 异步读取文件内容，可限制最大字符数 |
 | `fs.read_file_sync(path)` | 读取文件内容 |
-| `fs.write_file_sync(path, content)` | 写入文件 |
+| `fs.write_file_sync(path, content)` | 写入文件（支持任意 Lua 字符串字节） |
 | `fs.stat(path)` | 获取文件状态 |
 | `fs.mkdir(path)` | 创建目录 |
 
@@ -132,6 +134,36 @@ local data = lc.cache.get("github.releases", "user_data")
 - `is_readable` - 是否可读
 - `is_writable` - 是否可写
 - `is_executable` - 是否可执行
+
+### lc.secrets - Secrets 存储
+
+用于保存敏感字符串，按 namespace 分文件存储到 `~/.config/lazycmd/secrets/`。和 `lc.cache` 不同，`lc.secrets` 只接受字符串值，不支持 TTL。
+
+| 函数 | 说明 |
+|------|------|
+| `secrets.get(namespace, key)` | 获取 secret 值，不存在时返回 `nil` |
+| `secrets.set(namespace, key, value)` | 保存 secret 字符串 |
+| `secrets.delete(namespace, key)` | 删除 secret |
+
+```lua
+lc.secrets.set("github", "token", "ghp_xxx")
+local token = lc.secrets.get("github", "token")
+```
+
+### lc.base64 - Base64 编解码
+
+Base64 编解码：
+
+| 函数 | 说明 |
+|------|------|
+| `base64.encode(data)` | Base64 编码 |
+| `base64.decode(encoded)` | Base64 解码为 Lua 字符串 |
+
+```lua
+local encoded = lc.base64.encode("hello")
+local decoded = lc.base64.decode(encoded)
+lc.fs.write_file_sync("/tmp/demo.bin", decoded)
+```
 
 ### lc.http - HTTP 客户端
 
@@ -155,6 +187,20 @@ function on_response(response)
     -- response.headers  - 响应头
     -- response.error    - 错误信息
 end
+```
+
+### lc.url - URL 编解码
+
+用于 URL 百分号编码和解码：
+
+| 函数 | 说明 |
+|------|------|
+| `url.encode(value)` | 对字符串做百分号编码 |
+| `url.decode(value)` | 解码百分号编码字符串 |
+
+```lua
+local encoded = lc.url.encode("hello world")
+local decoded = lc.url.decode(encoded)
 ```
 
 ### lc.keymap - 键盘映射

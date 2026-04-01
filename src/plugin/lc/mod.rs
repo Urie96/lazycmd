@@ -8,10 +8,12 @@ mod http;
 mod json;
 mod keymap;
 mod path;
+mod secrets;
 mod socket;
 mod style;
 mod system;
 mod time;
+mod url;
 mod yaml;
 
 use crate::widgets::{LuaLine, LuaSpan};
@@ -69,8 +71,10 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
     let fs = fs::new_table(lua)?.into_lua(lua)?;
     let http = http::new_table(lua)?.into_lua(lua)?;
     let path = path::new_table(lua)?.into_lua(lua)?;
+    let secrets = secrets::new_table(lua)?.into_lua(lua)?;
     let socket = socket::new_table(lua)?.into_lua(lua)?;
     let time = time::new_table(lua)?.into_lua(lua)?;
+    let url = url::new_table(lua)?.into_lua(lua)?;
     let json = json::new_table(lua)?.into_lua(lua)?;
     let yaml = yaml::new_table(lua)?.into_lua(lua)?;
     let base64 = base64::new_table(lua)?.into_lua(lua)?;
@@ -304,7 +308,9 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
         ("system", mlua::Value::Table(system_tbl)),
         ("socket", socket),
         ("path", path),
+        ("secrets", secrets),
         ("time", time),
+        ("url", url),
         ("json", json),
         ("yaml", yaml),
         ("base64", base64),
