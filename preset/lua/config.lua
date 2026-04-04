@@ -7,9 +7,11 @@ local cfg = {
     preview_up = '<pageup>',
     preview_down = '<pagedown>',
     reload = '<C-r>',
+    history_back = '<C-o>',
     quit = 'q',
     force_quit = '<C-q>',
     filter = '/',
+    command_prompt = ':',
     clear_filter = '<esc>',
     back = '<left>',
     open = '<right>',
@@ -225,8 +227,10 @@ local function apply_configured_keymap()
   map(cfg.keymap.preview_up, 'scroll_preview_by -30', 'scroll preview up')
   map(cfg.keymap.preview_down, 'scroll_preview_by 30', 'scroll preview down')
   map(cfg.keymap.reload, 'reload', 'reload')
+  map(cfg.keymap.history_back, 'history_back', 'history back')
   map(cfg.keymap.quit, 'quit', 'quit')
   map(cfg.keymap.force_quit, 'quit', 'force quit')
+  map(cfg.keymap.command_prompt, 'command_prompt', 'command prompt')
   map(cfg.keymap.filter, open_filter, 'filter')
   map(cfg.keymap.clear_filter, function() lc.api.set_filter '' end, 'clear filter')
   map(cfg.keymap.back, 'back', 'back')

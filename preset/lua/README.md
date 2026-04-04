@@ -171,7 +171,9 @@ lc.url.decode("hello%20world") -- "hello world"
   preview_up = '<pageup>',
   preview_down = '<pagedown>',
   reload = '<C-r>',
+  history_back = '<C-o>',
   quit = 'q',
+  command_prompt = ':',
   force_quit = '<C-q>',
   filter = '/',
   clear_filter = '<esc>',
@@ -192,6 +194,8 @@ lc.url.decode("hello%20world") -- "hello world"
 | `<PageUp>` | 预览向上滚动 |
 | `<PageDown>` | 预览向下滚动 |
 | `Ctrl+r` | 刷新 |
+| `Ctrl+o` | 跳回上一个访问页面 |
+| `:` | 打开命令输入框 |
 | `q` | 退出 |
 | `/` | 进入过滤模式 |
 | `?` | 打开快捷键帮助 |
@@ -282,7 +286,18 @@ lc.config {
 
 其中 `Backspace`、`Left`、`Right`、`Ctrl-G` 是 Rust 内置输入键位，不通过 `lc.config.keymap` 配置。`Ctrl-G` 会调用外部编辑器编辑当前输入内容，优先使用 `$VISUAL`，其次 `$EDITOR`，否则回退到 `vi`。
 
-支持的字段有：`up`、`down`、`top`、`bottom`、`preview_up`、`preview_down`、`reload`、`quit`、`force_quit`、`filter`、`clear_filter`、`back`、`open`、`enter`、`input_submit`、`input_cancel`、`input_clear_before_cursor`、`input_cursor_to_start`、`input_cursor_to_end`。每次调用 `lc.config` 都会根据当前 `keymap` 重新调用一遍 `lc.keymap.set`。
+支持的字段有：`up`、`down`、`top`、`bottom`、`preview_up`、`preview_down`、`reload`、`history_back`、`quit`、`force_quit`、`command_prompt`、`filter`、`clear_filter`、`back`、`open`、`enter`、`input_submit`、`input_cancel`、`input_clear_before_cursor`、`input_cursor_to_start`、`input_cursor_to_end`。每次调用 `lc.config` 都会根据当前 `keymap` 重新调用一遍 `lc.keymap.set`。
+
+通过 `:` 打开的命令输入框可以执行内部命令，例如：
+
+```lua
+cd /github/search
+cd ../repo/lazygit
+reload
+history_back
+```
+
+其中 `cd` 支持绝对路径（以 `/` 开头）、相对路径，以及 `.` / `..`。
 
 页面 entry 还可以定义 `keymap` 字段：
 
@@ -352,11 +367,16 @@ lc.hook.post_page_enter(function(ctx) print(vim.inspect(ctx.path)) end)
 
 ```lua
 "text".fg("blue")       -- 设置前景色
+"text":bold()           -- 加粗
+"text":italic()         -- 斜体
+"text":underline()      -- 下划线
 "text":ansi()           -- 解析 ANSI 转义序列
 "a,b,c":split(",")      -- 分割字符串
 "  hello  ":trim()       -- 去除首尾空白
 "你好世界":utf8_sub(1, 3)  -- UTF-8 字符截取
 ```
+
+`utf8_sub()` 在 Lua 5.3+/5.4 下使用内置 `utf8` 库，在 LuaJIT 下会自动退回到内置的兼容实现。
 
 支持的颜色：`black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white`
 
@@ -370,6 +390,10 @@ lc.style.line({s1, s2, ...}) -- 创建 Line
 lc.style.text({l1, l2, ...}) -- 创建 Text
 lc.style.highlight(code, lang)  -- 语法高亮
 lc.style.align_columns(lines)    -- 列对齐
+
+lc.style.span("x"):bold()        -- Span 加粗
+lc.style.line({"x"}):italic()    -- Line 斜体
+lc.style.span("x"):underline()   -- Span 下划线
 ```
 
 ### system.lua - 系统命令

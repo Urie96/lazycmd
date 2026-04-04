@@ -1,5 +1,5 @@
 use mlua::prelude::*;
-use ratatui::style::Color;
+use ratatui::style::{Color, Modifier};
 use ratatui::text::{Line, Span, Text};
 use std::str::FromStr;
 
@@ -45,6 +45,25 @@ impl LuaUserData for LuaSpan {
             ud.into_lua(lua)
         });
 
+        methods.add_function_mut("bold", |lua, ud: AnyUserData| {
+            ud.borrow_mut::<Self>()?.0.style.add_modifier.insert(Modifier::BOLD);
+            ud.into_lua(lua)
+        });
+
+        methods.add_function_mut("italic", |lua, ud: AnyUserData| {
+            ud.borrow_mut::<Self>()?.0.style.add_modifier.insert(Modifier::ITALIC);
+            ud.into_lua(lua)
+        });
+
+        methods.add_function_mut("underline", |lua, ud: AnyUserData| {
+            ud.borrow_mut::<Self>()?
+                .0
+                .style
+                .add_modifier
+                .insert(Modifier::UNDERLINED);
+            ud.into_lua(lua)
+        });
+
         methods.add_meta_function_mut(
             mlua::MetaMethod::Concat,
             |lua, (lhs, rhs): (LuaSpan, LuaValue)| match rhs {
@@ -82,6 +101,25 @@ impl LuaUserData for LuaLine {
         methods.add_function_mut("bg", |lua, (ud, color): (AnyUserData, String)| {
             let color = Color::from_str(&color).into_lua_err()?;
             ud.borrow_mut::<Self>()?.0.style.bg = Some(color);
+            ud.into_lua(lua)
+        });
+
+        methods.add_function_mut("bold", |lua, ud: AnyUserData| {
+            ud.borrow_mut::<Self>()?.0.style.add_modifier.insert(Modifier::BOLD);
+            ud.into_lua(lua)
+        });
+
+        methods.add_function_mut("italic", |lua, ud: AnyUserData| {
+            ud.borrow_mut::<Self>()?.0.style.add_modifier.insert(Modifier::ITALIC);
+            ud.into_lua(lua)
+        });
+
+        methods.add_function_mut("underline", |lua, ud: AnyUserData| {
+            ud.borrow_mut::<Self>()?
+                .0
+                .style
+                .add_modifier
+                .insert(Modifier::UNDERLINED);
             ud.into_lua(lua)
         });
 
@@ -207,5 +245,48 @@ impl FromLua for LuaLine {
                 message: Some("expected UserData or String".to_string()),
             }),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lua_span_style_methods_apply_modifiers() {
+        let lua = Lua::new();
+        let span = lua
+            .create_userdata(LuaSpan(Span::raw("repo")))
+            .expect("create span userdata");
+        lua.globals().set("span", span).expect("set span global");
+
+        let styled: LuaAnyUserData = lua
+            .load("return span:bold():italic():underline()")
+            .eval()
+            .expect("style span in lua");
+        let span = styled.borrow::<LuaSpan>().expect("borrow styled span");
+
+        assert!(span.0.style.add_modifier.contains(Modifier::BOLD));
+        assert!(span.0.style.add_modifier.contains(Modifier::ITALIC));
+        assert!(span.0.style.add_modifier.contains(Modifier::UNDERLINED));
+    }
+
+    #[test]
+    fn lua_line_style_methods_apply_modifiers() {
+        let lua = Lua::new();
+        let line = lua
+            .create_userdata(LuaLine(Line::raw("repo")))
+            .expect("create line userdata");
+        lua.globals().set("line", line).expect("set line global");
+
+        let styled: LuaAnyUserData = lua
+            .load("return line:bold():italic():underline()")
+            .eval()
+            .expect("style line in lua");
+        let line = styled.borrow::<LuaLine>().expect("borrow styled line");
+
+        assert!(line.0.style.add_modifier.contains(Modifier::BOLD));
+        assert!(line.0.style.add_modifier.contains(Modifier::ITALIC));
+        assert!(line.0.style.add_modifier.contains(Modifier::UNDERLINED));
     }
 }

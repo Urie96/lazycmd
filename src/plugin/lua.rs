@@ -100,4 +100,48 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn string_preset_utf8_sub_works_without_utf8_global() -> mlua::Result<()> {
+        let lua = Lua::new();
+        let globals = lua.globals();
+
+        globals.set("lc", lua.create_table()?)?;
+
+        let raw_lc = lua.create_table()?;
+        let style = lua.create_table()?;
+        style.set(
+            "span",
+            lua.create_function(|_, s: String| Ok(s))?,
+        )?;
+        style.set(
+            "ansi",
+            lua.create_function(|_, s: String| Ok(s))?,
+        )?;
+        raw_lc.set("style", style)?;
+        raw_lc.set(
+            "split",
+            lua.create_function(|lua, (s, sep): (String, String)| {
+                let parts = lua.create_table()?;
+                for (idx, part) in s.split(&sep).enumerate() {
+                    parts.set(idx + 1, part)?;
+                }
+                Ok(parts)
+            })?,
+        )?;
+        globals.set("_lc", raw_lc)?;
+        globals.set("utf8", mlua::Value::Nil)?;
+
+        lua.load(&include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/preset/lua/string.lua"))[..])
+            .set_name("preset/lua/string.lua")
+            .exec()?;
+
+        let result: String = lua.load(r#"return string.utf8_sub("Hello 世界！🌍", 7, 8)"#).eval()?;
+        let tail: String = lua.load(r#"return string.utf8_sub("Hello 世界！🌍", -3, -1)"#).eval()?;
+
+        assert_eq!(result, "世界");
+        assert_eq!(tail, "界！🌍");
+
+        Ok(())
+    }
 }

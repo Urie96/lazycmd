@@ -9,11 +9,17 @@ local style = {}
 ---A TUI Span widget
 ---@field fg fun(self: Span, color: string): Span Set foreground color (modifies in place and returns self)
 ---@field bg fun(self: Span, color: string): Span Set background color (modifies in place and returns self)
+---@field bold fun(self: Span): Span Apply bold style (modifies in place and returns self)
+---@field italic fun(self: Span): Span Apply italic style (modifies in place and returns self)
+---@field underline fun(self: Span): Span Apply underline style (modifies in place and returns self)
 
 ---@class Line
 ---A TUI Line widget containing multiple Spans
 ---@field fg fun(self: Line, color: string): Line Set foreground color (modifies in place and returns self)
 ---@field bg fun(self: Line, color: string): Line Set background color (modifies in place and returns self)
+---@field bold fun(self: Line): Line Apply bold style (modifies in place and returns self)
+---@field italic fun(self: Line): Line Apply italic style (modifies in place and returns self)
+---@field underline fun(self: Line): Line Apply underline style (modifies in place and returns self)
 
 ---Create a Span from a string
 ---@param s string The string into a Line

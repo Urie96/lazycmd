@@ -83,6 +83,9 @@ pub struct LuaLine(pub Line<'static>);
 // 方法
 line.fg(color)    // 设置前景色
 line.bg(color)   // 设置背景色
+line.bold()      // 加粗
+line.italic()    // 斜体
+line.underline() // 下划线
 // 支持连接操作: line .. "text" 或 line .. span
 ```
 
@@ -96,6 +99,9 @@ pub struct LuaSpan(pub Span<'static>);
 // 方法
 span.fg(color)   // 设置前景色
 span.bg(color)  // 设置背景色
+span.bold()     // 加粗
+span.italic()   // 斜体
+span.underline() // 下划线
 // 支持连接操作: span .. "text" 或 span .. span
 ```
 
@@ -115,6 +121,9 @@ span.bg(color)  // 设置背景色
 local span = lc.style.span("hello"):fg("green")
 local line = lc.style.line({span, " world"})
 local text = lc.style.text({line})
+
+local emph = "repo":bold()
+local note = lc.style.span("important"):underline()
 
 -- 设置预览
 lc.api.page_set_preview(text)

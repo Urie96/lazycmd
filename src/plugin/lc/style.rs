@@ -128,6 +128,21 @@ mod tests {
         let borrowed_line3 = line3.borrow::<LuaLine>().expect("Failed to borrow line3");
         assert_eq!(borrowed_line3.0.spans[2].content.as_ref(), "系统架构师"); // Already max width (10 display columns)
     }
+
+    #[test]
+    fn test_text_preserves_empty_string_as_blank_line() {
+        let lua = Lua::new();
+        let text_fn = text(&lua).expect("Failed to create text function");
+        let args = lua.create_table().expect("Failed to create args");
+
+        args.set(1, "").expect("Failed to set arg");
+
+        let rendered: LuaAnyUserData = text_fn.call(args).expect("Failed to render text");
+        let borrowed = rendered.borrow::<LuaText>().expect("Failed to borrow text");
+
+        assert_eq!(borrowed.0.lines.len(), 1);
+        assert_eq!(borrowed.0.lines[0], Line::raw(""));
+    }
 }
 
 pub fn span(lua: &Lua) -> mlua::Result<LuaFunction> {
@@ -179,9 +194,13 @@ pub fn text(lua: &Lua) -> mlua::Result<LuaFunction> {
             match arg {
                 LuaValue::String(s) => {
                     let content = s.to_str()?;
-                    // Split string by newlines into multiple lines
-                    for line in content.lines() {
-                        lines.push(Line::raw(line.to_string()));
+                    if content.is_empty() {
+                        lines.push(Line::raw(String::new()));
+                    } else {
+                        // Split string by newlines into multiple lines
+                        for line in content.lines() {
+                            lines.push(Line::raw(line.to_string()));
+                        }
                     }
                 }
                 LuaValue::UserData(ud) => {

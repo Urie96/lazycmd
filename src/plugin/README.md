@@ -302,6 +302,10 @@ end
 | `lc.style.ansi(s)` | 解析 ANSI 转义序列 |
 | `lc.style.align_columns(lines)` | 对齐列 |
 
+`Span` / `Line` userdata 支持的方法：
+- `:fg(color)` / `:bg(color)` - 设置颜色
+- `:bold()` / `:italic()` / `:underline()` - 添加文本样式
+
 ### lc.system - 系统命令
 
 | 函数 | 说明 |

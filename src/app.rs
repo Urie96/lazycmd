@@ -91,9 +91,13 @@ impl App {
 
     /// Runs the main loop of the application, handling events and actions
     pub async fn run(&mut self, mut events: Events) -> Result<()> {
-        self.event_sender
-            .send(Event::Enter(self.initial_path.clone()))
-            .unwrap();
+        let from_cache = self.state.go_to(self.initial_path.clone(), false);
+        if from_cache {
+            self.call_preview()?;
+        }
+        self.call_list()?;
+        self.run_post_page_enter_hooks()?;
+        self.dirty = true;
 
         // Initially hide cursor (Main mode)
         execute!(self.term.backend_mut(), Hide)?;
@@ -249,7 +253,7 @@ impl App {
             Event::Command(command) => self.handle_command(command.as_str())?,
             Event::AddKeymap(keymap) => self.state.add_keymap(keymap),
             Event::Enter(path) => {
-                let from_cache = self.state.go_to(path);
+                let from_cache = self.state.go_to(path, true);
                 if from_cache {
                     // Restore preview for cached page
                     self.call_preview()?;
@@ -451,6 +455,31 @@ impl App {
         text
     }
 
+    fn resolve_command_path(current_path: &[String], raw_path: &str) -> Result<Vec<String>> {
+        let raw_path = raw_path.trim();
+        if raw_path.is_empty() {
+            bail!("cd requires a target path");
+        }
+
+        let mut path = if raw_path.starts_with('/') {
+            Vec::new()
+        } else {
+            current_path.to_vec()
+        };
+
+        for segment in raw_path.split('/') {
+            match segment {
+                "" | "." => {}
+                ".." => {
+                    path.pop();
+                }
+                _ => path.push(segment.to_string()),
+            }
+        }
+
+        Ok(path)
+    }
+
     fn edit_input_dialog_in_external_editor(&mut self) -> Result<()> {
         let Some(dialog) = self.state.input_dialog.as_ref() else {
             return Ok(());
@@ -485,6 +514,35 @@ impl App {
 
         let _ = fs::remove_file(&path);
         result
+    }
+
+    fn open_command_prompt(&mut self, initial_value: String) -> Result<()> {
+        let sender = self.event_sender.clone();
+        let on_submit = self
+            .lua
+            .create_function(move |_, input: String| -> mlua::Result<()> {
+                let command = input.trim().to_string();
+                if !command.is_empty() {
+                    sender
+                        .send(Event::Command(command))
+                        .map_err(|err| mlua::Error::RuntimeError(err.to_string()))?;
+                }
+                Ok(())
+            })?
+            .to_owned();
+        let on_cancel = self.lua.create_function(|_, ()| Ok(()))?.to_owned();
+        let on_change = self.lua.create_function(|_, ()| Ok(()))?.to_owned();
+
+        self.state.show_input_dialog(
+            ":".to_string(),
+            "输入命令...".to_string(),
+            initial_value,
+            on_submit,
+            on_cancel,
+            on_change,
+        );
+        self.dirty = true;
+        Ok(())
     }
 
     fn handle_command(&mut self, command: &str) -> Result<()> {
@@ -549,11 +607,27 @@ impl App {
                 }
                 self.dirty = true;
             }
+            "cd" => {
+                let raw_path = it.cloned().collect::<Vec<_>>().join(" ");
+                let path = Self::resolve_command_path(&self.state.current_path, &raw_path)?;
+                let from_cache = self.state.go_to(path, true);
+                if !from_cache {
+                    self.call_list()?;
+                } else {
+                    self.call_preview()?;
+                }
+                self.run_post_page_enter_hooks()?;
+                self.dirty = true;
+            }
+            "command_prompt" => {
+                let initial_value = it.cloned().collect::<Vec<_>>().join(" ");
+                self.open_command_prompt(initial_value)?;
+            }
             "enter" => {
                 if let Some(hovered) = self.state.hovered() {
                     let mut path = self.state.current_path.clone();
                     path.push(hovered.key.clone());
-                    let from_cache = self.state.go_to(path);
+                    let from_cache = self.state.go_to(path, true);
                     if !from_cache {
                         self.call_list()?;
                     } else {
@@ -568,11 +642,22 @@ impl App {
                 let mut path = self.state.current_path.clone();
                 if !path.is_empty() {
                     path.pop();
-                    let from_cache = self.state.go_to(path);
+                    let from_cache = self.state.go_to(path, true);
                     if !from_cache {
                         self.call_list()?;
                     } else {
                         // Restore preview for cached page
+                        self.call_preview()?;
+                    }
+                    self.run_post_page_enter_hooks()?;
+                    self.dirty = true;
+                }
+            }
+            "history_back" => {
+                if let Some((_, from_cache)) = self.state.go_back_in_history() {
+                    if !from_cache {
+                        self.call_list()?;
+                    } else {
                         self.call_preview()?;
                     }
                     self.run_post_page_enter_hooks()?;
@@ -807,6 +892,8 @@ impl StatefulWidget for AppWidget {
 
 #[cfg(test)]
 mod tests {
+    use crate::events::Event;
+
     use super::App;
 
     #[test]
@@ -820,5 +907,66 @@ mod tests {
             "txt"
         );
         assert_eq!(App::normalize_input_editor_output("txt".to_string()), "txt");
+    }
+
+    #[test]
+    fn command_prompt_submit_triggers_command_event() {
+        let lua = mlua::Lua::new();
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+
+        let sender = tx.clone();
+        let on_submit = lua
+            .create_function(move |_, input: String| -> mlua::Result<()> {
+                let command = input.trim().to_string();
+                if !command.is_empty() {
+                    sender
+                        .send(Event::Command(command))
+                        .map_err(|err| mlua::Error::RuntimeError(err.to_string()))?;
+                }
+                Ok(())
+            })
+            .unwrap();
+
+        on_submit.call::<()>("reload".to_string()).unwrap();
+
+        match rx.try_recv().unwrap() {
+            Event::Command(command) => assert_eq!(command, "reload"),
+            _ => panic!("expected command event"),
+        }
+    }
+
+    #[test]
+    fn resolve_command_path_supports_absolute_relative_and_parent_segments() {
+        let current_path = vec!["github".to_string(), "search".to_string()];
+
+        assert_eq!(
+            App::resolve_command_path(&current_path, "/github/repo/lazygit").unwrap(),
+            vec![
+                "github".to_string(),
+                "repo".to_string(),
+                "lazygit".to_string()
+            ]
+        );
+        assert_eq!(
+            App::resolve_command_path(&current_path, "repo/lazygit").unwrap(),
+            vec![
+                "github".to_string(),
+                "search".to_string(),
+                "repo".to_string(),
+                "lazygit".to_string()
+            ]
+        );
+        assert_eq!(
+            App::resolve_command_path(&current_path, "../repo/lazygit").unwrap(),
+            vec![
+                "github".to_string(),
+                "repo".to_string(),
+                "lazygit".to_string()
+            ]
+        );
+        assert_eq!(
+            App::resolve_command_path(&current_path, "/").unwrap(),
+            Vec::<String>::new()
+        );
     }
 }

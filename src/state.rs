@@ -811,6 +811,56 @@ mod tests {
         assert!(!state.set_hover_by_path(&["file".into(), "other".into(), "a".into()]));
         assert_eq!(state.hovered().map(|entry| entry.key.as_str()), Some("a"));
     }
+
+    #[test]
+    fn go_to_records_history_and_history_back_restores_previous_page() {
+        let lua = Lua::new();
+        let mut state = State::new();
+
+        state.set_current_page_entries(vec![make_entry_with_key(&lua, "github")]);
+        assert!(!state.go_to(vec!["github".to_string()], true));
+
+        state.set_current_page_entries(vec![make_entry_with_key(&lua, "search")]);
+        assert!(!state.go_to(vec!["github".to_string(), "search".to_string()], true));
+
+        let Some((path, from_cache)) = state.go_back_in_history() else {
+            panic!("expected history entry");
+        };
+        assert_eq!(path, vec!["github".to_string()]);
+        assert!(from_cache);
+        assert_eq!(state.current_path, vec!["github".to_string()]);
+    }
+
+    #[test]
+    fn go_back_in_history_skips_current_page_duplicates() {
+        let lua = Lua::new();
+        let mut state = State::new();
+
+        state.set_current_page_entries(vec![make_entry_with_key(&lua, "github")]);
+        assert!(!state.go_to(vec!["github".to_string()], true));
+        state.set_current_page_entries(vec![make_entry_with_key(&lua, "search")]);
+
+        assert!(state.go_to(vec!["github".to_string()], true));
+        let Some((path, _)) = state.go_back_in_history() else {
+            panic!("expected history entry");
+        };
+        assert_eq!(path, Vec::<String>::new());
+        assert_eq!(state.current_path, Vec::<String>::new());
+    }
+
+    #[test]
+    fn go_to_same_path_does_not_push_history() {
+        let lua = Lua::new();
+        let mut state = State::new();
+
+        state.set_current_page_entries(vec![make_entry_with_key(&lua, "github")]);
+        assert!(!state.go_to(vec!["github".to_string()], true));
+        state.set_current_page_entries(vec![make_entry_with_key(&lua, "search")]);
+
+        assert!(state.go_to(vec!["github".to_string()], true));
+        assert!(state.go_back_in_history().is_some());
+        assert!(state.go_back_in_history().is_none());
+    }
 }
 
 /// State for the confirm dialog
@@ -852,6 +902,8 @@ pub struct State {
 
     /// Cache for pages to preserve cursor position, entries and filter when navigating back
     page_cache: HashMap<Vec<String>, Page>,
+    /// Navigation history for jumping back to the previously visited page
+    navigation_history: Vec<Vec<String>>,
     /// Hooks to call before reload command
     pub pre_reload_hooks: Vec<LuaFunction>,
     /// Hooks to call before quit command
@@ -1116,8 +1168,16 @@ impl State {
         }
     }
 
-    pub fn go_to(&mut self, path: Vec<String>) -> bool {
+    pub fn go_to(&mut self, path: Vec<String>, record_history: bool) -> bool {
         self.clear_key_buffer();
+        if path == self.current_path {
+            return self.current_page.is_some();
+        }
+
+        if record_history && self.current_page.is_some() {
+            self.navigation_history.push(self.current_path.clone());
+        }
+
         // Cache current page before navigating away
         if let Some(page) = self.current_page.take() {
             self.page_cache.insert(self.current_path.clone(), page);
@@ -1133,6 +1193,19 @@ impl State {
         } else {
             false // Not in cache, needs to be loaded
         }
+    }
+
+    pub fn go_back_in_history(&mut self) -> Option<(Vec<String>, bool)> {
+        self.clear_key_buffer();
+
+        while let Some(path) = self.navigation_history.pop() {
+            if path != self.current_path {
+                let from_cache = self.go_to(path.clone(), false);
+                return Some((path, from_cache));
+            }
+        }
+
+        None
     }
 
     /// Clear cache for current path (used by reload command)
