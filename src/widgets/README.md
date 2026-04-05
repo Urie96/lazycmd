@@ -68,10 +68,10 @@ let paragraph = StatefulParagraph::from(text);
 
 ### FooterWidget
 
-底部组件，显示在右下角，格式为 ` current/total `：
+底部组件，显示在底部：
 
-- 当前选中的条目索引（从 1 开始）
-- 过滤后列表的总数
+- 左下角：当前悬停 entry 的 `bottom_line`（若存在，支持 `string` / `Span` / `Line`）
+- 右下角：计数器，格式为 ` current/total `
 - `` 和 `` 符号使用蓝色前景色
 - 中间的计数文本使用蓝色背景和白色前景色
 

@@ -46,7 +46,13 @@ preset/lua 目录中的脚本是 Rust 后端 API 的 Lua 封装层。它们：
 
 ### api.lua - 页面管理
 
-封装页面和导航相关的 API：
+封装页面和导航相关的 API。页面 entry 常用字段包括：
+
+- `key: string` - 唯一标识
+- `display?: string|Span|Line` - 列表区显示内容
+- `bottom_line?: string|Span|Line` - 当前 entry 被 hover 时显示在底部左侧的一行
+- `keymap?: table` - entry 局部快捷键
+- `preview?: function` - entry 局部预览回调
 
 ```lua
 lc.api.set_entries(path, entries)    -- path=nil 为当前页面，entries=nil 清空 Rust 侧页面
@@ -109,12 +115,12 @@ lc.log(level, format, ...)   -- 写入日志
 文件系统操作封装：
 
 ```lua
-lc.fs.read_dir_sync(path)     -- 读取目录
+lc.fs.read_dir_sync(path)     -- 读取目录（每项包含 name / is_dir / size）
 lc.fs.read_file(path, callback)  -- 异步读取文件
 lc.fs.read_file(path, { max_chars = 20000 }, callback)  -- 限制最多读取字符数
 lc.fs.read_file_sync(path)    -- 读取文件
 lc.fs.write_file_sync(path, content)  -- 写入文件（支持二进制内容）
-lc.fs.stat(path)              -- 获取文件状态
+lc.fs.stat(path)              -- 获取文件状态（包含 size 字段）
 lc.fs.mkdir(path)             -- 创建目录
 ```
 

@@ -29,23 +29,33 @@ impl PageEntry {
         }
     }
 
-    /// Extract the Text content from the display field
-    pub fn display(&self) -> Line<'_> {
-        let f = || match self.tbl.get::<LuaValue>("display")? {
-            LuaValue::Nil => Ok(Line::from(self.key.as_str())),
-            LuaValue::String(s) => Ok(Line::from(s.to_string_lossy())),
+    fn extract_line_field(&self, field: &str) -> anyhow::Result<Option<Line<'static>>> {
+        match self.tbl.get::<LuaValue>(field)? {
+            LuaValue::Nil => Ok(None),
+            LuaValue::String(s) => Ok(Some(Line::from(s.to_string_lossy().to_string()))),
             LuaValue::UserData(ud) => {
                 if let Ok(span) = ud.borrow::<LuaSpan>() {
-                    Ok(Line::from(span.0.clone()))
+                    Ok(Some(Line::from(span.0.clone())))
                 } else if let Ok(line) = ud.borrow::<LuaLine>() {
-                    Ok(Line::from(line.0.clone()))
+                    Ok(Some(line.0.clone()))
                 } else {
-                    bail!("Expected Span, Line, Text, or nil")
+                    bail!("Expected Span, Line, string, or nil")
                 }
             }
             _ => bail!("Expected Span, Line, string, or nil"),
-        };
-        f().unwrap_or_else(|e| Line::from(e.to_string()))
+        }
+    }
+
+    /// Extract the Text content from the display field
+    pub fn display(&self) -> Line<'static> {
+        self.extract_line_field("display")
+            .and_then(|line| Ok(line.unwrap_or_else(|| Line::from(self.key.clone()))))
+            .unwrap_or_else(|e| Line::from(e.to_string()))
+    }
+
+    pub fn bottom_line(&self) -> Option<Line<'static>> {
+        self.extract_line_field("bottom_line")
+            .unwrap_or_else(|e| Some(Line::from(e.to_string())))
     }
 }
 

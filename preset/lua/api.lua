@@ -3,7 +3,8 @@ local api = {}
 
 ---@class PageEntry
 ---@field key string The unique key for the entry
----@field display? string|Span The display text or Span widget
+---@field display? string|Span|Line The display text or styled line widget shown in the list
+---@field bottom_line? string|Span|Line Extra line rendered at the bottom-left when this entry is hovered
 ---@field keymap? table<string, fun()|{callback: fun(), desc?: string}> Entry-local keymap table, resolved from the entry/metatable and preferred over global keymaps when matched
 ---@field preview? fun(self: PageEntry, cb: fun(widget: string|Span|Text|Line)) Entry-local preview callback, preferred over plugin.preview when present
 ---@field [string] any Additional custom fields

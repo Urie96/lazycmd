@@ -180,9 +180,15 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
                 std::fs::read_dir(path)?
                     .map(|v| {
                         v.into_lua_err().and_then(|e| {
-                            let tbl = lua.create_table_with_capacity(0, 2)?;
+                            let path = e.path();
+                            let metadata = e.metadata().ok();
+                            let is_dir = metadata.as_ref().map(|m| m.is_dir()).unwrap_or_else(|| path.is_dir());
+                            let size = metadata.as_ref().map(|m| m.len());
+
+                            let tbl = lua.create_table_with_capacity(0, 3)?;
                             tbl.raw_set("name", e.file_name())?;
-                            tbl.raw_set("is_dir", e.path().is_dir())?;
+                            tbl.raw_set("is_dir", is_dir)?;
+                            tbl.raw_set("size", size)?;
                             Ok(tbl)
                         })
                     })
@@ -253,14 +259,15 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
         .create_function(|lua, path: String| -> mlua::Result<LuaTable> {
             let path_obj = std::path::Path::new(&path);
             let exists = path_obj.exists();
-            let (is_file, is_dir) = if exists {
-                let metadata = std::fs::metadata(&path).ok();
-                (
-                    metadata.as_ref().map(|m| m.is_file()).unwrap_or(false),
-                    metadata.as_ref().map(|m| m.is_dir()).unwrap_or(false),
-                )
+            let metadata = if exists {
+                std::fs::metadata(&path).ok()
             } else {
-                (false, false)
+                None
+            };
+            let (is_file, is_dir, size) = if let Some(metadata) = metadata.as_ref() {
+                (metadata.is_file(), metadata.is_dir(), Some(metadata.len()))
+            } else {
+                (false, false, None)
             };
 
             let is_readable = exists && is_readable(path_obj);
@@ -271,6 +278,7 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
                 ("exists", exists.into_lua(lua)?),
                 ("is_file", is_file.into_lua(lua)?),
                 ("is_dir", is_dir.into_lua(lua)?),
+                ("size", size.into_lua(lua)?),
                 ("is_readable", is_readable.into_lua(lua)?),
                 ("is_writable", is_writable.into_lua(lua)?),
                 ("is_executable", is_executable.into_lua(lua)?),

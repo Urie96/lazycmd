@@ -7,6 +7,18 @@ impl StatefulWidget for FooterWidget {
     type State = State;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+        let bottom_line = state.hovered().and_then(|entry| entry.bottom_line());
+
+        if let Some(line) = bottom_line {
+            let left_area = Rect {
+                x: area.x,
+                y: area.y,
+                width: area.width,
+                height: area.height,
+            };
+            Paragraph::new(line).render(left_area, buf);
+        }
+
         // Get the current page and calculate counter text
         let counter_text = if let Some(page) = &state.current_page {
             let total = page.filtered_list.len();

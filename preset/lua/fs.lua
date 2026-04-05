@@ -1,7 +1,13 @@
+---@class ReadDirEntry
+---@field name string Entry name
+---@field is_dir boolean Whether the entry is a directory
+---@field size integer? File size in bytes (when available)
+
 ---@class FileStat
 ---@field exists boolean Whether the file/directory exists
 ---@field is_file boolean Whether it's a file
 ---@field is_dir boolean Whether it's a directory
+---@field size integer? File size in bytes (when available)
 ---@field is_readable boolean Whether it's readable
 ---@field is_writable boolean Whether it's writable
 ---@field is_executable boolean Whether it's executable
@@ -22,7 +28,7 @@ local fs = {}
 
 ---Read directory synchronously
 ---@param path string The directory path to read
----@return table[] entries List of directory entries
+---@return ReadDirEntry[] entries List of directory entries
 ---@return string|nil error Error message if failed
 function fs.read_dir_sync(path) return _lc.fs.read_dir_sync(path) end
 

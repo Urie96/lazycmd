@@ -78,6 +78,14 @@ scope(lua, state, sender, || {
 
 ### lc.api - 页面管理
 
+页面 entry 支持的常用字段：
+
+- `key: string` - 唯一标识
+- `display?: string|Span|Line` - 列表区显示内容
+- `bottom_line?: string|Span|Line` - 当 entry 被 hover 时，渲染在底部左侧的一行
+- `keymap?: table` - entry 局部快捷键
+- `preview?: function` - entry 局部预览回调
+
 | 函数 | 说明 |
 |------|------|
 | `set_entries(path, entries)` | 设置指定页面的条目列表；`path=nil` 表示当前页面，`entries=nil` 会清空 Rust 侧页面 |
@@ -126,17 +134,18 @@ local data = lc.cache.get("github.releases", "user_data")
 
 | 函数 | 说明 |
 |------|------|
-| `fs.read_dir_sync(path)` | 读取目录（返回数组） |
+| `fs.read_dir_sync(path)` | 读取目录（返回 name / is_dir / size 等字段） |
 | `fs.read_file(path, [opts], callback)` | 异步读取文件内容，可限制最大字符数 |
 | `fs.read_file_sync(path)` | 读取文件内容 |
 | `fs.write_file_sync(path, content)` | 写入文件（支持任意 Lua 字符串字节） |
-| `fs.stat(path)` | 获取文件状态 |
+| `fs.stat(path)` | 获取文件状态（包含 exists / is_file / is_dir / size / readable / writable / executable） |
 | `fs.mkdir(path)` | 创建目录 |
 
 `fs.stat()` 返回的表包含：
 - `exists` - 文件是否存在
 - `is_file` - 是否为文件
 - `is_dir` - 是否为目录
+- `size` - 文件大小（字节，若可获取）
 - `is_readable` - 是否可读
 - `is_writable` - 是否可写
 - `is_executable` - 是否可执行
