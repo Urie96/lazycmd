@@ -11,22 +11,24 @@ pub struct LuaLine(pub Line<'static>);
 
 pub struct LuaSpan(pub Span<'static>);
 
-fn into_line(value: LuaValue) -> mlua::Result<Line<'static>> {
+fn into_lines(value: LuaValue) -> mlua::Result<Vec<Line<'static>>> {
     match value {
-        LuaValue::String(s) => Ok(Line::raw(s.to_str()?.to_string())),
+        LuaValue::String(s) => Ok(vec![Line::raw(s.to_str()?.to_string())]),
         LuaValue::UserData(ud) => {
             if let Ok(line) = ud.take::<LuaLine>() {
-                Ok(line.0)
+                Ok(vec![line.0])
             } else if let Ok(span) = ud.take::<LuaSpan>() {
-                Ok(Line::from(span.0))
+                Ok(vec![Line::from(span.0)])
+            } else if let Ok(text) = ud.take::<LuaText>() {
+                Ok(text.0.lines)
             } else {
                 Err(mlua::Error::runtime(
-                    "expected Line, Span, or String for append",
+                    "expected Text, Line, Span, or String for append",
                 ))
             }
         }
         _ => Err(mlua::Error::runtime(
-            "expected Line, Span, or String for append",
+            "expected Text, Line, Span, or String for append",
         )),
     }
 }
@@ -154,7 +156,7 @@ impl LuaUserData for LuaLine {
 impl LuaUserData for LuaText {
     fn add_methods<M: LuaUserDataMethods<Self>>(methods: &mut M) {
         methods.add_method_mut("append", |_lua, this, value: LuaValue| {
-            this.0.lines.push(into_line(value)?);
+            this.0.lines.extend(into_lines(value)?);
             Ok(())
         });
     }
@@ -288,5 +290,34 @@ mod tests {
         assert!(line.0.style.add_modifier.contains(Modifier::BOLD));
         assert!(line.0.style.add_modifier.contains(Modifier::ITALIC));
         assert!(line.0.style.add_modifier.contains(Modifier::UNDERLINED));
+    }
+
+    #[test]
+    fn lua_text_append_accepts_text() {
+        let lua = Lua::new();
+        let text = lua
+            .create_userdata(LuaText(Text::from(vec![Line::raw("head")])))
+            .expect("create text userdata");
+        let extra = lua
+            .create_userdata(LuaText(Text::from(vec![Line::raw("tail-1"), Line::raw("tail-2")])))
+            .expect("create extra text userdata");
+        lua.globals().set("text", text).expect("set text global");
+        lua.globals().set("extra", extra).expect("set extra global");
+
+        let appended: LuaAnyUserData = lua
+            .load(
+                r#"
+                text:append(extra)
+                return text
+            "#,
+            )
+            .eval()
+            .expect("append text in lua");
+        let text = appended.borrow::<LuaText>().expect("borrow appended text");
+
+        assert_eq!(text.0.lines.len(), 3);
+        assert_eq!(text.0.lines[0], Line::raw("head"));
+        assert_eq!(text.0.lines[1], Line::raw("tail-1"));
+        assert_eq!(text.0.lines[2], Line::raw("tail-2"));
     }
 }

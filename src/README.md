@@ -111,6 +111,12 @@ App::run(events)
     └─ draw()            # 渲染 UI
 ```
 
+路径处理约定：
+
+- `State.current_path` 保存解码后的原始 path segment
+- Lua 插件通过 `lc.api.go_to({ ... })` / `lc.api.get_current_path()` 读写的也都是原始 segment
+- 当路径以字符串形式出现时（例如 header、命令行初始路径、`cd` 命令），Rust 侧会自动做 percent 编解码，避免插件手动处理
+
 ## 状态管理
 
 `state.rs` 中的 `State` 结构体：

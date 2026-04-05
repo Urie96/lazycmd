@@ -80,11 +80,11 @@ scope(lua, state, sender, || {
 
 | 函数 | 说明 |
 |------|------|
-| `page_set_entries(entries)` | 设置页面条目列表 |
-| `page_get_entries()` | 获取当前页面完整条目列表（过滤前） |
-| `page_get_hovered()` | 获取当前悬停条目 |
-| `page_set_hovered(path)` | 按完整路径设置当前悬停条目 |
-| `page_set_preview(preview)` | 设置预览内容 |
+| `set_entries(path, entries)` | 设置指定页面的条目列表；`path=nil` 表示当前页面，`entries=nil` 会清空 Rust 侧页面 |
+| `get_entries(path)` | 获取指定页面完整条目列表（过滤前）；`path=nil` 表示当前页面 |
+| `get_hovered()` | 获取当前悬停条目 |
+| `set_hovered(path)` | 按完整路径设置当前悬停条目 |
+| `set_preview(path, preview)` | 设置指定悬停路径的预览；`path=nil` 表示当前悬停项，`preview=nil` 会清空 Rust 侧缓存/预览 |
 | `go_to(path)` | 导航到指定路径 |
 | `get_current_path()` | 获取当前路径 |
 | `get_hovered_path()` | 获取悬停项路径 |
@@ -94,10 +94,16 @@ scope(lua, state, sender, || {
 | `enter_filter_mode()` | 进入过滤模式 |
 | `exit_filter_mode()` | 退出过滤模式 |
 | `accept_filter()` | 应用过滤 |
-| `append_hook_pre_reload(cb)` | 添加重载前钩子 |
+| `lc.hook.pre_reload(cb)` | 添加重载前钩子 |
 | `append_hook_pre_quit(cb)` | 添加退出前钩子（Lua 侧封装为 `lc.hook.pre_quit`） |
 
 ### lc.cache - 缓存系统
+
+`lc.api` 里的路径数组都使用“原始 segment”：
+
+- Lua 插件调用 `go_to({ ... })` 时不需要手动做 URL 编码
+- `get_current_path()` / `get_hovered_path()` 返回的也是解码后的原始 segment
+- 当路径需要显示为字符串（例如 header）或从字符串解析（例如命令行初始路径、`cd` 命令）时，Rust 侧会自动处理 percent 编解码
 
 基于 JSON 文件的持久化缓存。缓存按 namespace 分文件存储，避免不同插件 key 冲突，也避免所有缓存共用单个大文件反复读写：
 
@@ -402,7 +408,7 @@ function hello() {
 }
 ]]
 local highlighted = lc.style.highlight(code, "javascript")
-lc.api.page_set_preview(highlighted)
+lc.api.set_preview(nil, highlighted)
 ```
 
 ## 使用示例

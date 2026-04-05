@@ -49,17 +49,18 @@ preset/lua 目录中的脚本是 Rust 后端 API 的 Lua 封装层。它们：
 封装页面和导航相关的 API：
 
 ```lua
-lc.api.page_set_entries(entries)  -- 设置页面条目
-lc.api.page_get_entries()         -- 获取当前页面完整条目
-lc.api.page_get_hovered()         -- 获取当前悬停项
-lc.api.page_set_hovered(path)     -- 按完整路径设置当前悬停项
-lc.api.page_set_preview(widget)    -- 设置预览内容
-lc.api.go_to(path)                -- 导航到路径
-lc.api.get_current_path()         -- 获取当前路径
-lc.api.get_hovered_path()         -- 获取悬停项完整路径
-lc.api.argv()                     -- 获取命令行参数
-lc.api.get_filter()               -- 获取当前过滤字符串
-lc.api.append_hook_pre_reload(cb) -- 添加重载前钩子
+lc.api.set_entries(path, entries)    -- path=nil 为当前页面，entries=nil 清空 Rust 侧页面
+lc.api.get_entries(path)             -- path=nil 为当前页面
+lc.api.get_hovered()                 -- 获取当前悬停项
+lc.api.set_hovered(path)             -- 按完整路径设置当前悬停项
+lc.api.set_preview(path, widget)     -- path=nil 为当前悬停项，widget=nil 清空 Rust 侧预览缓存
+lc.api.go_to(path)                   -- 导航到路径
+lc.api.get_current_path()            -- 获取当前路径
+lc.api.get_hovered_path()            -- 获取悬停项完整路径
+lc.api.argv()                        -- 获取命令行参数
+lc.api.get_filter()                  -- 获取当前过滤字符串
+lc.api.set_filter()                  -- 设置当前过滤字符串
+lc.hook.pre_reload(cb)               -- 添加重载前钩子
 ```
 
 ### cache.lua - 缓存系统
@@ -565,7 +566,7 @@ local header = lc.style.line({
     lc.style.span("文件列表").fg("green"),
     lc.style.span(" (" .. count .. ")").fg("gray")
 })
-lc.api.page_set_preview(lc.style.text({header, content}))
+lc.api.set_preview(nil, lc.style.text({header, content}))
 
 -- 语法高亮
 local code = [[
@@ -574,7 +575,7 @@ function hello()
 end
 ]]
 local highlighted = lc.style.highlight(code, "lua")
-lc.api.page_set_preview(highlighted)
+lc.api.set_preview(nil, highlighted)
 
 -- 异步执行命令
 lc.system.exec({"ls", "-la"}, function(out)

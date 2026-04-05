@@ -183,7 +183,7 @@ pub fn line(lua: &Lua) -> mlua::Result<LuaFunction> {
     })
 }
 
-/// Create a Text from a table of Lines, Spans, or Strings
+/// Create a Text from a table of Texts, Lines, Spans, or Strings
 pub fn text(lua: &Lua) -> mlua::Result<LuaFunction> {
     lua.create_function(|_lua, args: LuaTable| {
         let len = args.raw_len();
@@ -204,20 +204,21 @@ pub fn text(lua: &Lua) -> mlua::Result<LuaFunction> {
                     }
                 }
                 LuaValue::UserData(ud) => {
-                    // Try Line first
-                    if let Ok(line) = ud.take::<LuaLine>() {
+                    if let Ok(text) = ud.take::<LuaText>() {
+                        lines.extend(text.0.lines);
+                    } else if let Ok(line) = ud.take::<LuaLine>() {
                         lines.push(line.0);
                     } else if let Ok(span) = ud.take::<LuaSpan>() {
                         lines.push(Line::from(span.0));
                     } else {
                         return Err(LuaError::RuntimeError(
-                            "Expected Line, Span, or String in table".to_string(),
+                            "Expected Text, Line, Span, or String in table".to_string(),
                         ));
                     }
                 }
                 _ => {
                     return Err(LuaError::RuntimeError(
-                        "Expected Line, Span, or String in table".to_string(),
+                        "Expected Text, Line, Span, or String in table".to_string(),
                     ));
                 }
             }

@@ -126,18 +126,21 @@ local emph = "repo":bold()
 local note = lc.style.span("important"):underline()
 
 -- 设置预览
-lc.api.page_set_preview(text)
+lc.api.set_preview(nil, text)
 
 -- 给已有 Text 追加一行
 text:append(lc.style.line { "tail line" })
 
+-- 给已有 Text 追加另一个 Text
+text:append(lc.style.highlight("# title", "markdown"))
+
 -- 字符串颜色扩展
 local colored = "hello".fg("blue")
-lc.api.page_set_preview(colored)
+lc.api.set_preview(nil, colored)
 
 -- 字符串 ANSI 解析
 local ansi_text = "\x1b[31mred\x1b[0m":ansi()
-lc.api.page_set_preview(ansi_text)
+lc.api.set_preview(nil, ansi_text)
 ```
 
 ## 输入状态管理

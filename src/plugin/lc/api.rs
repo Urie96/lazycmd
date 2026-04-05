@@ -2,12 +2,18 @@ use crate::{plugin, widgets::Renderable, Event, PageEntry};
 use mlua::prelude::*;
 
 pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
-    let page_set_entries = lua
-        .create_function(|lua, entries: Vec<PageEntry>| {
+    let set_entries = lua
+        .create_function(|lua, (path, entries): (Option<Vec<String>>, Option<Vec<PageEntry>>)| {
             plugin::mut_scope_state(lua, |state| {
-                state.set_current_page_entries(entries);
-                plugin::send_render_event(lua)?;
-                plugin::send_event(lua, Event::Command("scroll_by 0".to_string()))?; // trigger scroll
+                let path = path.unwrap_or_else(|| state.current_path.clone());
+                let is_current_path = state.current_path == path;
+                state.set_entries_for_path(&path, entries);
+                if is_current_path {
+                    plugin::send_render_event(lua)?;
+                    if state.current_page.is_some() {
+                        plugin::send_event(lua, Event::Command("scroll_by 0".to_string()))?;
+                    }
+                }
                 Ok(())
             })
         })?
@@ -42,7 +48,7 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
         })?
         .into_lua(lua)?;
 
-    let page_set_hovered = lua
+    let set_hovered = lua
         .create_function(|lua, path: Vec<String>| {
             plugin::mut_scope_state(lua, |state| {
                 if state.set_hover_by_path(&path) {
@@ -54,32 +60,37 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
         })?
         .into_lua(lua)?;
 
-    let page_set_preview = lua
-        .create_function(|lua, preview: Box<dyn Renderable>| {
-            plugin::mut_scope_state(lua, |state| {
-                state.current_preview = Some(preview);
-                plugin::send_render_event(lua)?;
-                plugin::send_event(lua, Event::Command("scroll_preview_by 0".to_string()))
-            })
-        })?
+    let set_preview = lua
+        .create_function(
+            |lua, (path, preview): (Option<Vec<String>>, Option<Box<dyn Renderable>>)| {
+                plugin::mut_scope_state(lua, |state| {
+                    let path = path
+                        .or_else(|| state.hovered_path())
+                        .unwrap_or_else(|| state.current_path.clone());
+                    state.set_preview_for_path(&path, preview);
+                    plugin::send_render_event(lua)?;
+                    plugin::send_event(lua, Event::Command("scroll_preview_by 0".to_string()))
+                })
+            },
+        )?
         .into_lua(lua)?;
 
-    let page_get_hovered = lua
+    let get_hovered = lua
         .create_function(|lua, ()| {
             plugin::borrow_scope_state(lua, |state| Ok(state.hovered().map(|p| p.tbl.clone())))
         })?
         .into_lua(lua)?;
 
-    let page_get_entries = lua
-        .create_function(|lua, ()| {
+    let get_entries = lua
+        .create_function(|lua, path: Option<Vec<String>>| {
             plugin::borrow_scope_state(lua, |state| {
-                let entries = state
-                    .current_page
-                    .as_ref()
-                    .map(|page| page.list.iter().map(|entry| entry.tbl.clone()))
-                    .into_iter()
-                    .flatten();
-                lua.create_sequence_from(entries)
+                let path = path.unwrap_or_else(|| state.current_path.clone());
+                match state.entries_for_path(&path) {
+                    Some(entries) => lua
+                        .create_sequence_from(entries.iter().map(|entry| entry.tbl.clone()))?
+                        .into_lua(lua),
+                    None => Ok(LuaNil),
+                }
             })
         })?
         .into_lua(lua)?;
@@ -97,8 +108,7 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
                     page.apply_filter();
                 }
                 state.last_key_event_buffer.clear();
-                // Clear preview so it will be refreshed based on new selection
-                state.current_preview.take();
+                let _ = state.restore_preview_for_hovered();
                 plugin::send_render_event(lua)?;
                 plugin::send_event(lua, Event::RefreshPreview)?;
                 Ok(())
@@ -172,11 +182,11 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
         .into_lua(lua)?;
 
     lua.create_table_from([
-        ("page_set_entries", page_set_entries),
-        ("page_get_entries", page_get_entries),
-        ("page_get_hovered", page_get_hovered),
-        ("page_set_hovered", page_set_hovered),
-        ("page_set_preview", page_set_preview),
+        ("set_entries", set_entries),
+        ("get_entries", get_entries),
+        ("get_hovered", get_hovered),
+        ("set_hovered", set_hovered),
+        ("set_preview", set_preview),
         ("go_to", go_to),
         ("get_current_path", get_current_path),
         ("get_hovered_path", get_hovered_path),

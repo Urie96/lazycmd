@@ -1,4 +1,4 @@
-use crate::State;
+use crate::{path_codec, State};
 use ratatui::{prelude::*, widgets::*};
 
 pub struct HeaderWidget;
@@ -11,7 +11,15 @@ impl StatefulWidget for HeaderWidget {
         let path_str = if state.current_path.is_empty() {
             "/".to_string()
         } else {
-            format!("/{}", state.current_path.join("/"))
+            format!(
+                "/{}",
+                state
+                    .current_path
+                    .iter()
+                    .map(|segment| path_codec::encode_path_segment_for_display(segment))
+                    .collect::<Vec<_>>()
+                    .join("/")
+            )
         };
 
         // Get filter from current page

@@ -19,6 +19,7 @@ mod input_handler;
 mod keymap;
 mod log;
 mod mode;
+mod path_codec;
 mod page;
 mod plugin;
 mod select_handler;
@@ -50,8 +51,8 @@ fn parse_initial_path(args: impl IntoIterator<Item = OsString>) -> anyhow::Resul
     Ok(trimmed
         .split('/')
         .filter(|segment| !segment.is_empty())
-        .map(str::to_owned)
-        .collect())
+        .map(path_codec::decode_path_segment_input)
+        .collect::<anyhow::Result<Vec<_>>>()?)
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -131,5 +132,21 @@ mod tests {
     #[test]
     fn parse_initial_path_rejects_extra_args() {
         assert!(parse_initial_path(os_args(&["lazycmd", "/docker", "/extra"])).is_err());
+    }
+
+    #[test]
+    fn parse_initial_path_decodes_percent_encoded_segments() {
+        assert_eq!(
+            parse_initial_path(os_args(&["lazycmd", "/github/repo/tpope/vim-abolish/tags/feature%2Ftest"]))
+                .unwrap(),
+            vec![
+                "github".to_string(),
+                "repo".to_string(),
+                "tpope".to_string(),
+                "vim-abolish".to_string(),
+                "tags".to_string(),
+                "feature/test".to_string(),
+            ]
+        );
     }
 }

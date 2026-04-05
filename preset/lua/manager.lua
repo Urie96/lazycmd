@@ -44,7 +44,7 @@ function M.setup(plugins)
 
   -- u: Update current plugin
   lc.keymap.set('main', 'u', function()
-    local entry = lc.api.page_get_hovered()
+    local entry = lc.api.get_hovered()
     if not entry then return end
 
     local spec = M.find_spec_by_name(entry.key)
@@ -74,7 +74,7 @@ function M.setup(plugins)
 
   -- i: Install current missing plugin
   lc.keymap.set('main', 'i', function()
-    local entry = lc.api.page_get_hovered()
+    local entry = lc.api.get_hovered()
     if not entry then return end
 
     if entry.status ~= 'missing' then
@@ -389,7 +389,7 @@ function M.preview(entry, cb)
         remote_info = remote_info,
       }
 
-      local current_entry = lc.api.page_get_hovered()
+      local current_entry = lc.api.get_hovered()
       if current_entry and current_entry.key == entry.key then
         cb(build_lines(build_update_lines(has_update, remote_info)))
       end

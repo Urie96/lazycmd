@@ -8,25 +8,28 @@ local api = {}
 ---@field preview? fun(self: PageEntry, cb: fun(widget: string|Span|Text|Line)) Entry-local preview callback, preferred over plugin.preview when present
 ---@field [string] any Additional custom fields
 
----Set the entries for the current page
----@param entries PageEntry[] The list of page entries
-function api.page_set_entries(entries) return _lc.api.page_set_entries(entries) end
+---Set the entries for a page
+---@param path string[]|nil The page path, or nil for the current page
+---@param entries PageEntry[]|nil The list of page entries, or nil to clear the page
+function api.set_entries(path, entries) return _lc.api.set_entries(path, entries) end
 
 ---Get the currently hovered entry
 ---@return PageEntry? entry The hovered entry or nil
-function api.page_get_hovered() return _lc.api.page_get_hovered() end
+function api.get_hovered() return _lc.api.get_hovered() end
 
 ---Set hovered entry by full path
 ---@param path string[] The full path including the entry key
-function api.page_set_hovered(path) return _lc.api.page_set_hovered(path) end
+function api.set_hovered(path) return _lc.api.set_hovered(path) end
 
----Get the full entry list for the current page before filtering
----@return PageEntry[] entries The current page entries
-function api.page_get_entries() return _lc.api.page_get_entries() end
+---Get the full entry list for a page before filtering
+---@param path string[]|nil The page path, or nil for the current page
+---@return PageEntry[]|nil entries The page entries
+function api.get_entries(path) return _lc.api.get_entries(path) end
 
 ---Set the preview panel content
----@param widget string|Span|Text|Line The widget to display in the preview panel
-function api.page_set_preview(widget) return _lc.api.page_set_preview(widget) end
+---@param path string[]|nil The hovered entry path, or nil for the current hovered entry
+---@param widget string|Span|Text|Line|nil The widget to display, or nil to clear the preview
+function api.set_preview(path, widget) return _lc.api.set_preview(path, widget) end
 
 ---Navigate to a specific path
 ---@param path string[] The path as an array of strings
@@ -47,10 +50,6 @@ function api.get_hovered_path() return _lc.api.get_hovered_path() end
 ---Get command line arguments
 ---@return string[] args Command line arguments (first element is program name)
 function api.argv() return _lc.api.argv() end
-
----Append a hook callback to be called before reload command
----@param callback fun() The callback function to execute before reload
-function api.append_hook_pre_reload(callback) _lc.api.append_hook_pre_reload(callback) end
 
 ---Set the filter string for the current page
 ---The page entries will be filtered based on this string
@@ -75,6 +74,10 @@ function api.get_available_keymaps() return _lc.api.get_available_keymaps() end
 
 lc.api = api
 lc.hook = lc.hook or {}
+
+---Append a hook callback to be called before reload command
+---@param callback fun() The callback function to execute before reload
+function lc.hook.pre_reload(callback) _lc.api.append_hook_pre_reload(callback) end
 
 ---Append a hook callback to be called before quit command
 ---@param callback fun() The callback function to execute before quit

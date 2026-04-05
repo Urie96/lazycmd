@@ -17,8 +17,9 @@ use std::mem;
 
 use crate::{
     confirm_handler,
-    events::{Event, Events},
+    events::{self, Event, Events},
     input_handler, plugin, select_handler,
+    path_codec,
     term::{self, Term},
     widgets::{
         confirm::ConfirmWidget, footer::FooterWidget, header::HeaderWidget,
@@ -93,11 +94,12 @@ impl App {
     pub async fn run(&mut self, mut events: Events) -> Result<()> {
         let from_cache = self.state.go_to(self.initial_path.clone(), false);
         if from_cache {
-            self.call_preview()?;
+            self.refresh_preview()?;
         }
         self.call_list()?;
         self.run_post_page_enter_hooks()?;
         self.dirty = true;
+        self.sync_render_interval();
 
         // Initially hide cursor (Main mode)
         execute!(self.term.backend_mut(), Hide)?;
@@ -128,6 +130,7 @@ impl App {
                 Self::routine(self.term.backend_mut(), cursor_info);
 
                 self.dirty = false;
+                self.sync_render_interval();
             }
         }
         Ok(())
@@ -155,6 +158,13 @@ impl App {
         )
     }
 
+    fn refresh_preview(&mut self) -> Result<()> {
+        if !self.state.restore_preview_for_hovered() {
+            self.call_preview()?;
+        }
+        Ok(())
+    }
+
     fn run_post_page_enter_hooks(&mut self) -> Result<()> {
         let current_path = self.state.current_path.clone();
         let payload = plugin::scope(&self.lua, &mut self.state, &self.event_sender, || {
@@ -176,6 +186,15 @@ impl App {
         Ok(())
     }
 
+    fn sync_render_interval(&self) {
+        let has_active_notification = self
+            .state
+            .notification
+            .as_ref()
+            .is_some_and(|(_, expiry)| Instant::now() <= *expiry);
+        events::set_fast_render_enabled(self.state.current_page.is_none() || has_active_notification);
+    }
+
     fn handle_event(&mut self, e: Event) -> Result<()> {
         match e {
             Event::Quit => {
@@ -186,8 +205,7 @@ impl App {
                 self.dirty = true;
             }
             Event::RefreshPreview => {
-                self.state.current_preview.take();
-                self.call_preview()?;
+                self.refresh_preview()?;
                 self.dirty = true;
             }
             Event::Crossterm(CrosstermEvent::Resize(_, _)) => {
@@ -255,8 +273,7 @@ impl App {
             Event::Enter(path) => {
                 let from_cache = self.state.go_to(path, true);
                 if from_cache {
-                    // Restore preview for cached page
-                    self.call_preview()?;
+                    self.refresh_preview()?;
                 }
                 self.call_list()?;
                 self.run_post_page_enter_hooks()?;
@@ -336,6 +353,7 @@ impl App {
                 self.dirty = true;
             }
         }
+        self.sync_render_interval();
         Ok(())
     }
 
@@ -473,7 +491,7 @@ impl App {
                 ".." => {
                     path.pop();
                 }
-                _ => path.push(segment.to_string()),
+                _ => path.push(path_codec::decode_path_segment_input(segment)?),
             }
         }
 
@@ -566,8 +584,7 @@ impl App {
                     None => 1,
                 };
                 self.state.scroll_by(num);
-                self.state.current_preview.take();
-                self.call_preview()?;
+                self.refresh_preview()?;
                 self.dirty = true;
             }
             "scroll_preview_by" => {
@@ -589,21 +606,31 @@ impl App {
                 }
                 // Save the selected entry key to restore later
                 let selected_key = self.state.hovered().map(|e| e.key.clone());
+                let selected_hovered_path = self.state.hovered_path();
+                if let Some(path) = &selected_hovered_path {
+                    self.state.clear_preview_for_path(path);
+                }
                 self.state.clear_current_cache();
                 self.call_list()?;
                 // Restore selection by finding the entry with the same key
+                let mut selection_changed = false;
                 if let Some(key) = selected_key {
                     if let Some(page) = &mut self.state.current_page {
                         // Find the index of the entry with the same key
                         if let Some(idx) = page.filtered_list.iter().position(|e| e.key == key) {
+                            selection_changed = page.list_state.selected() != Some(idx);
                             page.list_state.select(Some(idx));
                         } else if !page.filtered_list.is_empty() {
                             // Entry not found, keep the current selection or select the first item
                             if page.list_state.selected().is_none() {
                                 page.list_state.select(Some(0));
+                                selection_changed = true;
                             }
                         }
                     }
+                }
+                if selection_changed {
+                    self.refresh_preview()?;
                 }
                 self.dirty = true;
             }
@@ -614,7 +641,7 @@ impl App {
                 if !from_cache {
                     self.call_list()?;
                 } else {
-                    self.call_preview()?;
+                    self.refresh_preview()?;
                 }
                 self.run_post_page_enter_hooks()?;
                 self.dirty = true;
@@ -631,8 +658,7 @@ impl App {
                     if !from_cache {
                         self.call_list()?;
                     } else {
-                        // Restore preview for cached page
-                        self.call_preview()?;
+                        self.refresh_preview()?;
                     }
                     self.run_post_page_enter_hooks()?;
                     self.dirty = true;
@@ -646,8 +672,7 @@ impl App {
                     if !from_cache {
                         self.call_list()?;
                     } else {
-                        // Restore preview for cached page
-                        self.call_preview()?;
+                        self.refresh_preview()?;
                     }
                     self.run_post_page_enter_hooks()?;
                     self.dirty = true;
@@ -658,7 +683,7 @@ impl App {
                     if !from_cache {
                         self.call_list()?;
                     } else {
-                        self.call_preview()?;
+                        self.refresh_preview()?;
                     }
                     self.run_post_page_enter_hooks()?;
                     self.dirty = true;
@@ -706,6 +731,46 @@ impl App {
 
 struct AppWidget;
 
+fn render_loading_placeholder(area: Rect, buf: &mut Buffer) {
+    if area.width < 12 || area.height < 5 {
+        Paragraph::new("Loading")
+            .alignment(Alignment::Center)
+            .style(Style::default().fg(Color::Cyan).bold())
+            .render(area, buf);
+        return;
+    }
+
+    let phase = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| (d.as_millis() as usize / 200) % 5)
+        .unwrap_or(0);
+    let pulse = ["▰▱▱▱▱", "▰▰▱▱▱", "▰▰▰▱▱", "▰▰▰▰▱", "▰▰▰▰▰"][phase];
+
+    let text = Text::from(vec![
+        Line::from(vec![
+            Span::styled("◌", Style::default().fg(Color::LightCyan)),
+            Span::raw(" "),
+            Span::styled("Loading", Style::default().fg(Color::White).bold()),
+            Span::raw(" "),
+            Span::styled("◌", Style::default().fg(Color::LightBlue)),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled(pulse, Style::default().fg(Color::LightCyan)),
+            Span::raw(" "),
+            Span::styled("fetching page", Style::default().fg(Color::White)),
+        ]),
+        Line::from(vec![Span::styled(
+            "please hold tight",
+            Style::default().fg(Color::DarkGray).italic(),
+        )]),
+    ]);
+
+    Paragraph::new(text)
+        .alignment(Alignment::Center)
+        .render(area, buf);
+}
+
 impl StatefulWidget for AppWidget {
     type State = State;
 
@@ -740,7 +805,7 @@ impl StatefulWidget for AppWidget {
             let list_widget = ListWidget { scrolloff };
             list_widget.render(list_area, buf, page);
         } else {
-            Paragraph::new("loading...").render(list_area, buf);
+            render_loading_placeholder(list_area, buf);
         }
 
         // Draw vertical divider line from top to bottom of the outer border
@@ -967,6 +1032,23 @@ mod tests {
         assert_eq!(
             App::resolve_command_path(&current_path, "/").unwrap(),
             Vec::<String>::new()
+        );
+    }
+
+    #[test]
+    fn resolve_command_path_decodes_percent_encoded_segments() {
+        let current_path = vec!["github".to_string(), "repo".to_string(), "tpope".to_string()];
+
+        assert_eq!(
+            App::resolve_command_path(&current_path, "vim-abolish/tags/feature%2Ftest").unwrap(),
+            vec![
+                "github".to_string(),
+                "repo".to_string(),
+                "tpope".to_string(),
+                "vim-abolish".to_string(),
+                "tags".to_string(),
+                "feature/test".to_string(),
+            ]
         );
     }
 }

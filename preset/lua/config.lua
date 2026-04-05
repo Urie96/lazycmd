@@ -147,9 +147,7 @@ end
 local function setup_plugin(name) return ensure_plugin(name) end
 
 local function guarded_preview_callback(hovered_path)
-  return function(preview)
-    if lc.deep_equal(hovered_path, lc.api.get_hovered_path()) then lc.api.page_set_preview(preview) end
-  end
+  return function(preview) lc.api.set_preview(hovered_path, preview) end
 end
 
 local function open_help()
@@ -262,7 +260,7 @@ function config.setup(opt)
     local path = lc.api.get_current_path()
     if #path == 0 then
       list_root_plugins(function(entries)
-        if lc.deep_equal(path, lc.api.get_current_path()) then lc.api.page_set_entries(entries) end
+        if lc.deep_equal(path, lc.api.get_current_path()) then lc.api.set_entries(nil, entries) end
       end)
       return
     end
@@ -270,19 +268,19 @@ function config.setup(opt)
     local plugin, err = ensure_plugin(path[1])
     if not plugin then
       lc.notify(tostring(err))
-      lc.api.page_set_entries {}
+      lc.api.set_entries(nil, {})
       return
     end
 
     if plugin.list then
       plugin.list(path, function(entries)
-        if lc.deep_equal(path, lc.api.get_current_path()) then lc.api.page_set_entries(entries) end
+        if lc.deep_equal(path, lc.api.get_current_path()) then lc.api.set_entries(nil, entries) end
       end)
     end
   end
 
   function lc._preview()
-    local entry = lc.api.page_get_hovered()
+    local entry = lc.api.get_hovered()
     local path = lc.api.get_hovered_path()
     if not entry then return end
 

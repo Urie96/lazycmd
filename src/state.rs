@@ -861,6 +861,65 @@ mod tests {
         assert!(state.go_back_in_history().is_some());
         assert!(state.go_back_in_history().is_none());
     }
+
+    #[test]
+    fn cached_preview_is_restored_when_hover_returns_to_entry() {
+        let lua = Lua::new();
+        let mut state = State::new();
+        state.current_path = vec!["file".to_string()];
+        state.set_current_page_entries(vec![
+            make_entry_with_key(&lua, "a"),
+            make_entry_with_key(&lua, "b"),
+        ]);
+
+        let path_a = vec!["file".to_string(), "a".to_string()];
+        let path_b = vec!["file".to_string(), "b".to_string()];
+
+        state.set_preview_for_path(
+            &path_a,
+            Some(Box::new(crate::widgets::StatefulParagraph::from("preview-a"))),
+        );
+        assert!(state.current_preview.is_some());
+
+        state.scroll_by(1);
+        assert!(!state.restore_preview_for_hovered());
+        assert!(state.current_preview.is_none());
+
+        state.set_preview_for_path(
+            &path_b,
+            Some(Box::new(crate::widgets::StatefulParagraph::from("preview-b"))),
+        );
+        assert!(state.current_preview.is_some());
+
+        state.scroll_by(-1);
+        assert!(state.restore_preview_for_hovered());
+        assert!(state.current_preview.is_some());
+    }
+
+    #[test]
+    fn stale_async_preview_result_is_cached_for_non_hovered_entry() {
+        let lua = Lua::new();
+        let mut state = State::new();
+        state.current_path = vec!["file".to_string()];
+        state.set_current_page_entries(vec![
+            make_entry_with_key(&lua, "a"),
+            make_entry_with_key(&lua, "b"),
+        ]);
+
+        let path_a = vec!["file".to_string(), "a".to_string()];
+        state.scroll_by(1);
+        state.set_preview_for_path(
+            &path_a,
+            Some(Box::new(crate::widgets::StatefulParagraph::from("late-preview-a"))),
+        );
+
+        assert_eq!(state.hovered().map(|entry| entry.key.as_str()), Some("b"));
+        assert!(state.current_preview.is_none());
+
+        state.scroll_by(-1);
+        assert!(state.restore_preview_for_hovered());
+        assert!(state.current_preview.is_some());
+    }
 }
 
 /// State for the confirm dialog
@@ -898,10 +957,12 @@ pub struct State {
     pub keymap_config: Vec<Keymap>,
     pub last_key_event_buffer: Vec<KeyEvent>,
     pub current_preview: Option<Box<dyn Renderable>>,
+    current_preview_path: Option<Vec<String>>,
     pub notification: Option<(Text<'static>, Instant)>,
 
     /// Cache for pages to preserve cursor position, entries and filter when navigating back
     page_cache: HashMap<Vec<String>, Page>,
+    preview_cache: HashMap<Vec<String>, Box<dyn Renderable>>,
     /// Navigation history for jumping back to the previously visited page
     navigation_history: Vec<Vec<String>>,
     /// Hooks to call before reload command
@@ -935,13 +996,7 @@ impl State {
         self.last_key_event_buffer.clear();
     }
 
-    pub fn set_current_page_entries(&mut self, entries: Vec<PageEntry>) {
-        self.clear_key_buffer();
-        if self.current_page.is_none() {
-            self.current_page = Some(Default::default())
-        }
-        let page = self.current_page.as_mut().unwrap();
-
+    fn set_page_entries(page: &mut Page, entries: Vec<PageEntry>) {
         // Save current selected index before updating entries
         let old_selected = page.list_state.selected();
 
@@ -963,6 +1018,48 @@ impl State {
                     page.list_state.select(Some(page.filtered_list.len() - 1));
                 }
             }
+        }
+    }
+
+    pub fn set_current_page_entries(&mut self, entries: Vec<PageEntry>) {
+        self.set_entries_for_path(&self.current_path.clone(), Some(entries));
+    }
+
+    pub fn set_entries_for_path(&mut self, path: &[String], entries: Option<Vec<PageEntry>>) {
+        self.clear_key_buffer();
+        let is_current_path = self.current_path == path;
+
+        if is_current_path {
+            self.stash_current_preview();
+            self.current_preview_path = None;
+            match entries {
+                Some(entries) => {
+                    let page = self.current_page.get_or_insert_default();
+                    Self::set_page_entries(page, entries);
+                }
+                None => {
+                    self.current_page = None;
+                }
+            }
+            return;
+        }
+
+        match entries {
+            Some(entries) => {
+                let page = self.page_cache.entry(path.to_vec()).or_default();
+                Self::set_page_entries(page, entries);
+            }
+            None => {
+                self.page_cache.remove(path);
+            }
+        }
+    }
+
+    pub fn entries_for_path(&self, path: &[String]) -> Option<&[PageEntry]> {
+        if self.current_path == path {
+            self.current_page.as_ref().map(|page| page.list.as_slice())
+        } else {
+            self.page_cache.get(path).map(|page| page.list.as_slice())
         }
     }
 
@@ -1019,6 +1116,16 @@ impl State {
         self.current_page
             .as_ref()
             .and_then(|p| p.list_state.selected().and_then(|s| p.filtered_list.get(s)))
+    }
+
+    pub fn hovered_path(&self) -> Option<Vec<String>> {
+        self.hovered().map(|hovered| {
+            self.current_path
+                .iter()
+                .cloned()
+                .chain([hovered.key.clone()])
+                .collect()
+        })
     }
 
     fn entry_keymap_candidates(&self) -> anyhow::Result<Vec<ResolvedKeymap>> {
@@ -1179,12 +1286,13 @@ impl State {
         }
 
         // Cache current page before navigating away
+        self.stash_current_preview();
         if let Some(page) = self.current_page.take() {
             self.page_cache.insert(self.current_path.clone(), page);
         }
 
         self.current_path = path.clone();
-        self.current_preview.take();
+        self.current_preview_path = None;
 
         // Try to restore page from cache
         if let Some(page) = self.page_cache.remove(&path) {
@@ -1216,6 +1324,76 @@ impl State {
     /// Clear cache for a specific path.
     pub fn clear_cache_for_path(&mut self, path: &[String]) {
         self.page_cache.remove(path);
+    }
+
+    fn stash_current_preview(&mut self) {
+        if let (Some(path), Some(preview)) = (
+            self.current_preview_path.take(),
+            self.current_preview.take(),
+        ) {
+            self.preview_cache.insert(path, preview);
+        }
+    }
+
+    pub fn restore_preview_for_hovered(&mut self) -> bool {
+        let Some(hovered_path) = self.hovered_path() else {
+            self.stash_current_preview();
+            self.current_preview_path = None;
+            return false;
+        };
+
+        if self.current_preview.is_some()
+            && self.current_preview_path.as_ref() == Some(&hovered_path)
+        {
+            return true;
+        }
+
+        self.stash_current_preview();
+        if let Some(preview) = self.preview_cache.remove(&hovered_path) {
+            self.current_preview = Some(preview);
+            self.current_preview_path = Some(hovered_path);
+            true
+        } else {
+            self.current_preview = None;
+            self.current_preview_path = None;
+            false
+        }
+    }
+
+    pub fn set_preview_for_path(
+        &mut self,
+        path: &[String],
+        preview: Option<Box<dyn Renderable>>,
+    ) {
+        let is_current = self.current_preview_path.as_ref().is_some_and(|p| p == path)
+            || self.hovered_path().as_deref() == Some(path);
+
+        if is_current {
+            if self.current_preview_path.as_deref() != Some(path) {
+                self.stash_current_preview();
+            }
+            self.preview_cache.remove(path);
+            self.current_preview = preview;
+            self.current_preview_path = self.current_preview.as_ref().map(|_| path.to_vec());
+            return;
+        }
+
+        match preview {
+            Some(preview) => {
+                self.preview_cache.insert(path.to_vec(), preview);
+            }
+            None => {
+                self.preview_cache.remove(path);
+            }
+        }
+    }
+
+    pub fn clear_preview_for_path(&mut self, path: &[String]) {
+        if self.current_preview_path.as_ref().is_some_and(|p| p == path) {
+            self.current_preview.take();
+            self.current_preview_path = None;
+        }
+        self.preview_cache.remove(path);
     }
 
     pub fn scroll_by(&mut self, amount: i16) {

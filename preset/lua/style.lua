@@ -3,7 +3,7 @@ local style = {}
 
 ---@class Text
 ---A TUI Text widget
----@field append fun(self: Text, line: Line|Span|string) Append a line to the text (modifies in place)
+---@field append fun(self: Text, line: Text|Line|Span|string) Append content to the text (modifies in place)
 
 ---@class Span
 ---A TUI Span widget
@@ -31,8 +31,8 @@ function style.span(args) return _lc.style.span(args) end
 ---@return Line A Line widget containing the combined Spans
 function style.line(args) return _lc.style.line(args) end
 
----Create a Text from a table of Lines, Spans, or Strings
----@param args (Line|Span|string)[] The Lines, Spans, or Strings to combine into a Text
+---Create a Text from a table of Texts, Lines, Spans, or Strings
+---@param args (Text|Line|Span|string)[] The Texts, Lines, Spans, or Strings to combine into a Text
 ---@return Text A Text widget containing the combined content
 function style.text(args) return _lc.style.text(args) end
 
