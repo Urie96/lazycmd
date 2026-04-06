@@ -86,9 +86,11 @@ fn save_cache_to_disk(namespace: &str, cache: &HashMap<String, CacheEntry>) -> m
 
     // Ensure directory exists
     if let Some(parent) = cache_path.parent() {
-        std::fs::create_dir_all(parent).into_lua_err().map_err(|e| {
-            LuaError::RuntimeError(format!("Failed to create cache directory: {}", e))
-        })?;
+        std::fs::create_dir_all(parent)
+            .into_lua_err()
+            .map_err(|e| {
+                LuaError::RuntimeError(format!("Failed to create cache directory: {}", e))
+            })?;
     }
 
     // Remove expired entries before saving
@@ -101,9 +103,11 @@ fn save_cache_to_disk(namespace: &str, cache: &HashMap<String, CacheEntry>) -> m
 
     if cleaned.is_empty() {
         if cache_path.exists() {
-            std::fs::remove_file(&cache_path).into_lua_err().map_err(|e| {
-                LuaError::RuntimeError(format!("Failed to delete cache file: {}", e))
-            })?;
+            std::fs::remove_file(&cache_path)
+                .into_lua_err()
+                .map_err(|e| {
+                    LuaError::RuntimeError(format!("Failed to delete cache file: {}", e))
+                })?;
         }
         return Ok(());
     }
@@ -147,7 +151,8 @@ fn flush_dirty_locked(store: &mut HashMap<String, NamespaceCache>) -> mlua::Resu
             continue;
         }
 
-        cache.entries
+        cache
+            .entries
             .retain(|_, entry| entry.expires.map(|exp| exp > now_ts()).unwrap_or(true));
         save_cache_to_disk(namespace, &cache.entries)?;
         cache.dirty = false;
@@ -293,14 +298,16 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
         .into_lua(lua)?;
 
     let delete = lua
-        .create_function(|_, (namespace, key): (String, String)| -> mlua::Result<()> {
-            let mut store = lock_store()?;
-            let cache = ensure_namespace_loaded(&mut store, &namespace)?;
-            if cache.entries.remove(&key).is_some() {
-                cache.dirty = true;
-            }
-            Ok(())
-        })?
+        .create_function(
+            |_, (namespace, key): (String, String)| -> mlua::Result<()> {
+                let mut store = lock_store()?;
+                let cache = ensure_namespace_loaded(&mut store, &namespace)?;
+                if cache.entries.remove(&key).is_some() {
+                    cache.dirty = true;
+                }
+                Ok(())
+            },
+        )?
         .into_lua(lua)?;
 
     let clear = lua

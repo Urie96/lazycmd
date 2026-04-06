@@ -13,6 +13,7 @@ preset/lua/
 ├── component.lua     # UI 组件（对话框、通知）
 ├── copy_from_neovim.lua # 从 Neovim 复用的表工具函数
 ├── fs.lua            # 文件系统 API 封装
+├── html.lua          # HTML 解析 API 封装
 ├── http.lua          # HTTP API 封装
 ├── init.lua          # 初始化脚本（默认配置和键盘映射）
 ├── inspect.lua       # 调试工具（表结构可视化）
@@ -145,6 +146,22 @@ lc.http.put(url, body, callback)
 lc.http.delete(url, callback)
 lc.http.patch(url, body, callback)
 lc.http.request(opts, callback)
+```
+
+### html.lua - HTML 解析
+
+HTML 文档/片段解析与 CSS selector 查询封装：
+
+```lua
+local doc = lc.html.parse(response.body)
+local repos = doc:select("article.Box-row")
+local first = repos[1]
+
+if first then
+  local link = first:first("h2 a")
+  local href = link and link:attr("href")
+  local text = link and link:text()
+end
 ```
 
 ### url.lua - URL 编解码
@@ -436,6 +453,7 @@ lc.time.now()                      -- 当前时间戳
 lc.time.parse("2023-12-25T15:30:45Z")  -- 解析时间字符串
 lc.time.format(1704067200)         -- 格式化时间戳
 lc.time.format(1704067200, "compact")  -- 紧凑格式
+lc.time.format(1704067200, "relative") -- 相对时间格式
 ```
 
 ### util.lua - 工具函数
@@ -622,4 +640,5 @@ end)
 -- 格式化时间
 local timestamp = lc.time.now()
 local formatted = lc.time.format(timestamp, "compact")  -- "14:30" 或 "03/15" 或 "2024/03"
+local relative = lc.time.format(timestamp - 3600, "relative")  -- "1 hour ago"
 ```

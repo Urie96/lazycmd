@@ -182,7 +182,10 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
                         v.into_lua_err().and_then(|e| {
                             let path = e.path();
                             let metadata = e.metadata().ok();
-                            let is_dir = metadata.as_ref().map(|m| m.is_dir()).unwrap_or_else(|| path.is_dir());
+                            let is_dir = metadata
+                                .as_ref()
+                                .map(|m| m.is_dir())
+                                .unwrap_or_else(|| path.is_dir());
                             let size = metadata.as_ref().map(|m| m.len());
 
                             let tbl = lua.create_table_with_capacity(0, 3)?;

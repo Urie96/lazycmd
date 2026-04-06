@@ -51,6 +51,7 @@ pub fn init_lua(lua: &Lua) -> mlua::Result<()> {
     load_preset!("promise")?;
     load_preset!("time")?;
     load_preset!("keymap")?;
+    load_preset!("html")?;
     load_preset!("http")?;
     load_preset!("cache")?;
     load_preset!("fs")?;
@@ -110,14 +111,8 @@ mod tests {
 
         let raw_lc = lua.create_table()?;
         let style = lua.create_table()?;
-        style.set(
-            "span",
-            lua.create_function(|_, s: String| Ok(s))?,
-        )?;
-        style.set(
-            "ansi",
-            lua.create_function(|_, s: String| Ok(s))?,
-        )?;
+        style.set("span", lua.create_function(|_, s: String| Ok(s))?)?;
+        style.set("ansi", lua.create_function(|_, s: String| Ok(s))?)?;
         raw_lc.set("style", style)?;
         raw_lc.set(
             "split",
@@ -132,12 +127,21 @@ mod tests {
         globals.set("_lc", raw_lc)?;
         globals.set("utf8", mlua::Value::Nil)?;
 
-        lua.load(&include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/preset/lua/string.lua"))[..])
-            .set_name("preset/lua/string.lua")
-            .exec()?;
+        lua.load(
+            &include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/preset/lua/string.lua"
+            ))[..],
+        )
+        .set_name("preset/lua/string.lua")
+        .exec()?;
 
-        let result: String = lua.load(r#"return string.utf8_sub("Hello 世界！🌍", 7, 8)"#).eval()?;
-        let tail: String = lua.load(r#"return string.utf8_sub("Hello 世界！🌍", -3, -1)"#).eval()?;
+        let result: String = lua
+            .load(r#"return string.utf8_sub("Hello 世界！🌍", 7, 8)"#)
+            .eval()?;
+        let tail: String = lua
+            .load(r#"return string.utf8_sub("Hello 世界！🌍", -3, -1)"#)
+            .eval()?;
 
         assert_eq!(result, "世界");
         assert_eq!(tail, "界！🌍");

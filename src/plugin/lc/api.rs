@@ -3,20 +3,22 @@ use mlua::prelude::*;
 
 pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
     let set_entries = lua
-        .create_function(|lua, (path, entries): (Option<Vec<String>>, Option<Vec<PageEntry>>)| {
-            plugin::mut_scope_state(lua, |state| {
-                let path = path.unwrap_or_else(|| state.current_path.clone());
-                let is_current_path = state.current_path == path;
-                state.set_entries_for_path(&path, entries);
-                if is_current_path {
-                    plugin::send_render_event(lua)?;
-                    if state.current_page.is_some() {
-                        plugin::send_event(lua, Event::Command("scroll_by 0".to_string()))?;
+        .create_function(
+            |lua, (path, entries): (Option<Vec<String>>, Option<Vec<PageEntry>>)| {
+                plugin::mut_scope_state(lua, |state| {
+                    let path = path.unwrap_or_else(|| state.current_path.clone());
+                    let is_current_path = state.current_path == path;
+                    state.set_entries_for_path(&path, entries);
+                    if is_current_path {
+                        plugin::send_render_event(lua)?;
+                        if state.current_page.is_some() {
+                            plugin::send_event(lua, Event::Command("scroll_by 0".to_string()))?;
+                        }
                     }
-                }
-                Ok(())
-            })
-        })?
+                    Ok(())
+                })
+            },
+        )?
         .into_lua(lua)?;
 
     let go_to = lua

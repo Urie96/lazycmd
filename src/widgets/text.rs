@@ -48,12 +48,20 @@ impl LuaUserData for LuaSpan {
         });
 
         methods.add_function_mut("bold", |lua, ud: AnyUserData| {
-            ud.borrow_mut::<Self>()?.0.style.add_modifier.insert(Modifier::BOLD);
+            ud.borrow_mut::<Self>()?
+                .0
+                .style
+                .add_modifier
+                .insert(Modifier::BOLD);
             ud.into_lua(lua)
         });
 
         methods.add_function_mut("italic", |lua, ud: AnyUserData| {
-            ud.borrow_mut::<Self>()?.0.style.add_modifier.insert(Modifier::ITALIC);
+            ud.borrow_mut::<Self>()?
+                .0
+                .style
+                .add_modifier
+                .insert(Modifier::ITALIC);
             ud.into_lua(lua)
         });
 
@@ -107,12 +115,20 @@ impl LuaUserData for LuaLine {
         });
 
         methods.add_function_mut("bold", |lua, ud: AnyUserData| {
-            ud.borrow_mut::<Self>()?.0.style.add_modifier.insert(Modifier::BOLD);
+            ud.borrow_mut::<Self>()?
+                .0
+                .style
+                .add_modifier
+                .insert(Modifier::BOLD);
             ud.into_lua(lua)
         });
 
         methods.add_function_mut("italic", |lua, ud: AnyUserData| {
-            ud.borrow_mut::<Self>()?.0.style.add_modifier.insert(Modifier::ITALIC);
+            ud.borrow_mut::<Self>()?
+                .0
+                .style
+                .add_modifier
+                .insert(Modifier::ITALIC);
             ud.into_lua(lua)
         });
 
@@ -299,7 +315,10 @@ mod tests {
             .create_userdata(LuaText(Text::from(vec![Line::raw("head")])))
             .expect("create text userdata");
         let extra = lua
-            .create_userdata(LuaText(Text::from(vec![Line::raw("tail-1"), Line::raw("tail-2")])))
+            .create_userdata(LuaText(Text::from(vec![
+                Line::raw("tail-1"),
+                Line::raw("tail-2"),
+            ])))
             .expect("create extra text userdata");
         lua.globals().set("text", text).expect("set text global");
         lua.globals().set("extra", extra).expect("set extra global");

@@ -877,7 +877,9 @@ mod tests {
 
         state.set_preview_for_path(
             &path_a,
-            Some(Box::new(crate::widgets::StatefulParagraph::from("preview-a"))),
+            Some(Box::new(crate::widgets::StatefulParagraph::from(
+                "preview-a",
+            ))),
         );
         assert!(state.current_preview.is_some());
 
@@ -887,7 +889,9 @@ mod tests {
 
         state.set_preview_for_path(
             &path_b,
-            Some(Box::new(crate::widgets::StatefulParagraph::from("preview-b"))),
+            Some(Box::new(crate::widgets::StatefulParagraph::from(
+                "preview-b",
+            ))),
         );
         assert!(state.current_preview.is_some());
 
@@ -910,7 +914,9 @@ mod tests {
         state.scroll_by(1);
         state.set_preview_for_path(
             &path_a,
-            Some(Box::new(crate::widgets::StatefulParagraph::from("late-preview-a"))),
+            Some(Box::new(crate::widgets::StatefulParagraph::from(
+                "late-preview-a",
+            ))),
         );
 
         assert_eq!(state.hovered().map(|entry| entry.key.as_str()), Some("b"));
@@ -1360,12 +1366,11 @@ impl State {
         }
     }
 
-    pub fn set_preview_for_path(
-        &mut self,
-        path: &[String],
-        preview: Option<Box<dyn Renderable>>,
-    ) {
-        let is_current = self.current_preview_path.as_ref().is_some_and(|p| p == path)
+    pub fn set_preview_for_path(&mut self, path: &[String], preview: Option<Box<dyn Renderable>>) {
+        let is_current = self
+            .current_preview_path
+            .as_ref()
+            .is_some_and(|p| p == path)
             || self.hovered_path().as_deref() == Some(path);
 
         if is_current {
@@ -1389,7 +1394,11 @@ impl State {
     }
 
     pub fn clear_preview_for_path(&mut self, path: &[String]) {
-        if self.current_preview_path.as_ref().is_some_and(|p| p == path) {
+        if self
+            .current_preview_path
+            .as_ref()
+            .is_some_and(|p| p == path)
+        {
             self.current_preview.take();
             self.current_preview_path = None;
         }

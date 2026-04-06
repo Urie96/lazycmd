@@ -139,6 +139,7 @@ return M
 | `lc.api`    | 页面管理、导航    |
 | `lc.fs`     | 文件系统操作      |
 | `lc.http`   | HTTP 请求         |
+| `lc.html`   | HTML 解析与选择器 |
 | `lc.system` | 执行外部命令      |
 | `lc.cache`  | 持久化缓存        |
 | `lc.time`   | 时间解析格式化    |

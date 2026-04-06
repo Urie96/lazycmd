@@ -204,6 +204,44 @@ function on_response(response)
 end
 ```
 
+### lc.html - HTML 解析
+
+基于 CSS selector 的 HTML 解析能力，适合从网页里提取结构化内容。
+
+| 函数 | 说明 |
+|------|------|
+| `html.parse(source)` | 按完整 HTML 文档解析，返回 `HtmlDocument` userdata |
+| `html.parse_fragment(source)` | 按 HTML 片段解析，返回 `HtmlDocument` userdata |
+
+`HtmlDocument` 方法：
+
+| 方法 | 说明 |
+|------|------|
+| `doc:select(selector)` | 返回 `HtmlNodeList` |
+| `doc:first(selector)` | 返回首个 `HtmlNode`，不存在时为 `nil` |
+| `doc:html()` | 返回原始 HTML |
+
+`HtmlNode` 方法：
+
+| 方法 | 说明 |
+|------|------|
+| `node:name()` | 标签名 |
+| `node:html()` | 节点 outer HTML |
+| `node:inner_html()` | 节点 inner HTML |
+| `node:text()` | 节点及后代文本拼接结果 |
+| `node:attr(name)` | 获取单个属性 |
+| `node:attrs()` | 获取全部属性表 |
+| `node:select(selector)` | 在当前节点片段内继续查询 |
+| `node:first(selector)` | 在当前节点片段内查询首个匹配 |
+
+`HtmlNodeList` 方法：
+
+| 方法 | 说明 |
+|------|------|
+| `list:len()` | 返回节点数 |
+| `list:get(index)` | 1-based 获取节点 |
+| `list:to_table()` | 转成 Lua 数组 |
+
 ### lc.url - URL 编解码
 
 用于 URL 百分号编码和解码：
@@ -357,6 +395,7 @@ end
 - RFC 2822: `Mon, 25 Dec 2023 15:30:45 +0800`
 - 日期: `2023-12-25`
 - 紧凑格式: `compact`（自动适配显示格式）
+- 相对时间格式: `relative`（例如 `47 minutes ago`、`yesterday`、`last week`、`in 2 hours`）
 
 ### lc.cache - 缓存
 

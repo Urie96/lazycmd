@@ -4,6 +4,7 @@ mod cache;
 mod clipboard;
 mod fs;
 mod highlighter;
+mod html;
 mod http;
 mod json;
 mod keymap;
@@ -69,6 +70,7 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
     let cache = cache::new_table(lua)?.into_lua(lua)?;
     let clipboard = clipboard::new_table(lua)?.into_lua(lua)?;
     let fs = fs::new_table(lua)?.into_lua(lua)?;
+    let html = html::new_table(lua)?.into_lua(lua)?;
     let http = http::new_table(lua)?.into_lua(lua)?;
     let path = path::new_table(lua)?.into_lua(lua)?;
     let secrets = secrets::new_table(lua)?.into_lua(lua)?;
@@ -302,6 +304,7 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
         ("cache", cache),
         ("clipboard", clipboard),
         ("fs", fs),
+        ("html", html),
         ("http", http),
         ("cmd", cmd),
         ("split", split),

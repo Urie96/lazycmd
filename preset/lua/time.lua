@@ -14,6 +14,7 @@ function time.parse(time_str) return _lc.time.parse(time_str) end
 ---@param timestamp number The Unix timestamp (seconds since epoch)
 ---@param format_str string? Optional format string:
 --- - "compact" - Compact format: HH:MM for today, MM-DD for this year, YYYY-MM for older dates
+--- - "relative" - GitHub-style relative time: "47 minutes ago", "yesterday", "last week", "in 2 hours"
 --- - "%Y-%m-%d" or any chrono format string
 --- - Defaults to ISO 8601 (e.g., "2023-12-25T15:30:45Z")
 ---@return string formatted The formatted datetime string

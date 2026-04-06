@@ -2,6 +2,78 @@ use mlua::prelude::*;
 
 use chrono::Datelike;
 
+fn relative_phrase(delta_seconds: i64) -> String {
+    let future = delta_seconds > 0;
+    let abs = delta_seconds.unsigned_abs();
+
+    let phrase = if abs < 60 {
+        "1 minute".to_string()
+    } else if abs < 60 * 60 {
+        format!("{} minutes", abs / 60)
+    } else if abs < 24 * 60 * 60 {
+        let hours = abs / 3600;
+        if hours <= 1 {
+            "1 hour".to_string()
+        } else {
+            format!("{} hours", hours)
+        }
+    } else if abs < 36 * 60 * 60 {
+        "yesterday".to_string()
+    } else if abs < 7 * 24 * 60 * 60 {
+        format!("{} days", abs / (24 * 3600))
+    } else if abs < 14 * 24 * 60 * 60 {
+        "last week".to_string()
+    } else if abs < 30 * 24 * 60 * 60 {
+        format!("{} weeks", abs / (7 * 24 * 3600))
+    } else if abs < 45 * 24 * 60 * 60 {
+        "last month".to_string()
+    } else if abs < 365 * 24 * 60 * 60 {
+        format!("{} months", abs / (30 * 24 * 3600))
+    } else if abs < 545 * 24 * 60 * 60 {
+        "last year".to_string()
+    } else {
+        format!("{} years", abs / (365 * 24 * 3600))
+    };
+
+    match phrase.as_str() {
+        "yesterday" => {
+            if future {
+                "tomorrow".to_string()
+            } else {
+                phrase
+            }
+        }
+        "last week" => {
+            if future {
+                "next week".to_string()
+            } else {
+                phrase
+            }
+        }
+        "last month" => {
+            if future {
+                "next month".to_string()
+            } else {
+                phrase
+            }
+        }
+        "last year" => {
+            if future {
+                "next year".to_string()
+            } else {
+                phrase
+            }
+        }
+        _ => {
+            if future {
+                format!("in {}", phrase)
+            } else {
+                format!("{} ago", phrase)
+            }
+        }
+    }
+}
+
 /// Create the lc.time table with time-related functions
 pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
     // Parse an ISO 8601 datetime string and return Unix timestamp
@@ -93,6 +165,10 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
                         // Same year but not today: show MM/DD
                         Ok(dt_local.format("%m/%d").to_string())
                     }
+                }
+                Some("relative") => {
+                    let now = chrono::Utc::now().timestamp();
+                    Ok(relative_phrase(dt_utc.timestamp() - now))
                 }
                 Some(fmt) => Ok(dt_utc.format(fmt).to_string()),
                 None => Ok(dt_utc.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)),
@@ -272,5 +348,64 @@ mod tests {
         assert!(formatted.len() == 7); // "YYYY/MM"
         assert!(formatted.contains('/'));
         assert!(!formatted.contains(':'));
+    }
+
+    #[test]
+    fn test_time_format_relative_past() {
+        let now = chrono::Utc::now().timestamp();
+
+        assert_eq!(relative_phrase(now - now), "1 minute ago");
+        assert_eq!(relative_phrase((now - 47 * 60) - now), "47 minutes ago");
+        assert_eq!(relative_phrase((now - 60 * 60) - now), "1 hour ago");
+        assert_eq!(relative_phrase((now - 2 * 60 * 60) - now), "2 hours ago");
+        assert_eq!(relative_phrase((now - 24 * 60 * 60) - now), "yesterday");
+        assert_eq!(
+            relative_phrase((now - 2 * 24 * 60 * 60) - now),
+            "2 days ago"
+        );
+        assert_eq!(relative_phrase((now - 8 * 24 * 60 * 60) - now), "last week");
+        assert_eq!(
+            relative_phrase((now - 14 * 24 * 60 * 60) - now),
+            "2 weeks ago"
+        );
+        assert_eq!(
+            relative_phrase((now - 35 * 24 * 60 * 60) - now),
+            "last month"
+        );
+    }
+
+    #[test]
+    fn test_time_format_relative_future() {
+        let now = chrono::Utc::now().timestamp();
+
+        assert_eq!(relative_phrase((now + 47 * 60) - now), "in 47 minutes");
+        assert_eq!(relative_phrase((now + 60 * 60) - now), "in 1 hour");
+        assert_eq!(relative_phrase((now + 2 * 60 * 60) - now), "in 2 hours");
+        assert_eq!(relative_phrase((now + 24 * 60 * 60) - now), "tomorrow");
+        assert_eq!(relative_phrase((now + 2 * 24 * 60 * 60) - now), "in 2 days");
+        assert_eq!(relative_phrase((now + 8 * 24 * 60 * 60) - now), "next week");
+        assert_eq!(
+            relative_phrase((now + 14 * 24 * 60 * 60) - now),
+            "in 2 weeks"
+        );
+        assert_eq!(
+            relative_phrase((now + 35 * 24 * 60 * 60) - now),
+            "next month"
+        );
+    }
+
+    #[test]
+    fn test_time_format_relative_via_lua_api() {
+        use chrono::Duration;
+
+        let lua = Lua::new();
+        let time_table = new_table(&lua).unwrap();
+        let format_fn: mlua::Function = time_table.get("format").unwrap();
+        let timestamp = (chrono::Utc::now() - Duration::minutes(47)).timestamp();
+
+        let formatted: String = format_fn
+            .call((timestamp, Some("relative".to_string())))
+            .unwrap();
+        assert_eq!(formatted, "47 minutes ago");
     }
 }

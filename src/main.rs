@@ -19,8 +19,8 @@ mod input_handler;
 mod keymap;
 mod log;
 mod mode;
-mod path_codec;
 mod page;
+mod path_codec;
 mod plugin;
 mod select_handler;
 mod state;
@@ -137,8 +137,11 @@ mod tests {
     #[test]
     fn parse_initial_path_decodes_percent_encoded_segments() {
         assert_eq!(
-            parse_initial_path(os_args(&["lazycmd", "/github/repo/tpope/vim-abolish/tags/feature%2Ftest"]))
-                .unwrap(),
+            parse_initial_path(os_args(&[
+                "lazycmd",
+                "/github/repo/tpope/vim-abolish/tags/feature%2Ftest"
+            ]))
+            .unwrap(),
             vec![
                 "github".to_string(),
                 "repo".to_string(),

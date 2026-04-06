@@ -18,8 +18,7 @@ use std::mem;
 use crate::{
     confirm_handler,
     events::{self, Event, Events},
-    input_handler, plugin, select_handler,
-    path_codec,
+    input_handler, path_codec, plugin, select_handler,
     term::{self, Term},
     widgets::{
         confirm::ConfirmWidget, footer::FooterWidget, header::HeaderWidget,
@@ -192,7 +191,9 @@ impl App {
             .notification
             .as_ref()
             .is_some_and(|(_, expiry)| Instant::now() <= *expiry);
-        events::set_fast_render_enabled(self.state.current_page.is_none() || has_active_notification);
+        events::set_fast_render_enabled(
+            self.state.current_page.is_none() || has_active_notification,
+        );
     }
 
     fn handle_event(&mut self, e: Event) -> Result<()> {
@@ -1037,7 +1038,11 @@ mod tests {
 
     #[test]
     fn resolve_command_path_decodes_percent_encoded_segments() {
-        let current_path = vec!["github".to_string(), "repo".to_string(), "tpope".to_string()];
+        let current_path = vec![
+            "github".to_string(),
+            "repo".to_string(),
+            "tpope".to_string(),
+        ];
 
         assert_eq!(
             App::resolve_command_path(&current_path, "vim-abolish/tags/feature%2Ftest").unwrap(),
