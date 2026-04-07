@@ -33,6 +33,8 @@ Lua 中的值通过 `FromLua` trait 转换为 `Box<dyn Renderable>`：
 
 - 字符串 → `StatefulParagraph`
 - `LuaText` (UserData) → `StatefulParagraph`
+- `LuaImage` (UserData) → 图片块渲染
+- 由 `string` / `Text` / `Image` 等组成的 Lua 数组 → 组合预览，按顺序渲染
 
 ## 组件说明
 
@@ -49,6 +51,16 @@ Lua 中的值通过 `FromLua` trait 转换为 `Box<dyn Renderable>`：
 let paragraph = StatefulParagraph::from("Hello World");
 let paragraph = StatefulParagraph::from(text);
 ```
+
+### LuaImage
+
+图片预览组件，支持：
+
+- 从本地文件读取图片
+- 按预览区宽度等比缩放
+- 优先使用终端原生图片协议（当前支持 Kitty / iTerm Inline）
+- 不支持或图片被滚动裁切时，使用 truecolor 半块字符（`▀` / `▄`）渲染
+- 可和文本一起放进数组做图文混排
 
 ### ListWidget
 

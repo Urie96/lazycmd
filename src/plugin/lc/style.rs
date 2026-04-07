@@ -1,8 +1,9 @@
 use crate::plugin::lc::highlighter;
-use crate::widgets::{LuaLine, LuaSpan, LuaText};
+use crate::widgets::{LuaImage, LuaLine, LuaSpan, LuaText};
 use ansi_to_tui::IntoText;
 use mlua::prelude::*;
 use ratatui::text::{Line, Span, Text};
+use std::path::PathBuf;
 use unicode_width::UnicodeWidthStr;
 
 #[cfg(test)]
@@ -224,6 +225,14 @@ pub fn text(lua: &Lua) -> mlua::Result<LuaFunction> {
             }
         }
         Ok(LuaText(Text::from(lines)))
+    })
+}
+
+pub fn image(lua: &Lua) -> mlua::Result<LuaFunction> {
+    lua.create_function(|_lua, (path, opts): (String, Option<LuaTable>)| {
+        let max_width = opts.as_ref().and_then(|opts| opts.get("max_width").ok());
+        let max_height = opts.as_ref().and_then(|opts| opts.get("max_height").ok());
+        Ok(LuaImage::new(PathBuf::from(path), max_width, max_height))
     })
 }
 

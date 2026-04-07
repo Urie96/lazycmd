@@ -5,6 +5,9 @@ local style = {}
 ---A TUI Text widget
 ---@field append fun(self: Text, line: Text|Line|Span|string) Append content to the text (modifies in place)
 
+---@class Image
+---A preview image widget rendered as truecolor block characters
+
 ---@class Span
 ---A TUI Span widget
 ---@field fg fun(self: Span, color: string): Span Set foreground color (modifies in place and returns self)
@@ -35,6 +38,12 @@ function style.line(args) return _lc.style.line(args) end
 ---@param args (Text|Line|Span|string)[] The Texts, Lines, Spans, or Strings to combine into a Text
 ---@return Text A Text widget containing the combined content
 function style.text(args) return _lc.style.text(args) end
+
+---Create an Image preview widget from a local file path
+---@param path string The local image path
+---@param opts? {max_width?: integer, max_height?: integer} Optional size caps in terminal cells
+---@return Image
+function style.image(path, opts) return _lc.style.image(path, opts) end
 
 ---Highlight code with syntax highlighting
 ---@param code string The code to highlight

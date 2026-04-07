@@ -365,6 +365,9 @@ end
 ```
 
 - `entry.preview(cb)` 的优先级高于插件级 `plugin.preview(entry, cb)`
+- `preview` 可以是 `string`、`Span`、`Line`、`Text`、`Image`，也可以是这些类型组成的数组，按顺序在预览区渲染
+- `Image` 会优先走终端原生图片协议（当前支持 Kitty / iTerm Inline），不支持时退回 truecolor 块字符
+- 当图片在预览区内被滚动裁切时，会临时退回块字符 fallback，避免 native 协议定位错误
 - `entry.preview` 可以异步调用 `cb(preview)`，也可以直接返回一个 preview widget 作为同步结果
 - `entry.preview` 同样通过 Lua 表访问，支持由元表 `__index` 提供
 - 当异步回调返回时，如果当前 hovered entry 已经变化，这次 preview 更新会被丢弃
@@ -385,6 +388,7 @@ end
 | `lc.style.span(s)` | 创建单个 Span |
 | `lc.style.line(args)` | 创建 Line（Span 数组） |
 | `lc.style.text(args)` | 创建 Text（Line 数组） |
+| `lc.style.image(path[, opts])` | 创建图片预览 widget，`opts` 支持 `max_width` / `max_height`（终端格） |
 | `lc.style.highlight(code, lang)` | 语法高亮代码 |
 | `lc.style.ansi(s)` | 解析 ANSI 转义序列 |
 | `lc.style.align_columns(lines)` | 对齐列 |

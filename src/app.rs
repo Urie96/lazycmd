@@ -114,6 +114,14 @@ impl App {
             }
 
             if self.dirty {
+                let native_allowed = self.state.input_dialog.is_none()
+                    && self.state.select_dialog.is_none()
+                    && self.state.confirm_dialog.is_none();
+                if let Some(preview) = self.state.current_preview.as_mut() {
+                    preview.set_native_enabled(native_allowed);
+                }
+                let _ = crate::widgets::native_image::clear(self.term.backend_mut())?;
+
                 // Hide cursor during rendering
                 execute!(self.term.backend_mut(), Hide)?;
 
@@ -122,6 +130,15 @@ impl App {
                     frame.render_stateful_widget(AppWidget, frame.area(), &mut self.state);
                 })?;
 
+                let _rendered_native = if native_allowed {
+                    if let Some(preview) = self.state.current_preview.as_mut() {
+                        preview.render_native(self.term.backend_mut())?
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                };
                 // Get cursor info after rendering (uses updated filter_cursor_x/y)
                 let cursor_info = self.get_cursor_info();
 

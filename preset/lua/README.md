@@ -392,6 +392,13 @@ lc.hook.post_page_enter(function(ctx) print(vim.inspect(ctx.path)) end)
 
 当光标停在该 entry 上且 `entry.preview` 存在时，会优先于插件级 `preview(entry, cb)`。如果回调执行时 hovered entry 已经变化，这次预览更新会被自动忽略。
 
+`preview` 支持：
+- `string` / `Span` / `Line` / `Text`
+- `Image`
+- 以上类型组成的数组，会在预览区按顺序渲染，适合图文混排
+
+`Image` 会优先使用终端原生图片协议（当前支持 Kitty / iTerm Inline），不支持时退回 truecolor 块字符。
+
 `entry.preview` 既可以异步调用 `cb(preview)`，也可以直接 `return preview` 返回同步结果：
 
 ```lua
@@ -432,12 +439,24 @@ lc.hook.post_page_enter(function(ctx) print(vim.inspect(ctx.path)) end)
 lc.style.span(s)              -- 创建 Span
 lc.style.line({s1, s2, ...}) -- 创建 Line
 lc.style.text({l1, l2, ...}) -- 创建 Text
+lc.style.image(path, opts)   -- 创建 Image
 lc.style.highlight(code, lang)  -- 语法高亮
 lc.style.align_columns(lines)    -- 列对齐
 
 lc.style.span("x"):bold()        -- Span 加粗
 lc.style.line({"x"}):italic()    -- Line 斜体
 lc.style.span("x"):underline()   -- Span 下划线
+
+图片预览示例：
+
+```lua
+return {
+  lc.style.line { "Cover" },
+  lc.style.image("/tmp/cover.png", { max_height = 20 }),
+  "",
+  lc.style.text { "Some description" },
+}
+```
 ```
 
 ### system.lua - 系统命令

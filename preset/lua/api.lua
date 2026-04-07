@@ -6,7 +6,7 @@ local api = {}
 ---@field display? string|Span|Line The display text or styled line widget shown in the list
 ---@field bottom_line? string|Span|Line Extra line rendered at the bottom-left when this entry is hovered
 ---@field keymap? table<string, fun()|{callback: fun(), desc?: string}> Entry-local keymap table, resolved from the entry/metatable and preferred over global keymaps when matched
----@field preview? fun(self: PageEntry, cb: fun(widget: string|Span|Text|Line)) Entry-local preview callback, preferred over plugin.preview when present
+---@field preview? fun(self: PageEntry, cb: fun(widget: string|Span|Text|Line|Image|(string|Span|Text|Line|Image)[])) Entry-local preview callback, preferred over plugin.preview when present
 ---@field [string] any Additional custom fields
 
 ---Set the entries for a page
@@ -29,7 +29,7 @@ function api.get_entries(path) return _lc.api.get_entries(path) end
 
 ---Set the preview panel content
 ---@param path string[]|nil The hovered entry path, or nil for the current hovered entry
----@param widget string|Span|Text|Line|nil The widget to display, or nil to clear the preview
+---@param widget string|Span|Text|Line|Image|(string|Span|Text|Line|Image)[]|nil The widget to display, or nil to clear the preview
 function api.set_preview(path, widget) return _lc.api.set_preview(path, widget) end
 
 ---Navigate to a specific path
