@@ -46,6 +46,31 @@ impl PageEntry {
         }
     }
 
+    fn extract_callable_line_field(&self, field: &str) -> anyhow::Result<Option<Line<'static>>> {
+        let value = match self.tbl.get::<LuaValue>(field)? {
+            LuaValue::Function(f) => f.call(())?,
+            other => other,
+        };
+
+        match value {
+            LuaValue::Nil => Ok(None),
+            LuaValue::String(s) => Ok(Some(Line::from(s.to_string_lossy().to_string()))),
+            LuaValue::UserData(ud) => {
+                if let Ok(span) = ud.borrow::<LuaSpan>() {
+                    Ok(Some(Line::from(span.0.clone())))
+                } else if let Ok(line) = ud.borrow::<LuaLine>() {
+                    Ok(Some(line.0.clone()))
+                } else {
+                    bail!("Expected Span, Line, string, function, or nil")
+                }
+            }
+            other => bail!(
+                "Expected Span, Line, string, function, or nil, got {}",
+                other.type_name()
+            ),
+        }
+    }
+
     /// Extract the Text content from the display field
     pub fn display(&self) -> Line<'static> {
         self.extract_line_field("display")
@@ -54,7 +79,7 @@ impl PageEntry {
     }
 
     pub fn bottom_line(&self) -> Option<Line<'static>> {
-        self.extract_line_field("bottom_line")
+        self.extract_callable_line_field("bottom_line")
             .unwrap_or_else(|e| Some(Line::from(e.to_string())))
     }
 }
