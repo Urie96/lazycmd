@@ -15,6 +15,7 @@ preset/lua/
 ├── fs.lua            # 文件系统 API 封装
 ├── html.lua          # HTML 解析 API 封装
 ├── http.lua          # HTTP API 封装
+├── http_server.lua   # 本地 HTTP 服务封装
 ├── init.lua          # 初始化脚本（默认配置和键盘映射）
 ├── inspect.lua       # 调试工具（表结构可视化）
 ├── interactive.lua   # 交互式命令封装
@@ -146,6 +147,25 @@ lc.http.put(url, body, callback)
 lc.http.delete(url, callback)
 lc.http.patch(url, body, callback)
 lc.http.request(opts, callback)
+```
+
+### http_server.lua - 本地 HTTP 服务
+
+本地 HTTP 服务封装，适合为外部进程或插件生成稳定 localhost URL：
+
+```lua
+lc.http_server.register_resolver('song', function(req, respond)
+  respond {
+    status = 307,
+    headers = {
+      Location = 'https://example.com/signed-url',
+    },
+  }
+end)
+
+local url = lc.http_server.url('song', { id = 123 })
+local info = lc.http_server.info()
+lc.http_server.unregister_resolver('song')
 ```
 
 ### html.lua - HTML 解析

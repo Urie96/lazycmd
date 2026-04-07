@@ -15,6 +15,7 @@ src/plugin/
     ├── fs.rs           # 文件系统操作
     ├── highlighter.rs  # 语法高亮
     ├── http.rs         # HTTP 客户端
+    ├── http_server.rs  # 本地 HTTP 服务
     ├── keymap.rs       # 键盘映射
     ├── path.rs         # 路径操作
     ├── secrets.rs      # secrets 读写
@@ -202,6 +203,39 @@ function on_response(response)
     -- response.headers  - 响应头
     -- response.error    - 错误信息
 end
+```
+
+### lc.http_server - 本地 HTTP 服务
+
+为插件提供本地稳定 URL。Rust 负责监听 `127.0.0.1` 端口和路由，Lua 负责注册 resolver 并异步返回响应。
+
+| 函数 | 说明 |
+|------|------|
+| `http_server.register_resolver(name, handler)` | 注册 resolver；`handler(request, respond)` 可稍后调用 `respond({...})` |
+| `http_server.unregister_resolver(name)` | 注销 resolver |
+| `http_server.url(name, params)` | 生成本地 URL，例如 `http://127.0.0.1:38173/r/song?id=123` |
+| `http_server.info()` | 返回 `{ host, port, base_url }` |
+
+请求对象：
+```lua
+{
+  method = 'GET',
+  path = '/r/song',
+  query = { id = '123' },
+  params = { id = '123' },
+  headers = { host = '127.0.0.1:38173' },
+}
+```
+
+响应对象：
+```lua
+{
+  status = 307,
+  headers = {
+    Location = 'https://example.com/signed-url',
+  },
+  body = 'optional text body',
+}
 ```
 
 ### lc.html - HTML 解析

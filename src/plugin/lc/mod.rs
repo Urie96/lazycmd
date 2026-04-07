@@ -6,6 +6,7 @@ mod fs;
 mod highlighter;
 mod html;
 mod http;
+mod http_server;
 mod json;
 mod keymap;
 mod path;
@@ -72,6 +73,7 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
     let fs = fs::new_table(lua)?.into_lua(lua)?;
     let html = html::new_table(lua)?.into_lua(lua)?;
     let http = http::new_table(lua)?.into_lua(lua)?;
+    let http_server = http_server::new_table(lua)?.into_lua(lua)?;
     let path = path::new_table(lua)?.into_lua(lua)?;
     let secrets = secrets::new_table(lua)?.into_lua(lua)?;
     let socket = socket::new_table(lua)?.into_lua(lua)?;
@@ -306,6 +308,7 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
         ("fs", fs),
         ("html", html),
         ("http", http),
+        ("http_server", http_server),
         ("cmd", cmd),
         ("split", split),
         ("system", mlua::Value::Table(system_tbl)),

@@ -53,6 +53,7 @@ pub fn init_lua(lua: &Lua) -> mlua::Result<()> {
     load_preset!("keymap")?;
     load_preset!("html")?;
     load_preset!("http")?;
+    load_preset!("http_server")?;
     load_preset!("cache")?;
     load_preset!("fs")?;
     load_preset!("util")?;
