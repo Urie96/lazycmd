@@ -212,7 +212,6 @@ impl MixedPreview {
         let mut lines = Vec::new();
         let mut native_layouts = Vec::new();
         let mut visual_offset = 0u16;
-        let native_enabled = self.native_enabled && native_image::protocol().is_some();
         for chunk in &self.chunks {
             match chunk {
                 PreviewChunk::Text(text) => {
@@ -222,7 +221,7 @@ impl MixedPreview {
                     lines.extend(text.lines.clone());
                 }
                 PreviewChunk::Image(image) => {
-                    let native_size = if native_enabled && viewport_height > 0 {
+                    let native_size = if native_image::protocol().is_some() && viewport_height > 0 {
                         native_image::measure_cell_area(
                             &image.path,
                             Rect::new(0, 0, width, viewport_height),
@@ -241,7 +240,7 @@ impl MixedPreview {
                         .as_ref()
                         .map(|rect| rect.height.max(1))
                         .or(image.max_height);
-                    let rendered = if native_enabled {
+                    let rendered = if native_image::protocol().is_some() {
                         super::RenderedImage {
                             lines: vec![
                                 Line::raw(" ".repeat(fallback_width as usize));
@@ -460,7 +459,7 @@ mod tests {
     }
 
     #[test]
-    fn mixed_preview_keeps_fallback_when_native_is_disabled() {
+    fn mixed_preview_keeps_blank_placeholder_when_native_is_disabled() {
         let mut image = RgbaImage::new(2, 2);
         image.put_pixel(0, 0, Rgba([255, 0, 0, 255]));
         image.put_pixel(1, 0, Rgba([0, 255, 0, 255]));
@@ -487,7 +486,7 @@ mod tests {
         let mut buf = Buffer::empty(area);
         preview.render(area, &mut buf);
 
-        assert_eq!(buf[(0, 0)].symbol(), "▀");
+        assert_eq!(buf[(0, 0)].symbol(), " ");
 
         std::fs::remove_file(path).ok();
     }

@@ -8,7 +8,6 @@ use ratatui::{
     prelude::*,
     widgets::{Block, BorderType, Paragraph},
 };
-use std::time::Instant;
 use tokio::sync::mpsc;
 
 use libc::{sigaction, sigemptyset, SIGINT, SIG_IGN};
@@ -16,7 +15,7 @@ use std::mem;
 
 use crate::{
     confirm_handler,
-    events::{self, Event, Events},
+    events::{Event, Events},
     input_handler, path_codec, plugin, select_handler,
     term::{self, Term},
     widgets::{
@@ -97,7 +96,6 @@ impl App {
         self.call_list()?;
         self.run_post_page_enter_hooks()?;
         self.dirty = true;
-        self.sync_render_interval();
 
         // Initially hide cursor (Main mode)
         execute!(self.term.backend_mut(), Hide)?;
@@ -113,6 +111,7 @@ impl App {
             }
 
             if self.dirty {
+                self.state.prune_expired_notifications();
                 let native_allowed = self.state.input_dialog.is_none()
                     && self.state.select_dialog.is_none()
                     && self.state.confirm_dialog.is_none();
@@ -145,7 +144,6 @@ impl App {
                 Self::routine(self.term.backend_mut(), cursor_info);
 
                 self.dirty = false;
-                self.sync_render_interval();
             }
         }
         Ok(())
@@ -201,18 +199,11 @@ impl App {
         Ok(())
     }
 
-    fn sync_render_interval(&self) {
-        let has_active_notification = self
-            .state
-            .notification
-            .as_ref()
-            .is_some_and(|(_, expiry)| Instant::now() <= *expiry);
-        events::set_fast_render_enabled(
-            self.state.current_page.is_none() || has_active_notification,
-        );
-    }
-
     fn handle_event(&mut self, e: Event) -> Result<()> {
+        if self.state.prune_expired_notifications() {
+            self.dirty = true;
+        }
+
         match e {
             Event::Quit => {
                 self.quitting = true;
@@ -321,7 +312,7 @@ impl App {
                 }
             }
             Event::Notify(message) => {
-                self.state.set_notification(message);
+                self.state.push_notification(message);
                 self.dirty = true;
             }
             Event::ShowConfirm {
@@ -362,7 +353,6 @@ impl App {
                 self.dirty = true;
             }
         }
-        self.sync_render_interval();
         Ok(())
     }
 
@@ -658,7 +648,7 @@ impl App {
             }
             _ => {
                 self.state
-                    .set_notification(Text::from(format!("Unsupported command {}", command)));
+                    .push_notification(Text::from(format!("Unsupported command {}", command)));
                 self.dirty = true;
             }
         };
@@ -766,20 +756,16 @@ impl StatefulWidget for AppWidget {
             p.render(preview_area, buf);
         }
 
-        // Check and clear expired notification
-        if let Some((_, expiry)) = &state.notification {
-            if Instant::now() > *expiry {
-                state.notification = None;
-            }
-        }
+        // Draw notifications in bottom-right corner, stacked upward
+        let min_width = 20u16;
+        let min_height = 1u16;
+        let right_padding = 2u16;
+        let bottom_padding = 1u16;
+        let gap = 1u16;
+        let mut bottom = area.height.saturating_sub(bottom_padding);
 
-        // Draw notification in bottom-right corner
-        if let Some((message, _)) = &state.notification {
-            // Dynamic size notification box
-            let min_width = 20u16;
-            let min_height = 1u16;
-
-            // Calculate required dimensions based on message content
+        for item in state.notifications.iter().rev() {
+            let message = &item.message;
             let line_count = message.lines.len().max(min_height as usize);
             let max_line_width = message
                 .lines
@@ -787,22 +773,19 @@ impl StatefulWidget for AppWidget {
                 .map(|l| l.width() as u16)
                 .max()
                 .unwrap_or(0);
+            let notification_width = (max_line_width + 2).max(min_width).min(area.width);
+            let notification_height = ((line_count as u16).max(min_height) + 2).min(area.height);
 
-            // Width: max of min_width and (max_line_width + 2 for padding)
-            let notification_width = (max_line_width + 2).max(min_width);
-
-            // Height: min_height + 2 for top/bottom borders
-            let notification_height = (line_count as u16).max(min_height) + 2;
-
-            // Calculate bottom-right position
-            let x = area.width.saturating_sub(notification_width + 1);
-            let y = area.height.saturating_sub(notification_height + 1);
-
+            if notification_height > bottom {
+                break;
+            }
+            let y = bottom.saturating_sub(notification_height);
+            let x = area.width.saturating_sub(notification_width + right_padding);
             let notification_area = Rect {
-                x: x.saturating_sub(1), // Extra padding from right edge
+                x,
                 y,
-                width: notification_width.min(area.width),
-                height: notification_height.min(area.height),
+                width: notification_width,
+                height: notification_height,
             };
 
             let block = Block::bordered()
@@ -813,6 +796,11 @@ impl StatefulWidget for AppWidget {
             Paragraph::new(message.clone())
                 .style(Style::default().fg(Color::Yellow))
                 .render(inner, buf);
+
+            if y < gap {
+                break;
+            }
+            bottom = y.saturating_sub(gap);
         }
 
         // Render confirm dialog (render last to appear on top of everything)

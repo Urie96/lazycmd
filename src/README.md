@@ -77,6 +77,7 @@ src/
 | `LuaCallback(f)`     | Lua 回调       |
 | `InteractiveCommand` | 执行交互式命令 |
 | `Notify(msg)`        | 显示通知       |
+| `ExpireNotification(id)` | 移除到期通知 |
 | `ShowConfirm`        | 显示确认对话框 |
 | `ShowSelect`         | 显示选择对话框 |
 
@@ -89,7 +90,7 @@ main.rs
 Logs::start()           # 初始化日志
 errors::install_hooks()  # 安装 panic 钩子
 term::init()            # 初始化终端
-parse_initial_path()    # 解析可选命令行初始路径
+parse_initial_path()    # 解析命令行参数（--help / --version / 可选初始路径）
     │
     ▼
 App::new(initial_path)
@@ -129,7 +130,7 @@ pub struct State {
     pub keymap_config: Vec<Keymap>,       // 键盘映射配置
     pub last_key_event_buffer: Vec<KeyEvent>,  // 按键序列缓冲区
     pub current_preview: Option<Box<dyn Renderable>>,  // 预览内容
-    pub notification: Option<(String, Instant)>,  // 通知消息
+    pub notifications: Vec<NotificationItem>,  // 通知消息队列
     pub filter_input: String,            // 过滤输入
     pub page_cache: HashMap<Vec<String>, Page>,  // 页面缓存
     pub confirm_dialog: Option<ConfirmDialog>,   // 确认对话框
@@ -248,6 +249,7 @@ Event::LuaCallback(Box::new(move |lua| {
 
 ## 日志系统
 
+- 通知不再依赖高频 Render 轮询过期，而是在创建时注册一次性延迟回调，到期后发送事件移除。
 - **Rust 日志**：`~/.local/state/lazycmd/lazycmd.log`
 - 使用 `tracing` 库
 - 非阻塞写入

@@ -1,11 +1,6 @@
 use mlua::prelude::*;
 use ratatui::text::Text;
-use std::{
-    hash::Hash,
-    pin::Pin,
-    sync::atomic::{AtomicBool, Ordering},
-    time::Duration,
-};
+use std::{hash::Hash, pin::Pin, time::Duration};
 
 use crossterm::event::{Event as CrosstermEvent, *};
 use futures::{Stream, StreamExt};
@@ -14,9 +9,7 @@ use tokio_stream::{wrappers::IntervalStream, StreamMap};
 
 use crate::Keymap;
 
-const FAST_RENDER_INTERVAL: Duration = Duration::from_millis(200);
-const IDLE_RENDER_TICKS: usize = 100;
-static FAST_RENDER_ENABLED: AtomicBool = AtomicBool::new(false);
+const RENDER_INTERVAL: Duration = Duration::from_secs(20);
 
 pub struct Events {
     tx: EventSender,
@@ -108,28 +101,9 @@ impl Default for Events {
     }
 }
 
-pub fn set_fast_render_enabled(enabled: bool) {
-    FAST_RENDER_ENABLED.store(enabled, Ordering::Relaxed);
-}
-
 fn render_stream() -> Pin<Box<dyn Stream<Item = Event>>> {
-    let render_interval = interval(FAST_RENDER_INTERVAL);
-    let mut idle_ticks = IDLE_RENDER_TICKS;
-    Box::pin(IntervalStream::new(render_interval).filter_map(move |_| {
-        let fast = FAST_RENDER_ENABLED.load(Ordering::Relaxed);
-        let should_render = if fast {
-            idle_ticks = 0;
-            true
-        } else if idle_ticks == 0 {
-            idle_ticks = IDLE_RENDER_TICKS;
-            true
-        } else {
-            idle_ticks -= 1;
-            false
-        };
-
-        async move { should_render.then_some(Event::Render) }
-    }))
+    let render_interval = interval(RENDER_INTERVAL);
+    Box::pin(IntervalStream::new(render_interval).map(|_| Event::Render))
 }
 
 fn crossterm_stream() -> Pin<Box<dyn Stream<Item = Event>>> {

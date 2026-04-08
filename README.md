@@ -51,6 +51,12 @@ cargo build --release
 # 运行
 cargo run --release
 
+# 查看帮助
+cargo run --release -- --help
+
+# 查看版本
+cargo run --release -- --version
+
 # 运行并直接进入指定页面
 cargo run --release -- /docker/container
 ```
@@ -277,7 +283,9 @@ lc.config {
 启动 lazycmd 后，会进入插件管理器界面：
 
 ```bash
-lazycmd          # 进入插件管理器
+lazycmd                 # 进入插件管理器
+lazycmd --help          # 显示帮助
+lazycmd --version       # 显示版本
 lazycmd /docker/container   # 启动后直接进入指定页面
 ````
 

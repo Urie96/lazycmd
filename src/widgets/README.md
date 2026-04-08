@@ -60,7 +60,8 @@ let paragraph = StatefulParagraph::from(text);
 - 支持 HTTP(S) URL，先显示占位文本，下载完成后自动回填
 - 按预览区宽度等比缩放，未指定尺寸时默认读取 `lc.config().image`
 - 优先使用终端原生图片协议（当前支持 Kitty / iTerm Inline）
-- 不支持或图片被滚动裁切时，使用 truecolor 半块字符（`▀` / `▄`）渲染
+- 终端不支持原生协议时，使用 truecolor 半块字符（`▀` / `▄`）渲染
+- 若终端支持原生协议，但图片被滚动裁切，或当前有对话框导致 native render 被禁用，则保留布局占位但不渲染图片内容
 - 可和文本一起放进数组做图文混排
 - 终端协议编码结果会缓存在 `~/.cache/lazycmd/prepared-images/`，避免重复 decode/resize/encode
 

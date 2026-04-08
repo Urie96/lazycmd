@@ -3,7 +3,7 @@ use crossterm::event::KeyEvent;
 use mlua::prelude::*;
 use ratatui::{text::Line, text::Text, widgets::ListState};
 use std::collections::HashMap;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use crate::{widgets::Renderable, KeySequence, Keymap, Mode, Page, PageEntry};
 
@@ -955,6 +955,12 @@ impl ConfirmDialog {
     }
 }
 
+pub struct NotificationItem {
+    pub id: u64,
+    pub message: Text<'static>,
+    pub expiry: Instant,
+}
+
 #[derive(Default)]
 pub struct State {
     pub current_mode: Mode,
@@ -964,7 +970,8 @@ pub struct State {
     pub last_key_event_buffer: Vec<KeyEvent>,
     pub current_preview: Option<Box<dyn Renderable>>,
     current_preview_path: Option<Vec<String>>,
-    pub notification: Option<(Text<'static>, Instant)>,
+    pub notifications: Vec<NotificationItem>,
+    next_notification_id: u64,
 
     /// Cache for pages to preserve cursor position, entries and filter when navigating back
     page_cache: HashMap<Vec<String>, Page>,
@@ -1446,8 +1453,28 @@ impl State {
         }
     }
 
-    pub fn set_notification(&mut self, message: Text<'static>) {
-        self.notification = Some((message, Instant::now() + std::time::Duration::from_secs(3)));
+    pub fn push_notification(&mut self, message: Text<'static>) -> u64 {
+        let id = self.next_notification_id;
+        self.next_notification_id = self.next_notification_id.saturating_add(1);
+        self.notifications.push(NotificationItem {
+            id,
+            message,
+            expiry: Instant::now() + Duration::from_secs(3),
+        });
+        id
+    }
+
+    pub fn expire_notification(&mut self, id: u64) -> bool {
+        let before = self.notifications.len();
+        self.notifications.retain(|item| item.id != id);
+        before != self.notifications.len()
+    }
+
+    pub fn prune_expired_notifications(&mut self) -> bool {
+        let now = Instant::now();
+        let before = self.notifications.len();
+        self.notifications.retain(|item| item.expiry > now);
+        before != self.notifications.len()
     }
 
     /// Show the confirm dialog
