@@ -57,6 +57,7 @@ let paragraph = StatefulParagraph::from(text);
 图片预览组件，支持：
 
 - 从本地文件读取图片
+- 支持 HTTP(S) URL，先显示占位文本，下载完成后自动回填
 - 按预览区宽度等比缩放
 - 优先使用终端原生图片协议（当前支持 Kitty / iTerm Inline）
 - 不支持或图片被滚动裁切时，使用 truecolor 半块字符（`▀` / `▄`）渲染

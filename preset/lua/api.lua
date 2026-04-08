@@ -1,5 +1,10 @@
 ---@class lc.api
 local api = {}
+local preview_runtime = {
+  pending_image_downloads = {},
+  failed_image_downloads = {},
+}
+local preview_image_cache_dir = os.getenv 'HOME' .. '/.local/state/lazycmd/preview-images'
 
 ---@class PageEntry
 ---@field key string The unique key for the entry
@@ -30,7 +35,154 @@ function api.get_entries(path) return _lc.api.get_entries(path) end
 ---Set the preview panel content
 ---@param path string[]|nil The hovered entry path, or nil for the current hovered entry
 ---@param widget string|Span|Text|Line|Image|(string|Span|Text|Line|Image)[]|nil The widget to display, or nil to clear the preview
-function api.set_preview(path, widget) return _lc.api.set_preview(path, widget) end
+local function is_image_widget(value)
+  return type(value) == 'table' and value.__lc_type == 'image' and type(value.source) == 'string'
+end
+
+local function is_remote_image_source(source)
+  return type(source) == 'string' and (source:match '^https://' or source:match '^http://')
+end
+
+local function image_cache_key(url)
+  local ext = url:match('%.([%w]+)[^./]*$') or ''
+  ext = ext:lower()
+  if ext == 'jpg' then ext = 'jpeg' end
+  local supported = { png = true, jpeg = true, gif = true, webp = true, bmp = true, tiff = true, tga = true }
+  if not supported[ext] then ext = '' end
+  return lc.base64.encode(url):gsub('[+/=]', '_') .. (ext ~= '' and '.' .. ext or '')
+end
+
+local function cached_image_path(url)
+  return preview_image_cache_dir .. '/' .. image_cache_key(url)
+end
+
+local function placeholder_for_image(message)
+  return lc.style.text {
+    lc.style.line {
+      lc.style.span(message or 'Loading image...'):fg 'dark_gray',
+    },
+  }
+end
+
+local function fetch_remote_image(url)
+  local key = image_cache_key(url)
+  local existing_path = cached_image_path(url)
+  local existing_stat = lc.fs.stat(existing_path)
+  if existing_stat and existing_stat.exists and existing_stat.is_file then
+    return Promise.resolve(existing_path)
+  end
+
+  local failed = preview_runtime.failed_image_downloads[key]
+  if failed then return Promise.reject(failed) end
+
+  if preview_runtime.pending_image_downloads[key] then
+    return preview_runtime.pending_image_downloads[key]
+  end
+
+  local promise = Promise.new(function(resolve, reject)
+    lc.http.get(url, function(response)
+      preview_runtime.pending_image_downloads[key] = nil
+
+      if not response.success or response.status < 200 or response.status >= 300 then
+        local reason = response.error or ('request failed with status ' .. tostring(response.status))
+        preview_runtime.failed_image_downloads[key] = reason
+        reject(reason)
+        return
+      end
+
+      local path = cached_image_path(url)
+      local ok_mkdir, mkdir_err = lc.fs.mkdir(preview_image_cache_dir)
+      if not ok_mkdir then
+        preview_runtime.failed_image_downloads[key] = mkdir_err
+        reject(mkdir_err)
+        return
+      end
+
+      local ok_write, write_err = lc.fs.write_file_sync(path, response.body)
+      if not ok_write then
+        preview_runtime.failed_image_downloads[key] = write_err
+        reject(write_err)
+        return
+      end
+
+      preview_runtime.failed_image_downloads[key] = nil
+      resolve(path)
+    end)
+  end)
+
+  preview_runtime.pending_image_downloads[key] = promise
+  return promise
+end
+
+local function normalize_preview_value(value, pending_downloads)
+  if is_image_widget(value) then
+    if not is_remote_image_source(value.source) then return value end
+
+    local key = image_cache_key(value.source)
+    local cached_path = cached_image_path(value.source)
+    local stat = lc.fs.stat(cached_path)
+    if stat and stat.exists and stat.is_file then
+      return lc.style.image(cached_path, {
+        max_width = value.max_width,
+        max_height = value.max_height,
+      })
+    end
+
+    if preview_runtime.failed_image_downloads[key] then
+      return placeholder_for_image 'Failed to load image'
+    end
+
+    table.insert(pending_downloads, fetch_remote_image(value.source))
+    return placeholder_for_image()
+  end
+
+  if type(value) ~= 'table' then return value end
+
+  local normalized = {}
+  for i, item in ipairs(value) do
+    normalized[i] = normalize_preview_value(item, pending_downloads)
+  end
+  return normalized
+end
+
+local function resolve_preview_images(preview)
+  if preview == nil then return nil, {} end
+
+  local pending_downloads = {}
+  local normalized = normalize_preview_value(preview, pending_downloads)
+  return normalized, pending_downloads
+end
+
+function api.set_preview(path, widget)
+  local target_path = path or api.get_hovered_path()
+  local normalized, pending_downloads = resolve_preview_images(widget)
+  _lc.api.set_preview(target_path, normalized)
+
+  if #pending_downloads == 0 then return end
+
+  local function notify_preview_error(prefix, err)
+    lc.notify(prefix .. ': ' .. tostring(err or 'unknown error'))
+  end
+
+  Promise.allSettled(pending_downloads):next(function(results)
+    local first_error = nil
+    for _, result in ipairs(results or {}) do
+      if result.status == 'rejected' then
+        first_error = result.reason
+        break
+      end
+    end
+
+    local refreshed = resolve_preview_images(widget)
+    _lc.api.set_preview(target_path, refreshed)
+
+    if first_error ~= nil then
+      notify_preview_error('Failed to load image', first_error)
+    end
+  end):catch(function(err)
+    notify_preview_error('Image preview error', err)
+  end)
+end
 
 ---Navigate to a specific path
 ---@param path string[] The path as an array of strings

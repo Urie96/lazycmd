@@ -5,10 +5,13 @@ use std::str::FromStr;
 
 type AnyUserData = LuaAnyUserData;
 
+#[derive(Clone)]
 pub struct LuaText(pub Text<'static>);
 
+#[derive(Clone)]
 pub struct LuaLine(pub Line<'static>);
 
+#[derive(Clone)]
 pub struct LuaSpan(pub Span<'static>);
 
 fn into_lines(value: LuaValue) -> mlua::Result<Vec<Line<'static>>> {

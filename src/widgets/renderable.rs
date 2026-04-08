@@ -28,19 +28,25 @@ impl FromLua for Box<dyn Renderable> {
         Ok(match value {
             LuaValue::String(s) => Box::new(StatefulParagraph::from(s.to_string_lossy())),
             LuaValue::UserData(ud) => {
-                if let Ok(text) = ud.take::<LuaText>() {
-                    Box::new(StatefulParagraph::from(text.0))
-                } else if let Ok(image) = ud.take::<LuaImage>() {
-                    Box::new(MixedPreview::new(vec![PreviewChunk::Image(image)]))
-                } else if let Ok(span) = ud.take::<LuaSpan>() {
-                    Box::new(StatefulParagraph::from(Text::from(span.0)))
-                } else if let Ok(line) = ud.take::<LuaLine>() {
-                    Box::new(StatefulParagraph::from(Text::from(line.0)))
+                if let Ok(text) = ud.borrow::<LuaText>() {
+                    Box::new(StatefulParagraph::from(text.0.clone()))
+                } else if let Ok(image) = ud.borrow::<LuaImage>() {
+                    Box::new(MixedPreview::new(vec![PreviewChunk::Image(image.clone())]))
+                } else if let Ok(span) = ud.borrow::<LuaSpan>() {
+                    Box::new(StatefulParagraph::from(Text::from(span.0.clone())))
+                } else if let Ok(line) = ud.borrow::<LuaLine>() {
+                    Box::new(StatefulParagraph::from(Text::from(line.0.clone())))
                 } else {
                     Err("expected string, preview array, or preview userdata".into_lua_err())?
                 }
             }
-            LuaValue::Table(table) => Box::new(MixedPreview::new(table_to_chunks(lua, table)?)),
+            LuaValue::Table(table) => {
+                if let Some(image) = image_from_table(&table)? {
+                    Box::new(MixedPreview::new(vec![PreviewChunk::Image(image)]))
+                } else {
+                    Box::new(MixedPreview::new(table_to_chunks(lua, table)?))
+                }
+            }
             _ => Err("expected string, preview array, or preview userdata".into_lua_err())?,
         })
     }
@@ -73,14 +79,14 @@ impl PreviewChunk {
         match value {
             LuaValue::String(s) => Ok(Self::Text(Text::raw(s.to_str()?.to_string()))),
             LuaValue::UserData(ud) => {
-                if let Ok(text) = ud.take::<LuaText>() {
-                    Ok(Self::Text(text.0))
-                } else if let Ok(image) = ud.take::<LuaImage>() {
-                    Ok(Self::Image(image))
-                } else if let Ok(line) = ud.take::<LuaLine>() {
-                    Ok(Self::Text(Text::from(line.0)))
-                } else if let Ok(span) = ud.take::<LuaSpan>() {
-                    Ok(Self::Text(Text::from(span.0)))
+                if let Ok(text) = ud.borrow::<LuaText>() {
+                    Ok(Self::Text(text.0.clone()))
+                } else if let Ok(image) = ud.borrow::<LuaImage>() {
+                    Ok(Self::Image(image.clone()))
+                } else if let Ok(line) = ud.borrow::<LuaLine>() {
+                    Ok(Self::Text(Text::from(line.0.clone())))
+                } else if let Ok(span) = ud.borrow::<LuaSpan>() {
+                    Ok(Self::Text(Text::from(span.0.clone())))
                 } else {
                     Err(
                         "expected Text, Image, Line, Span, or string in preview array"
@@ -88,9 +94,32 @@ impl PreviewChunk {
                     )
                 }
             }
+            LuaValue::Table(table) => image_from_table(&table)?.map(Self::Image).ok_or_else(|| {
+                "expected Text, Image, Line, Span, or string in preview array".into_lua_err()
+            }),
             _ => Err("expected Text, Image, Line, Span, or string in preview array".into_lua_err()),
         }
     }
+}
+
+fn image_from_table(table: &LuaTable) -> mlua::Result<Option<LuaImage>> {
+    let kind: Option<String> = table.get("__lc_type").ok();
+    if kind.as_deref() != Some("image") {
+        return Ok(None);
+    }
+
+    let source: String = table.get("source")?;
+    if source.starts_with("http://") || source.starts_with("https://") {
+        return Err("remote image URL should be resolved before rendering".into_lua_err());
+    }
+
+    let max_width = table.get("max_width").ok();
+    let max_height = table.get("max_height").ok();
+    Ok(Some(LuaImage::new(
+        std::path::PathBuf::from(source),
+        max_width,
+        max_height,
+    )))
 }
 
 #[derive(Default)]
@@ -183,7 +212,7 @@ impl MixedPreview {
         let mut lines = Vec::new();
         let mut native_layouts = Vec::new();
         let mut visual_offset = 0u16;
-        let native_enabled = native_image::protocol().is_some();
+        let native_enabled = self.native_enabled && native_image::protocol().is_some();
         for chunk in &self.chunks {
             match chunk {
                 PreviewChunk::Text(text) => {
@@ -210,7 +239,32 @@ impl MixedPreview {
                         .as_ref()
                         .map(|rect| rect.height.max(1))
                         .or(image.max_height);
-                    let rendered = image.render_block_preview(fallback_width, fallback_height)?;
+                    let rendered = if native_enabled {
+                        super::RenderedImage {
+                            lines: vec![
+                                Line::raw(" ".repeat(fallback_width as usize));
+                                fallback_height.unwrap_or(1) as usize
+                            ],
+                            width: fallback_width,
+                            height: fallback_height.unwrap_or(1),
+                        }
+                    } else {
+                        match image.render_block_preview(fallback_width, fallback_height) {
+                            Ok(rendered) => rendered,
+                            Err(err) => {
+                                let line = Line::raw(format!(
+                                    "[image error] {}",
+                                    err.to_string()
+                                        .lines()
+                                        .next()
+                                        .unwrap_or("failed to render image")
+                                ));
+                                visual_offset = visual_offset.saturating_add(1);
+                                lines.push(line);
+                                continue;
+                            }
+                        }
+                    };
                     if let Some(native_area) =
                         native_size.filter(|rect| rect.width > 0 && rect.height > 0)
                     {
@@ -329,6 +383,10 @@ impl Renderable for MixedPreview {
     }
 
     fn set_native_enabled(&mut self, enabled: bool) {
+        if self.native_enabled != enabled {
+            self.cached_width = 0;
+            self.cached_height = 0;
+        }
         self.native_enabled = enabled;
     }
 
@@ -378,6 +436,25 @@ mod tests {
 
         assert_eq!(buf[(0, 0)].symbol(), "h");
         assert_eq!(buf[(0, 1)].symbol(), "t");
+    }
+
+    #[test]
+    fn image_descriptor_table_is_converted_to_preview() {
+        let lua = Lua::new();
+        let preview: Box<dyn Renderable> = lua
+            .load(
+                r#"
+                return {
+                  __lc_type = "image",
+                  source = "/tmp/example.png",
+                  max_height = 10,
+                }
+                "#,
+            )
+            .eval()
+            .expect("image descriptor should convert");
+
+        let _preview = preview;
     }
 
     #[test]

@@ -397,6 +397,8 @@ lc.hook.post_page_enter(function(ctx) print(vim.inspect(ctx.path)) end)
 - `Image`
 - 以上类型组成的数组，会在预览区按顺序渲染，适合图文混排
 
+`Image` 可以传本地路径或 HTTP(S) URL。URL 会先在预览区显示占位文本，后台下载完成后自动刷新为真正的图片。
+
 `Image` 会优先使用终端原生图片协议（当前支持 Kitty / iTerm Inline），不支持时退回 truecolor 块字符。
 
 `entry.preview` 既可以异步调用 `cb(preview)`，也可以直接 `return preview` 返回同步结果：
@@ -452,7 +454,7 @@ lc.style.span("x"):underline()   -- Span 下划线
 ```lua
 return {
   lc.style.line { "Cover" },
-  lc.style.image("/tmp/cover.png", { max_height = 20 }),
+  lc.style.image("https://example.com/cover.png", { max_height = 20 }),
   "",
   lc.style.text { "Some description" },
 }

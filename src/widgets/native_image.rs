@@ -1,4 +1,5 @@
 use std::{
+    collections::{HashMap, VecDeque},
     env,
     io::Write,
     os::fd::AsRawFd,
@@ -16,7 +17,7 @@ use image::{
 };
 use ratatui::layout::Rect;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum Protocol {
     Kitty,
     Iip,
@@ -24,6 +25,7 @@ pub enum Protocol {
 
 static PROTOCOL: OnceLock<Option<Protocol>> = OnceLock::new();
 static SHOWN_IMAGE: Mutex<Option<ShownImage>> = Mutex::new(None);
+static PREPARED_IMAGES: OnceLock<Mutex<PreparedImageCache>> = OnceLock::new();
 static TMUX_PASSTHROUGH_READY: OnceLock<()> = OnceLock::new();
 
 pub fn protocol() -> Option<Protocol> {
@@ -188,39 +190,64 @@ fn ensure_tmux_passthrough() {
 }
 
 fn render_iip<W: Write + ?Sized>(w: &mut W, path: &Path, area: Rect) -> Result<()> {
-    let img = downscale_for_area(path, area)?;
-    let (width, height) = img.dimensions();
-    let encoded = encode_inline_image(img)?;
+    let prepared = prepared_image(path, area, Protocol::Iip)?;
 
     move_to(w, area.x, area.y)?;
     let payload = format!(
         "\x1b]1337;File=inline=1;size={};width={}px;height={}px;doNotMoveCursor=1:{}\x07",
-        encoded.binary_len, width, height, encoded.base64
+        prepared.binary_len, prepared.width, prepared.height, prepared.payload
     );
     write_wrapped_escape(w, &payload)?;
     Ok(())
 }
 
 fn render_kitty<W: Write + ?Sized>(w: &mut W, path: &Path, area: Rect) -> Result<()> {
-    let img = downscale_for_area(path, area)?;
-    let bytes = encode_kitty_chunks(img)?;
+    let prepared = prepared_image(path, area, Protocol::Kitty)?;
     let placement = kitty_place(area);
 
     move_to(w, area.x, area.y)?;
-    for chunk in bytes {
+    for chunk in &prepared.chunks {
         write_wrapped_escape(w, &chunk)?;
     }
     write_all(w, &placement)?;
     Ok(())
 }
 
-fn downscale_for_area(path: &Path, area: Rect) -> Result<DynamicImage> {
+fn prepared_image(path: &Path, area: Rect, protocol: Protocol) -> Result<PreparedImage> {
+    let (max_width_px, max_height_px) = max_pixels(area);
+    let key = PreparedImageKey {
+        path: path.to_path_buf(),
+        protocol,
+        max_width_px,
+        max_height_px,
+    };
+
+    let cache = PREPARED_IMAGES.get_or_init(|| Mutex::new(PreparedImageCache::new(8)));
+    if let Some(prepared) = cache
+        .lock()
+        .expect("prepared image cache mutex poisoned")
+        .get(&key)
+    {
+        return Ok(prepared);
+    }
+
+    let img = downscale_for_pixels(path, key.max_width_px, key.max_height_px)?;
+    let prepared = match protocol {
+        Protocol::Iip => PreparedImage::from_inline_image(encode_inline_image(img)?),
+        Protocol::Kitty => PreparedImage::from_kitty_chunks(encode_kitty_chunks(img)?),
+    };
+
+    let mut cache = cache.lock().expect("prepared image cache mutex poisoned");
+    cache.insert(key, prepared.clone());
+    Ok(prepared)
+}
+
+fn downscale_for_pixels(path: &Path, max_w: u32, max_h: u32) -> Result<DynamicImage> {
     let mut img = ImageReader::open(path)
         .with_context(|| format!("failed to open image '{}'", path.display()))?
         .decode()
         .with_context(|| format!("failed to decode image '{}'", path.display()))?;
 
-    let (max_w, max_h) = max_pixels(area);
     if img.width() > max_w || img.height() > max_h {
         img = img.resize(max_w, max_h, FilterType::Triangle);
     }
@@ -255,6 +282,8 @@ fn encode_inline_image(img: DynamicImage) -> Result<EncodedImage> {
     }
 
     Ok(EncodedImage {
+        width,
+        height,
         binary_len: bytes.len(),
         base64: STANDARD.encode(bytes),
     })
@@ -372,8 +401,95 @@ fn cell_pixel_size() -> Option<(u16, u16)> {
 }
 
 struct EncodedImage {
+    width: u32,
+    height: u32,
     binary_len: usize,
     base64: String,
+}
+
+#[derive(Clone)]
+struct PreparedImage {
+    width: u32,
+    height: u32,
+    binary_len: usize,
+    payload: String,
+    chunks: Vec<String>,
+}
+
+impl PreparedImage {
+    fn from_inline_image(image: EncodedImage) -> Self {
+        Self {
+            width: image.width,
+            height: image.height,
+            binary_len: image.binary_len,
+            payload: image.base64,
+            chunks: Vec::new(),
+        }
+    }
+
+    fn from_kitty_chunks(chunks: Vec<String>) -> Self {
+        Self {
+            width: 0,
+            height: 0,
+            binary_len: 0,
+            payload: String::new(),
+            chunks,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct PreparedImageKey {
+    path: PathBuf,
+    protocol: Protocol,
+    max_width_px: u32,
+    max_height_px: u32,
+}
+
+struct PreparedImageCache {
+    entries: HashMap<PreparedImageKey, PreparedImage>,
+    order: VecDeque<PreparedImageKey>,
+    capacity: usize,
+}
+
+impl PreparedImageCache {
+    fn new(capacity: usize) -> Self {
+        Self {
+            entries: HashMap::new(),
+            order: VecDeque::new(),
+            capacity,
+        }
+    }
+
+    fn get(&mut self, key: &PreparedImageKey) -> Option<PreparedImage> {
+        let entry = self.entries.get(key)?.clone();
+        self.touch(key);
+        Some(entry)
+    }
+
+    fn insert(&mut self, key: PreparedImageKey, value: PreparedImage) {
+        if self.entries.contains_key(&key) {
+            self.entries.insert(key.clone(), value);
+            self.touch(&key);
+            return;
+        }
+
+        if self.entries.len() >= self.capacity {
+            if let Some(oldest) = self.order.pop_front() {
+                self.entries.remove(&oldest);
+            }
+        }
+
+        self.order.push_back(key.clone());
+        self.entries.insert(key, value);
+    }
+
+    fn touch(&mut self, key: &PreparedImageKey) {
+        if let Some(idx) = self.order.iter().position(|existing| existing == key) {
+            self.order.remove(idx);
+        }
+        self.order.push_back(key.clone());
+    }
 }
 
 const DIACRITICS: &[char] = &[

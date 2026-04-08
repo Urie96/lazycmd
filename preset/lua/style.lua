@@ -6,7 +6,11 @@ local style = {}
 ---@field append fun(self: Text, line: Text|Line|Span|string) Append content to the text (modifies in place)
 
 ---@class Image
----A preview image widget rendered as truecolor block characters
+---@field __lc_type "image"
+---@field source string Local image path or remote URL
+---@field max_width? integer Optional width cap in terminal cells
+---@field max_height? integer Optional height cap in terminal cells
+---A preview image widget. URLs are resolved asynchronously before rendering.
 
 ---@class Span
 ---A TUI Span widget
@@ -40,10 +44,17 @@ function style.line(args) return _lc.style.line(args) end
 function style.text(args) return _lc.style.text(args) end
 
 ---Create an Image preview widget from a local file path
----@param path string The local image path
+---@param path string The local image path or remote URL
 ---@param opts? {max_width?: integer, max_height?: integer} Optional size caps in terminal cells
 ---@return Image
-function style.image(path, opts) return _lc.style.image(path, opts) end
+function style.image(path, opts)
+  return {
+    __lc_type = 'image',
+    source = path,
+    max_width = opts and opts.max_width or nil,
+    max_height = opts and opts.max_height or nil,
+  }
+end
 
 ---Highlight code with syntax highlighting
 ---@param code string The code to highlight

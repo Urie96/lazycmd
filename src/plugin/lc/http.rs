@@ -25,7 +25,7 @@ async fn execute_request(
     url: String,
     headers: Option<HeaderMap>,
     body: Option<String>,
-) -> (bool, u16, String, HeaderMap, Option<String>) {
+) -> (bool, u16, Vec<u8>, HeaderMap, Option<String>) {
     let mut request = match method.to_uppercase().as_str() {
         "GET" => client.get(&url),
         "POST" => client.post(&url),
@@ -36,7 +36,7 @@ async fn execute_request(
             return (
                 false,
                 0,
-                String::new(),
+                Vec::new(),
                 HeaderMap::new(),
                 Some(format!("Invalid method: {}", method)),
             )
@@ -57,24 +57,12 @@ async fn execute_request(
         Ok(response) => {
             let status = response.status().as_u16();
             let response_headers = response.headers().clone();
-            match response.text().await {
-                Ok(body) => (true, status, body, response_headers, None),
-                Err(e) => (
-                    false,
-                    0,
-                    String::new(),
-                    HeaderMap::new(),
-                    Some(e.to_string()),
-                ),
+            match response.bytes().await {
+                Ok(body) => (true, status, body.to_vec(), response_headers, None),
+                Err(e) => (false, 0, Vec::new(), HeaderMap::new(), Some(e.to_string())),
             }
         }
-        Err(e) => (
-            false,
-            0,
-            String::new(),
-            HeaderMap::new(),
-            Some(e.to_string()),
-        ),
+        Err(e) => (false, 0, Vec::new(), HeaderMap::new(), Some(e.to_string())),
     }
 }
 
@@ -94,14 +82,14 @@ fn create_response_table(
     lua: &Lua,
     success: bool,
     status: u16,
-    body: String,
+    body: Vec<u8>,
     headers: &HeaderMap,
     error: Option<String>,
 ) -> mlua::Result<LuaTable> {
     let response = lua.create_table()?;
     response.set("success", success)?;
     response.set("status", status)?;
-    response.set("body", body)?;
+    response.set("body", lua.create_string(&body)?)?;
     response.set("headers", headers_to_lua(lua, headers)?)?;
     if let Some(err) = error {
         response.set("error", err)?;

@@ -294,7 +294,6 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
         ("span", style::span(lua)?),
         ("line", style::line(lua)?),
         ("text", style::text(lua)?),
-        ("image", style::image(lua)?),
         ("highlight", style::highlight(lua)?),
         ("ansi", style::ansi(lua)?),
         ("align_columns", style::align_columns(lua)?),
