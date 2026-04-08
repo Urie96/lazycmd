@@ -26,6 +26,10 @@ local cfg = {
     input_cursor_to_start = '<C-a>',
     input_cursor_to_end = '<C-e>',
   },
+  image = {
+    max_width = 40,
+    max_height = 10,
+  },
 }
 
 local function append_package_path(paths, path, seen)

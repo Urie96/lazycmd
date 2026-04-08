@@ -4,7 +4,7 @@ local preview_runtime = {
   pending_image_downloads = {},
   failed_image_downloads = {},
 }
-local preview_image_cache_dir = os.getenv 'HOME' .. '/.local/state/lazycmd/preview-images'
+local preview_image_cache_dir = os.getenv 'HOME' .. '/.cache/lazycmd/preview-images'
 
 ---@class PageEntry
 ---@field key string The unique key for the entry

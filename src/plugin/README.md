@@ -389,7 +389,7 @@ end
 | `lc.style.span(s)` | 创建单个 Span |
 | `lc.style.line(args)` | 创建 Line（Span 数组） |
 | `lc.style.text(args)` | 创建 Text（Line 数组） |
-| `lc.style.image(path_or_url[, opts])` | 创建图片预览 widget，支持本地路径或 HTTP(S) URL；`opts` 支持 `max_width` / `max_height`（终端格） |
+| `lc.style.image(path_or_url[, opts])` | 创建图片预览 widget，支持本地路径或 HTTP(S) URL；`opts` 支持 `max_width` / `max_height`（终端格），未显式指定时读取 `lc.config().image` 默认值 |
 | `lc.style.highlight(code, lang)` | 语法高亮代码 |
 | `lc.style.ansi(s)` | 解析 ANSI 转义序列 |
 | `lc.style.align_columns(lines)` | 对齐列 |

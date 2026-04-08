@@ -226,6 +226,8 @@ impl MixedPreview {
                         native_image::measure_cell_area(
                             &image.path,
                             Rect::new(0, 0, width, viewport_height),
+                            image.max_width,
+                            image.max_height,
                         )
                         .ok()
                     } else {

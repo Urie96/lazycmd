@@ -1,11 +1,14 @@
 use std::{
+    collections::hash_map::DefaultHasher,
     collections::{HashMap, VecDeque},
-    env,
+    env, fs,
+    hash::{Hash, Hasher},
     io::Write,
     os::fd::AsRawFd,
     path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::{Mutex, OnceLock},
+    time::UNIX_EPOCH,
 };
 
 use anyhow::{Context, Result};
@@ -24,7 +27,7 @@ pub enum Protocol {
 }
 
 static PROTOCOL: OnceLock<Option<Protocol>> = OnceLock::new();
-static SHOWN_IMAGE: Mutex<Option<ShownImage>> = Mutex::new(None);
+static SHOWN_IMAGES: Mutex<Vec<ShownImage>> = Mutex::new(Vec::new());
 static PREPARED_IMAGES: OnceLock<Mutex<PreparedImageCache>> = OnceLock::new();
 static TMUX_PASSTHROUGH_READY: OnceLock<()> = OnceLock::new();
 
@@ -35,12 +38,15 @@ pub fn protocol() -> Option<Protocol> {
 
 #[allow(dead_code)]
 pub fn clear<W: Write + ?Sized>(w: &mut W) -> Result<bool> {
-    let shown = SHOWN_IMAGE
+    let shown = SHOWN_IMAGES
         .lock()
         .expect("native image mutex poisoned")
-        .take();
-    if let Some(shown) = shown {
-        clear_shown_image(w, &shown)?;
+        .drain(..)
+        .collect::<Vec<_>>();
+    if !shown.is_empty() {
+        for image in &shown {
+            clear_shown_image(w, image)?;
+        }
         return Ok(true);
     }
     Ok(false)
@@ -59,34 +65,53 @@ pub fn render<W: Write + ?Sized>(w: &mut W, path: &Path, area: Rect) -> Result<b
         path: path.to_path_buf(),
         area,
         protocol,
+        kitty_id: (protocol == Protocol::Kitty).then(|| {
+            let (max_width_px, max_height_px) = max_pixels(area);
+            kitty_image_id(path, max_width_px, max_height_px)
+        }),
     };
-    let mut shown = SHOWN_IMAGE.lock().expect("native image mutex poisoned");
-    if shown.as_ref() == Some(&next) {
+    let mut shown = SHOWN_IMAGES.lock().expect("native image mutex poisoned");
+    if shown.contains(&next) {
         return Ok(true);
-    }
-
-    if let Some(prev) = shown.take() {
-        clear_shown_image(w, &prev)?;
     }
 
     match protocol {
         Protocol::Iip => render_iip(w, path, area)?,
-        Protocol::Kitty => render_kitty(w, path, area)?,
+        Protocol::Kitty => render_kitty(
+            w,
+            path,
+            area,
+            next.kitty_id
+                .expect("kitty image id must exist for kitty protocol"),
+        )?,
     }
 
-    *shown = Some(next);
+    shown.push(next);
     Ok(true)
 }
 
-pub fn measure_cell_area(path: &Path, max_area: Rect) -> Result<Rect> {
+pub fn measure_cell_area(
+    path: &Path,
+    max_area: Rect,
+    max_width_cells: Option<u16>,
+    max_height_cells: Option<u16>,
+) -> Result<Rect> {
     let reader = ImageReader::open(path)
         .with_context(|| format!("failed to open image '{}'", path.display()))?
         .with_guessed_format()
         .with_context(|| format!("failed to inspect image '{}'", path.display()))?;
     let (src_w, src_h) = reader.into_dimensions()?;
     let (cw, ch) = cell_pixel_size().unwrap_or((8, 16));
-    let max_w_px = (max_area.width as u32 * cw as u32).max(1);
-    let max_h_px = (max_area.height as u32 * ch as u32).max(1);
+    let max_w_px = (max_width_cells
+        .unwrap_or(max_area.width)
+        .min(max_area.width) as u32
+        * cw as u32)
+        .max(1);
+    let max_h_px = (max_height_cells
+        .unwrap_or(max_area.height)
+        .min(max_area.height) as u32
+        * ch as u32)
+        .max(1);
     let scale = ((max_w_px as f32 / src_w as f32).min(max_h_px as f32 / src_h as f32)).min(1.0);
     let scaled_w = ((src_w as f32 * scale).round().max(1.0)) as u32;
     let scaled_h = ((src_h as f32 * scale).round().max(1.0)) as u32;
@@ -104,13 +129,18 @@ struct ShownImage {
     path: PathBuf,
     area: Rect,
     protocol: Protocol,
+    kitty_id: Option<u32>,
 }
 
 fn clear_shown_image<W: Write + ?Sized>(w: &mut W, shown: &ShownImage) -> Result<()> {
     match shown.protocol {
         Protocol::Kitty => {
             erase_area(w, shown.area)?;
-            write_wrapped_escape(w, "\x1b_Gq=2,a=d,d=A\x1b\\")
+            if let Some(id) = shown.kitty_id {
+                write_wrapped_escape(w, &format!("\x1b_Gq=2,a=d,d=I,i={id}\x1b\\"))
+            } else {
+                Ok(())
+            }
         }
         Protocol::Iip => erase_area(w, shown.area),
     }
@@ -191,22 +221,46 @@ fn ensure_tmux_passthrough() {
 
 fn render_iip<W: Write + ?Sized>(w: &mut W, path: &Path, area: Rect) -> Result<()> {
     let prepared = prepared_image(path, area, Protocol::Iip)?;
+    let PreparedImageKind::Iip {
+        width,
+        height,
+        binary_len,
+        payload,
+    } = &prepared.kind
+    else {
+        anyhow::bail!("invalid prepared image kind for iip");
+    };
 
     move_to(w, area.x, area.y)?;
     let payload = format!(
         "\x1b]1337;File=inline=1;size={};width={}px;height={}px;doNotMoveCursor=1:{}\x07",
-        prepared.binary_len, prepared.width, prepared.height, prepared.payload
+        binary_len, width, height, payload
     );
     write_wrapped_escape(w, &payload)?;
     Ok(())
 }
 
-fn render_kitty<W: Write + ?Sized>(w: &mut W, path: &Path, area: Rect) -> Result<()> {
+fn render_kitty<W: Write + ?Sized>(
+    w: &mut W,
+    path: &Path,
+    area: Rect,
+    image_id: u32,
+) -> Result<()> {
     let prepared = prepared_image(path, area, Protocol::Kitty)?;
-    let placement = kitty_place(area);
+    let PreparedImageKind::Kitty {
+        width,
+        height,
+        format,
+        payload,
+    } = &prepared.kind
+    else {
+        anyhow::bail!("invalid prepared image kind for kitty");
+    };
+    let chunks = kitty_chunks_from_base64(*format, *width, *height, payload, image_id);
+    let placement = kitty_place(area, image_id);
 
     move_to(w, area.x, area.y)?;
-    for chunk in &prepared.chunks {
+    for chunk in chunks {
         write_wrapped_escape(w, &chunk)?;
     }
     write_all(w, &placement)?;
@@ -231,12 +285,19 @@ fn prepared_image(path: &Path, area: Rect, protocol: Protocol) -> Result<Prepare
         return Ok(prepared);
     }
 
+    if let Some(prepared) = load_prepared_image_from_disk(&key)? {
+        let mut cache = cache.lock().expect("prepared image cache mutex poisoned");
+        cache.insert(key, prepared.clone());
+        return Ok(prepared);
+    }
+
     let img = downscale_for_pixels(path, key.max_width_px, key.max_height_px)?;
     let prepared = match protocol {
         Protocol::Iip => PreparedImage::from_inline_image(encode_inline_image(img)?),
-        Protocol::Kitty => PreparedImage::from_kitty_chunks(encode_kitty_chunks(img)?),
+        Protocol::Kitty => PreparedImage::from_kitty_image(encode_kitty_payload(img)?),
     };
 
+    save_prepared_image_to_disk(&key, &prepared)?;
     let mut cache = cache.lock().expect("prepared image cache mutex poisoned");
     cache.insert(key, prepared.clone());
     Ok(prepared)
@@ -289,7 +350,7 @@ fn encode_inline_image(img: DynamicImage) -> Result<EncodedImage> {
     })
 }
 
-fn encode_kitty_chunks(img: DynamicImage) -> Result<Vec<String>> {
+fn encode_kitty_payload(img: DynamicImage) -> Result<EncodedKittyImage> {
     let format = if img.color().has_alpha() { 32 } else { 24 };
     let (width, height) = img.dimensions();
     let raw = match img {
@@ -299,31 +360,47 @@ fn encode_kitty_chunks(img: DynamicImage) -> Result<Vec<String>> {
         v => v.into_rgb8().into_raw(),
     };
 
-    let b64 = STANDARD.encode(raw);
-    let image_id = kitty_image_id();
+    Ok(EncodedKittyImage {
+        width,
+        height,
+        format,
+        base64: STANDARD.encode(raw),
+    })
+}
+
+fn kitty_chunks_from_base64(
+    format: u8,
+    width: u32,
+    height: u32,
+    b64: &str,
+    image_id: u32,
+) -> Vec<String> {
     let mut chunks = Vec::new();
     let mut parts = b64.as_bytes().chunks(4096).peekable();
     if let Some(first) = parts.next() {
         chunks.push(format!(
             "\x1b_Gq=2,a=T,C=1,U=1,f={format},s={width},v={height},i={image_id},m={};{}\x1b\\",
             u8::from(parts.peek().is_some()),
-            std::str::from_utf8(first)?
+            std::str::from_utf8(first).unwrap_or_default()
         ));
     }
     while let Some(chunk) = parts.next() {
         chunks.push(format!(
             "\x1b_Gm={};{}\x1b\\",
             u8::from(parts.peek().is_some()),
-            std::str::from_utf8(chunk)?
+            std::str::from_utf8(chunk).unwrap_or_default()
         ));
     }
-    Ok(chunks)
+    chunks
 }
 
-fn kitty_place(area: Rect) -> Vec<u8> {
+fn kitty_place(area: Rect, image_id: u32) -> Vec<u8> {
     let mut buf = Vec::new();
-    let id = kitty_image_id();
-    let (r, g, b) = ((id >> 16) & 0xff, (id >> 8) & 0xff, id & 0xff);
+    let (r, g, b) = (
+        (image_id >> 16) & 0xff,
+        (image_id >> 8) & 0xff,
+        image_id & 0xff,
+    );
     let _ = write!(buf, "\x1b[38;2;{r};{g};{b}m");
 
     for y in 0..area.height {
@@ -341,9 +418,13 @@ fn kitty_place(area: Rect) -> Vec<u8> {
     buf
 }
 
-fn kitty_image_id() -> u32 {
-    static ID: OnceLock<u32> = OnceLock::new();
-    *ID.get_or_init(|| std::process::id() % (0x00ff_ffff + 1))
+fn kitty_image_id(path: &Path, max_width_px: u32, max_height_px: u32) -> u32 {
+    let mut hasher = DefaultHasher::new();
+    std::process::id().hash(&mut hasher);
+    path.hash(&mut hasher);
+    max_width_px.hash(&mut hasher);
+    max_height_px.hash(&mut hasher);
+    (hasher.finish() as u32) & 0x00ff_ffff
 }
 
 fn erase_area<W: Write + ?Sized>(w: &mut W, area: Rect) -> Result<()> {
@@ -375,7 +456,7 @@ fn write_all<W: Write + ?Sized>(w: &mut W, bytes: &[u8]) -> Result<()> {
     Ok(())
 }
 
-fn cell_pixel_size() -> Option<(u16, u16)> {
+pub(crate) fn cell_pixel_size() -> Option<(u16, u16)> {
     let fd = std::io::stdout().as_raw_fd();
     let mut winsize = libc::winsize {
         ws_row: 0,
@@ -407,35 +488,56 @@ struct EncodedImage {
     base64: String,
 }
 
-#[derive(Clone)]
-struct PreparedImage {
+struct EncodedKittyImage {
     width: u32,
     height: u32,
-    binary_len: usize,
-    payload: String,
-    chunks: Vec<String>,
+    format: u8,
+    base64: String,
+}
+
+#[derive(Clone)]
+struct PreparedImage {
+    kind: PreparedImageKind,
 }
 
 impl PreparedImage {
     fn from_inline_image(image: EncodedImage) -> Self {
         Self {
-            width: image.width,
-            height: image.height,
-            binary_len: image.binary_len,
-            payload: image.base64,
-            chunks: Vec::new(),
+            kind: PreparedImageKind::Iip {
+                width: image.width,
+                height: image.height,
+                binary_len: image.binary_len,
+                payload: image.base64,
+            },
         }
     }
 
-    fn from_kitty_chunks(chunks: Vec<String>) -> Self {
+    fn from_kitty_image(image: EncodedKittyImage) -> Self {
         Self {
-            width: 0,
-            height: 0,
-            binary_len: 0,
-            payload: String::new(),
-            chunks,
+            kind: PreparedImageKind::Kitty {
+                width: image.width,
+                height: image.height,
+                format: image.format,
+                payload: image.base64,
+            },
         }
     }
+}
+
+#[derive(Clone)]
+enum PreparedImageKind {
+    Iip {
+        width: u32,
+        height: u32,
+        binary_len: usize,
+        payload: String,
+    },
+    Kitty {
+        width: u32,
+        height: u32,
+        format: u8,
+        payload: String,
+    },
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -450,6 +552,147 @@ struct PreparedImageCache {
     entries: HashMap<PreparedImageKey, PreparedImage>,
     order: VecDeque<PreparedImageKey>,
     capacity: usize,
+}
+
+fn load_prepared_image_from_disk(key: &PreparedImageKey) -> Result<Option<PreparedImage>> {
+    let path = prepared_cache_path(key)?;
+    let bytes = match fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(err) => return Err(err.into()),
+    };
+
+    parse_prepared_image(&bytes).map(Some)
+}
+
+fn save_prepared_image_to_disk(key: &PreparedImageKey, prepared: &PreparedImage) -> Result<()> {
+    let path = prepared_cache_path(key)?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(path, serialize_prepared_image(prepared))?;
+    Ok(())
+}
+
+fn prepared_cache_path(key: &PreparedImageKey) -> Result<PathBuf> {
+    Ok(prepared_cache_dir()?.join(prepared_cache_key(key)?))
+}
+
+fn prepared_cache_dir() -> Result<PathBuf> {
+    let home = env::var("HOME")?;
+    Ok(Path::new(&home)
+        .join(".cache/lazycmd")
+        .join("prepared-images"))
+}
+
+fn prepared_cache_key(key: &PreparedImageKey) -> Result<String> {
+    let meta = fs::metadata(&key.path)?;
+    let modified = meta
+        .modified()
+        .ok()
+        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default();
+    let source = format!(
+        "v2|{}|{}|{}|{}|{}|{}",
+        key.path.display(),
+        meta.len(),
+        modified,
+        match key.protocol {
+            Protocol::Kitty => "kitty",
+            Protocol::Iip => "iip",
+        },
+        key.max_width_px,
+        key.max_height_px
+    );
+    Ok(STANDARD.encode(source).replace(['/', '+', '='], "_"))
+}
+
+fn serialize_prepared_image(prepared: &PreparedImage) -> Vec<u8> {
+    match &prepared.kind {
+        PreparedImageKind::Iip {
+            width,
+            height,
+            binary_len,
+            payload,
+        } => format!("IIP\n{width}\n{height}\n{binary_len}\n{payload}").into_bytes(),
+        PreparedImageKind::Kitty {
+            width,
+            height,
+            format,
+            payload,
+        } => {
+            let mut bytes = format!("KITTY\n{width}\n{height}\n{format}\n").into_bytes();
+            bytes.extend_from_slice(payload.as_bytes());
+            bytes
+        }
+    }
+}
+
+fn parse_prepared_image(bytes: &[u8]) -> Result<PreparedImage> {
+    if let Some(rest) = bytes.strip_prefix(b"KITTY\n") {
+        let text = String::from_utf8(rest.to_vec())?;
+        let mut parts = text.splitn(4, '\n');
+        let width = parts
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("corrupt prepared image cache: missing kitty width"))?
+            .parse()?;
+        let height = parts
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("corrupt prepared image cache: missing kitty height"))?
+            .parse()?;
+        let format = parts
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("corrupt prepared image cache: missing kitty format"))?
+            .parse()?;
+        let payload = parts
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("corrupt prepared image cache: missing kitty payload"))?
+            .to_owned();
+
+        return Ok(PreparedImage {
+            kind: PreparedImageKind::Kitty {
+                width,
+                height,
+                format,
+                payload,
+            },
+        });
+    }
+
+    if let Some(rest) = bytes.strip_prefix(b"IIP\n") {
+        let text = String::from_utf8(rest.to_vec())?;
+        let mut parts = text.splitn(4, '\n');
+        let width = parts
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("corrupt prepared image cache: missing width"))?
+            .parse()?;
+        let height = parts
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("corrupt prepared image cache: missing height"))?
+            .parse()?;
+        let binary_len = parts
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("corrupt prepared image cache: missing binary_len"))?
+            .parse()?;
+        let payload = parts
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("corrupt prepared image cache: missing payload"))?
+            .to_owned();
+
+        return Ok(PreparedImage {
+            kind: PreparedImageKind::Iip {
+                width,
+                height,
+                binary_len,
+                payload,
+            },
+        });
+    }
+
+    Err(anyhow::anyhow!(
+        "corrupt prepared image cache: unknown format"
+    ))
 }
 
 impl PreparedImageCache {
@@ -534,7 +777,8 @@ mod tests {
         ));
         image.save(&path).expect("save temp image");
 
-        let rect = measure_cell_area(&path, Rect::new(0, 0, 40, 20)).expect("measure area");
+        let rect =
+            measure_cell_area(&path, Rect::new(0, 0, 40, 20), None, None).expect("measure area");
         assert!(rect.width <= 2);
         assert!(rect.height <= 1);
 

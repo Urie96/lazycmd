@@ -58,10 +58,11 @@ let paragraph = StatefulParagraph::from(text);
 
 - 从本地文件读取图片
 - 支持 HTTP(S) URL，先显示占位文本，下载完成后自动回填
-- 按预览区宽度等比缩放
+- 按预览区宽度等比缩放，未指定尺寸时默认读取 `lc.config().image`
 - 优先使用终端原生图片协议（当前支持 Kitty / iTerm Inline）
 - 不支持或图片被滚动裁切时，使用 truecolor 半块字符（`▀` / `▄`）渲染
 - 可和文本一起放进数组做图文混排
+- 终端协议编码结果会缓存在 `~/.cache/lazycmd/prepared-images/`，避免重复 decode/resize/encode
 
 ### ListWidget
 

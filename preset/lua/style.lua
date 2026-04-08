@@ -8,8 +8,8 @@ local style = {}
 ---@class Image
 ---@field __lc_type "image"
 ---@field source string Local image path or remote URL
----@field max_width? integer Optional width cap in terminal cells
----@field max_height? integer Optional height cap in terminal cells
+---@field max_width? integer Optional width cap in terminal cells. Defaults to lc.config().image.max_width.
+---@field max_height? integer Optional height cap in terminal rows/cells. Defaults to lc.config().image.max_height.
 ---A preview image widget. URLs are resolved asynchronously before rendering.
 
 ---@class Span
@@ -48,11 +48,12 @@ function style.text(args) return _lc.style.text(args) end
 ---@param opts? {max_width?: integer, max_height?: integer} Optional size caps in terminal cells
 ---@return Image
 function style.image(path, opts)
+  local image_cfg = (lc.config and lc.config.get and lc.config.get().image) or {}
   return {
     __lc_type = 'image',
     source = path,
-    max_width = opts and opts.max_width or nil,
-    max_height = opts and opts.max_height or nil,
+    max_width = (opts and opts.max_width) or image_cfg.max_width,
+    max_height = (opts and opts.max_height) or image_cfg.max_height,
   }
 end
 

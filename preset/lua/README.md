@@ -441,7 +441,7 @@ lc.hook.post_page_enter(function(ctx) print(vim.inspect(ctx.path)) end)
 lc.style.span(s)              -- 创建 Span
 lc.style.line({s1, s2, ...}) -- 创建 Line
 lc.style.text({l1, l2, ...}) -- 创建 Text
-lc.style.image(path, opts)   -- 创建 Image
+lc.style.image(path, opts)   -- 创建 Image，默认读取 lc.config().image.max_width/max_height
 lc.style.highlight(code, lang)  -- 语法高亮
 lc.style.align_columns(lines)    -- 列对齐
 
