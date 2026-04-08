@@ -307,8 +307,8 @@ lc.keymap.set('main', 'p', function() paste() end, { once = true, desc = 'paste 
 ```
 
 - `mode` 支持 `main` / `m` 和 `input` / `i`
-- 输入框中 `Backspace`、`Left`、`Right`、`Ctrl-G` 为 Rust 内置键位；其中 `Ctrl-G` 会调用外部编辑器编辑当前输入内容，优先使用 `$VISUAL`，其次 `$EDITOR`，否则回退到 `vi`
-- 其余默认动作通过 `preset/lua/config.lua` 用 `lc.keymap.set('input', ...)` 注册到内部命令，例如 `input_submit`、`input_cancel`
+- 输入框中 `Backspace`、`Left`、`Right` 为 Rust 内置键位
+- 其余默认动作通过 `preset/lua/config.lua` 用 `lc.keymap.set('input', ...)` 注册到内部命令或 Lua 回调，例如 `input_submit`、`input_cancel`；默认 `<C-g>` 通过 `lc.system.edit(...)` 调用外部编辑器编辑当前输入内容
 
 `lc.config` 还支持 `keymap` 字段来覆盖内置主模式键位，例如：
 
@@ -322,7 +322,7 @@ lc.config {
 }
 ```
 
-支持的键位名包括 `up`、`down`、`top`、`bottom`、`preview_up`、`preview_down`、`reload`、`quit`、`force_quit`、`filter`、`clear_filter`、`back`、`open`、`enter`，以及 `input_submit`、`input_cancel`、`input_clear_before_cursor`、`input_cursor_to_start`、`input_cursor_to_end`。每次调用 `lc.config` 都会按这些配置重新执行一遍 `lc.keymap.set`。
+支持的键位名包括 `up`、`down`、`top`、`bottom`、`preview_up`、`preview_down`、`reload`、`quit`、`force_quit`、`filter`、`clear_filter`、`back`、`open`、`enter`，以及 `input_submit`、`input_cancel`、`input_clear_before_cursor`、`input_cursor_to_start`、`input_cursor_to_end`、`input_external_editor`。每次调用 `lc.config` 都会按这些配置重新执行一遍 `lc.keymap.set`。
 
 页面 entry 也可以定义局部 keymap：
 
@@ -406,6 +406,7 @@ end
 | `lc.system.spawn(cmd)` | 启动后台命令并返回 pid |
 | `lc.system.kill(pid[, signal])` | 向进程发送信号，默认 `SIGTERM` |
 | `lc.system.open(path)` | 用默认应用打开文件 |
+| `lc.system.edit(opts[, callback])` | 用外部编辑器编辑文件内容；传 `path` 时直接原地编辑该文件；不传 `path` 时可用 `ext` 指定临时文件后缀以启用语法高亮；传 callback 时回调接收 `(content, error)`，不传时 Rust 不会读取编辑后内容 |
 | `lc.system.exec(opts)` | 异步执行命令 |
 | `lc.system.interactive(opts)` | 执行交互式命令 |
 
@@ -463,6 +464,9 @@ end
 | `lc.notify(msg)` | 显示通知 (支持 string、Span、Line 或 Text 类型) |
 | `lc.confirm(opts)` | 显示确认对话框 |
 | `lc.select(opts, callback)` | 显示选择对话框 |
+| `lc.input(opts)` / `lc.input.show(opts)` | 显示输入对话框 |
+| `lc.input.get()` | 获取当前输入对话框文本；未打开时返回 `nil` |
+| `lc.input.set(value)` | 设置当前输入对话框文本，并触发 `on_change`；未打开时抛错 |
 
 ## 内部命令
 

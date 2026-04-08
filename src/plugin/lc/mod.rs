@@ -299,6 +299,70 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
         ("align_columns", style::align_columns(lua)?),
     ])?;
 
+    let input_tbl = lua.create_table()?;
+    input_tbl.set(
+        "show",
+        lua.create_function(|lua, opts: LuaTable| -> mlua::Result<()> {
+            let prompt: String = opts.get("prompt").unwrap_or_else(|_| "".to_string());
+            let placeholder: String = opts.get("placeholder").unwrap_or_else(|_| "".to_string());
+            let value: String = opts.get("value").unwrap_or_else(|_| "".to_string());
+            let on_submit: LuaFunction = opts.get("on_submit")?;
+
+            let on_cancel: LuaFunction = opts
+                .get("on_cancel")
+                .unwrap_or_else(|_| lua.create_function(|_, ()| Ok(())).unwrap());
+            let on_change: LuaFunction = opts
+                .get("on_change")
+                .unwrap_or_else(|_| lua.create_function(|_, ()| Ok(())).unwrap());
+
+            plugin::send_event(
+                lua,
+                Event::ShowInput {
+                    prompt,
+                    placeholder,
+                    value,
+                    on_submit,
+                    on_cancel,
+                    on_change,
+                },
+            )?;
+            Ok(())
+        })?,
+    )?;
+    input_tbl.set(
+        "get",
+        lua.create_function(|lua, ()| -> mlua::Result<LuaValue> {
+            let value: Option<String> =
+                plugin::borrow_scope_state(lua, |state| Ok(state.input_dialog_get_text()))?;
+            match value {
+                Some(value) => Ok(value.into_lua(lua)?),
+                None => Ok(LuaNil.into_lua(lua)?),
+            }
+        })?,
+    )?;
+    input_tbl.set(
+        "set",
+        lua.create_function(|lua, value: String| -> mlua::Result<()> {
+            let result: Option<(String, LuaFunction, bool)> = plugin::mut_scope_state(lua, |state| {
+                Ok(state.input_dialog_replace_text(value))
+            })?;
+            match result {
+                Some((text, on_change, changed)) => {
+                    if changed {
+                        let sender = plugin::clone_sender(lua)?;
+                        sender
+                            .send(Event::LuaCallback(Box::new(move |_lua| on_change.call::<()>(text))))
+                            .map_err(|e| LuaError::RuntimeError(format!("Failed to schedule input.set callback: {}", e)))?;
+                    }
+                    Ok(())
+                }
+                None => Err(LuaError::RuntimeError(
+                    "No input dialog is currently open".to_string(),
+                )),
+            }
+        })?,
+    )?;
+
     let lc = lua.create_table_from([
         ("defer_fn", defer_fn),
         ("keymap", keymap),
@@ -325,40 +389,7 @@ pub(super) fn register(lua: &Lua) -> mlua::Result<()> {
         ("notify", notify_fn),
         ("confirm", mlua::Value::Function(confirm_fn)),
         ("select", mlua::Value::Function(select_fn)),
-        // lc.input: show an input dialog
-        (
-            "input",
-            mlua::Value::Function(lua.create_function(
-                |lua, opts: LuaTable| -> mlua::Result<()> {
-                    let prompt: String = opts.get("prompt").unwrap_or_else(|_| "".to_string());
-                    let placeholder: String =
-                        opts.get("placeholder").unwrap_or_else(|_| "".to_string());
-                    let value: String = opts.get("value").unwrap_or_else(|_| "".to_string());
-                    let on_submit: LuaFunction = opts.get("on_submit")?;
-
-                    // Default callbacks that do nothing
-                    let on_cancel: LuaFunction = opts
-                        .get("on_cancel")
-                        .unwrap_or_else(|_| lua.create_function(|_, ()| Ok(())).unwrap());
-                    let on_change: LuaFunction = opts
-                        .get("on_change")
-                        .unwrap_or_else(|_| lua.create_function(|_, ()| Ok(())).unwrap());
-
-                    plugin::send_event(
-                        lua,
-                        Event::ShowInput {
-                            prompt,
-                            placeholder,
-                            value,
-                            on_submit,
-                            on_cancel,
-                            on_change,
-                        },
-                    )?;
-                    Ok(())
-                },
-            )?),
-        ),
+        ("input", mlua::Value::Table(input_tbl)),
         ("style", mlua::Value::Table(style_tbl)),
     ])?;
     lua.globals().raw_set("lc", lua.create_table()?)?;

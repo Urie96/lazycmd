@@ -70,6 +70,16 @@ function system.kill(pid, signal) return _lc.system.kill(pid, signal) end
 ---@param file_path string The path to the file to open
 function system.open(file_path) return _lc.system.open(file_path) end
 
+---@class SystemEditOptions
+---@field path string? Optional file path to edit directly; when provided, editor opens this file in place instead of a temp file
+---@field content string? Optional initial content; when path is also provided, this content is written to path before opening editor
+---@field ext string? Optional temp file suffix/extension used when path is not provided, e.g. "rs" or ".rs"
+
+---Open external editor and optionally return edited content plus optional error.
+---@param opts SystemEditOptions
+---@param callback fun(content: string|nil, error: string|nil)?
+function system.edit(opts, callback) return _lc.system.edit(opts, callback) end
+
 lc.system = system
 
 -- Set metatable on lc.system to handle multiple argument formats

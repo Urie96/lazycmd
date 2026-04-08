@@ -44,12 +44,29 @@ function lc.notify(message) return _lc.notify(message) end
 ---@field on_change? fun(input: string) Callback function when input text changes
 ---  - Called with the current input text on each keystroke
 
+---Input dialog helpers.
+---Can be called directly as `lc.input(opts)` to show a dialog.
+---@class lc.input
+lc.input = {}
+
 ---Show an input dialog to the user
 ---The dialog appears centered on screen with an input field
 ---Users can type text, use Backspace/Delete to edit, Left/Right to move cursor
 ---Press Enter to submit, Escape to cancel
 ---@param opts InputOptions Configuration options
-function lc.input(opts) return _lc.input(opts) end
+function lc.input.show(opts) return _lc.input.show(opts) end
+
+---Get current input dialog text.
+---@return string|nil
+function lc.input.get() return _lc.input.get() end
+
+---Replace current input dialog text.
+---@param value string
+function lc.input.set(value) return _lc.input.set(value) end
+
+setmetatable(lc.input, {
+  __call = function(_, opts) return lc.input.show(opts) end,
+})
 
 ---Write a log entry to the log file
 ---@param level string Log level (e.g., "info", "warn", "error", "debug")

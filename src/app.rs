@@ -9,7 +9,6 @@ use ratatui::{
     widgets::{Block, BorderType, Paragraph},
 };
 use std::time::Instant;
-use std::{fs, path::PathBuf};
 use tokio::sync::mpsc;
 
 use libc::{sigaction, sigemptyset, SIGINT, SIG_IGN};
@@ -258,14 +257,6 @@ impl App {
 
                 // If input dialog is shown, handle its keyboard input
                 if self.state.input_dialog.is_some() {
-                    if key.code == crossterm::event::KeyCode::Char('g')
-                        && key
-                            .modifiers
-                            .contains(crossterm::event::KeyModifiers::CONTROL)
-                    {
-                        self.edit_input_dialog_in_external_editor()?;
-                        return Ok(());
-                    }
                     if input_handler::handle_input_dialog_key(
                         &self.lua,
                         &mut self.state,
@@ -450,47 +441,6 @@ impl App {
         Ok(exit_code)
     }
 
-    fn external_editor_command(&self) -> Result<Vec<String>> {
-        let editor = std::env::var("VISUAL")
-            .ok()
-            .filter(|v| !v.trim().is_empty())
-            .or_else(|| {
-                std::env::var("EDITOR")
-                    .ok()
-                    .filter(|v| !v.trim().is_empty())
-            })
-            .unwrap_or_else(|| "vi".to_string());
-        let cmd = shell_words::split(&editor)?;
-        if cmd.is_empty() {
-            bail!("Empty editor command");
-        }
-        Ok(cmd)
-    }
-
-    fn input_editor_tempfile_path() -> PathBuf {
-        let mut path = std::env::temp_dir();
-        let nanos = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_nanos())
-            .unwrap_or(0);
-        path.push(format!(
-            "lazycmd-input-{}-{}.tmp",
-            std::process::id(),
-            nanos
-        ));
-        path
-    }
-
-    fn normalize_input_editor_output(mut text: String) -> String {
-        if text.ends_with('\n') {
-            text.pop();
-            if text.ends_with('\r') {
-                text.pop();
-            }
-        }
-        text
-    }
-
     fn resolve_command_path(current_path: &[String], raw_path: &str) -> Result<Vec<String>> {
         let raw_path = raw_path.trim();
         if raw_path.is_empty() {
@@ -516,41 +466,6 @@ impl App {
         Ok(path)
     }
 
-    fn edit_input_dialog_in_external_editor(&mut self) -> Result<()> {
-        let Some(dialog) = self.state.input_dialog.as_ref() else {
-            return Ok(());
-        };
-
-        let path = Self::input_editor_tempfile_path();
-        fs::write(&path, &dialog.text)?;
-
-        let result = (|| -> Result<()> {
-            let mut cmd = self.external_editor_command()?;
-            cmd.push(path.to_string_lossy().to_string());
-            let exit_code = self.execute_interactive_command(cmd, None)?;
-            let updated = Self::normalize_input_editor_output(fs::read_to_string(&path)?);
-
-            if let Some((text, on_change, changed)) = self.state.input_dialog_replace_text(updated)
-            {
-                if changed {
-                    plugin::scope(&self.lua, &mut self.state, &self.event_sender, || {
-                        on_change.call::<()>(text)
-                    })?;
-                }
-            }
-
-            if exit_code != 0 {
-                self.state
-                    .set_notification(format!("editor exited with code {exit_code}").into());
-            }
-
-            self.dirty = true;
-            Ok(())
-        })();
-
-        let _ = fs::remove_file(&path);
-        result
-    }
 
     fn open_command_prompt(&mut self, initial_value: String) -> Result<()> {
         let sender = self.event_sender.clone();
@@ -741,7 +656,11 @@ impl App {
                     self.dirty = true;
                 }
             }
-            _ => bail!("Unsupported command {}", command),
+            _ => {
+                self.state
+                    .set_notification(Text::from(format!("Unsupported command {}", command)));
+                self.dirty = true;
+            }
         };
         Ok(())
     }
@@ -978,19 +897,6 @@ mod tests {
     use crate::events::Event;
 
     use super::App;
-
-    #[test]
-    fn normalize_input_editor_output_strips_single_trailing_newline() {
-        assert_eq!(
-            App::normalize_input_editor_output("txt\n".to_string()),
-            "txt"
-        );
-        assert_eq!(
-            App::normalize_input_editor_output("txt\r\n".to_string()),
-            "txt"
-        );
-        assert_eq!(App::normalize_input_editor_output("txt".to_string()), "txt");
-    }
 
     #[test]
     fn command_prompt_submit_triggers_command_event() {

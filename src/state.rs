@@ -1509,6 +1509,10 @@ impl State {
         Some((dialog.text.clone(), dialog.on_change.clone()))
     }
 
+    pub fn input_dialog_get_text(&self) -> Option<String> {
+        self.input_dialog.as_ref().map(|dialog| dialog.text.clone())
+    }
+
     pub fn input_dialog_replace_text(
         &mut self,
         text: String,

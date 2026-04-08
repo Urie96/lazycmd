@@ -25,6 +25,7 @@ local cfg = {
     input_clear_before_cursor = '<C-u>',
     input_cursor_to_start = '<C-a>',
     input_cursor_to_end = '<C-e>',
+    input_external_editor = '<C-g>',
   },
   image = {
     max_width = 40,
@@ -219,6 +220,20 @@ local function open_filter()
   }
 end
 
+local function edit_current_input_in_external_editor()
+  local current = lc.input.get()
+  if current == nil then return end
+
+  lc.system.edit({ content = current }, function(content, err)
+    if err then
+      lc.notify(err)
+    end
+    if content ~= nil then
+      lc.input.set(content:gsub('\r?\n$', ''))
+    end
+  end)
+end
+
 local function apply_configured_keymap()
   local map = function(key, cb, desc) lc.keymap.set('main', key, cb, { desc = desc }) end
   local map_input = function(key, cb, desc) lc.keymap.set('input', key, cb, { desc = desc }) end
@@ -246,6 +261,7 @@ local function apply_configured_keymap()
   map_input(cfg.keymap.input_clear_before_cursor, 'input_clear_before_cursor', 'delete text before cursor')
   map_input(cfg.keymap.input_cursor_to_start, 'input_cursor_to_start', 'move cursor to start')
   map_input(cfg.keymap.input_cursor_to_end, 'input_cursor_to_end', 'move cursor to end')
+  map_input(cfg.keymap.input_external_editor, edit_current_input_in_external_editor, 'edit input in external editor')
 end
 
 local config = {}

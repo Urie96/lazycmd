@@ -1,7 +1,51 @@
 use crate::{plugin, Event};
+use anyhow::{bail, Context};
 use mlua::prelude::*;
+use std::fs;
+use std::path::PathBuf;
 use std::process::Stdio;
 use tokio::process::Command;
+
+fn external_editor_command() -> anyhow::Result<Vec<String>> {
+    let editor = std::env::var("VISUAL")
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .or_else(|| std::env::var("EDITOR").ok().filter(|v| !v.trim().is_empty()))
+        .unwrap_or_else(|| "vi".to_string());
+    let cmd = shell_words::split(&editor).context("Failed to parse $VISUAL/$EDITOR")?;
+    if cmd.is_empty() {
+        bail!("Empty editor command");
+    }
+    Ok(cmd)
+}
+
+fn editor_tempfile_path(path_hint: Option<&str>, ext_hint: Option<&str>) -> PathBuf {
+    let mut path = std::env::temp_dir();
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+
+    let suffix = ext_hint
+        .map(|ext| ext.trim())
+        .filter(|ext| !ext.is_empty())
+        .map(|ext| ext.trim_start_matches('.'))
+        .map(|ext| format!(".{}", ext))
+        .or_else(|| {
+            path_hint
+                .and_then(|p| std::path::Path::new(p).extension().and_then(|s| s.to_str()))
+                .map(|ext| format!(".{}", ext))
+        })
+        .unwrap_or_default();
+
+    path.push(format!(
+        "lazycmd-edit-{}-{}{}",
+        std::process::id(),
+        nanos,
+        suffix
+    ));
+    path
+}
 
 /// Create the lc.system table with executable, open, exec, spawn, and kill functions
 pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
@@ -21,11 +65,88 @@ pub(super) fn new_table(lua: &Lua) -> mlua::Result<LuaTable> {
         })
     })?;
 
+    let edit_fn = lua.create_function(|lua, (opts, callback): (LuaTable, Option<LuaFunction>)| {
+        let path: Option<String> = opts.get("path").ok();
+        let content: Option<LuaString> = opts.get("content").ok();
+        let ext: Option<String> = opts.get("ext").ok();
+
+        let (edit_path, cleanup_after): (PathBuf, bool) = if let Some(path) = path.as_ref() {
+            if let Some(content) = content {
+                fs::write(path, content.as_bytes()).map_err(|e| {
+                    LuaError::RuntimeError(format!("Failed to write file '{}': {}", path, e))
+                })?;
+            }
+            (PathBuf::from(path), false)
+        } else {
+            let temp_path = editor_tempfile_path(None, ext.as_deref());
+            let initial_bytes = content.map(|c| c.as_bytes().to_vec()).unwrap_or_default();
+            fs::write(&temp_path, &initial_bytes).map_err(|e| {
+                LuaError::RuntimeError(format!(
+                    "Failed to prepare editor temp file '{}': {}",
+                    temp_path.display(),
+                    e
+                ))
+            })?;
+            (temp_path, true)
+        };
+
+        let mut cmd = external_editor_command()
+            .map_err(|e| LuaError::RuntimeError(format!("{}", e)))?;
+        cmd.push(edit_path.to_string_lossy().to_string());
+
+        let on_complete = if let Some(callback) = callback {
+            Some(lua.create_function(move |lua, exit_code: i32| {
+                let read_result = fs::read(&edit_path);
+                if cleanup_after {
+                    let _ = fs::remove_file(&edit_path);
+                }
+
+                let mut error: Option<String> = None;
+                if exit_code != 0 {
+                    error = Some(format!("Editor exited with code {}", exit_code));
+                }
+
+                let content = match read_result {
+                    Ok(bytes) => Some(lua.create_string(&bytes)?),
+                    Err(e) => {
+                        if error.is_none() {
+                            error = Some(format!(
+                                "Failed to read edited file '{}': {}",
+                                edit_path.display(),
+                                e
+                            ));
+                        }
+                        None
+                    }
+                };
+
+                callback.call::<()>((content, error))
+            })?)
+        } else if cleanup_after {
+            Some(lua.create_function(move |_lua, _exit_code: i32| {
+                let _ = fs::remove_file(&edit_path);
+                Ok(())
+            })?)
+        } else {
+            None
+        };
+
+        plugin::send_event(
+            lua,
+            Event::InteractiveCommand {
+                cmd,
+                on_complete,
+                wait_confirm: None,
+            },
+        )
+    })?;
+
     // Add executable function
     system_tbl.set("executable", executable_fn)?;
 
     // Add open function
     system_tbl.set("open", open_fn)?;
+    system_tbl.set("edit", edit_fn)?;
 
     // Add _exec function for executing commands (internal implementation)
     // The args table contains: cmd, callback, stdin, env
